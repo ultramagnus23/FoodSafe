@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FoodSafe India</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #F7F4EF;
+    --bg-card:   #FDFBF8;
+    --forest:    #1B4332;
+    --forest-lt: #2D6A4F;
+    --forest-pale:#E8F0EB;
+    --amber:     #D97706;
+    --amber-lt:  #FEF3C7;
+    --red:       #DC2626;
+    --red-lt:    #FEE2E2;
+    --sage:      #4CAF7D;
+    --sage-lt:   #D1FAE5;
+    --ink:       #1C1917;
+    --muted:     #78716C;
+    --border:    #E7E2DA;
+    --shadow:    0 1px 3px rgba(28,25,23,.08), 0 4px 16px rgba(28,25,23,.04);
+    --shadow-lg: 0 8px 32px rgba(28,25,23,.12);
+    --radius:    10px;
+    --font-serif: 'Cormorant Garamond', Georgia, serif;
+    --font-sans:  'DM Sans', system-ui, sans-serif;
+    --font-mono:  'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  button { font-family: var(--font-sans); cursor: pointer; border: none; background: none; }
+  input, select, textarea { font-family: var(--font-sans); }
+  a { color: inherit; text-decoration: none; }
+
+  /* ---- NAV ---- */
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(247,244,239,.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px;
+    height: 60px;
+  }
+  .nav-logo {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-serif); font-size: 22px; font-weight: 600;
+    color: var(--forest); letter-spacing: -.3px;
+  }
+  .nav-logo-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--sage); display: inline-block;
+  }
+  .nav-links { display: flex; gap: 4px; }
+  .nav-btn {
+    padding: 6px 14px; border-radius: 6px; font-size: 13.5px; font-weight: 500;
+    color: var(--muted); transition: all .15s;
+  }
+  .nav-btn:hover { background: var(--forest-pale); color: var(--forest); }
+  .nav-btn.active { color: var(--forest); background: var(--forest-pale); }
+  .nav-cta {
+    padding: 7px 16px; border-radius: 6px; font-size: 13.5px; font-weight: 500;
+    background: var(--forest); color: #fff; transition: all .15s;
+  }
+  .nav-cta:hover { background: var(--forest-lt); }
+
+  /* ---- HERO ---- */
+  .hero {
+    min-height: 88vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 64px 24px 48px;
+    position: relative; overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(27,67,50,.06) 0%, transparent 70%);
+  }
+  .hero-grain {
+    position: absolute; inset: 0; pointer-events: none; opacity: .4;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    background: var(--forest-pale); color: var(--forest);
+    font-size: 12px; font-weight: 500; letter-spacing: .4px; text-transform: uppercase;
+    margin-bottom: 24px; position: relative;
+  }
+  .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+  .hero-h1 {
+    font-family: var(--font-serif); font-size: clamp(42px, 7vw, 76px);
+    font-weight: 300; line-height: 1.1; text-align: center;
+    color: var(--ink); letter-spacing: -.5px; margin-bottom: 20px;
+    position: relative;
+  }
+  .hero-h1 em { font-style: italic; color: var(--forest); }
+  .hero-sub {
+    font-size: 17px; color: var(--muted); text-align: center; max-width: 520px;
+    line-height: 1.65; margin-bottom: 40px; position: relative;
+  }
+  .search-bar {
+    display: flex; gap: 0; position: relative; width: 100%; max-width: 580px;
+    background: var(--bg-card); border: 1.5px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: var(--shadow-lg); transition: border-color .2s;
+  }
+  .search-bar:focus-within { border-color: var(--forest); }
+  .search-input {
+    flex: 1; padding: 16px 20px; border: none; outline: none;
+    font-size: 16px; background: transparent; color: var(--ink);
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-select {
+    border: none; outline: none; background: transparent;
+    padding: 0 16px; font-size: 14px; color: var(--muted);
+    border-left: 1px solid var(--border); cursor: pointer;
+  }
+  .search-btn {
+    padding: 12px 24px; margin: 6px; border-radius: 8px;
+    background: var(--forest); color: #fff;
+    font-size: 14px; font-weight: 500; transition: background .15s;
+    white-space: nowrap;
+  }
+  .search-btn:hover { background: var(--forest-lt); }
+
+  /* ---- STATS BAR ---- */
+  .stats-bar {
+    display: flex; gap: 40px; justify-content: center; flex-wrap: wrap;
+    margin-top: 56px; padding-top: 40px;
+    border-top: 1px solid var(--border);
+  }
+  .stat { text-align: center; }
+  .stat-num {
+    font-family: var(--font-serif); font-size: 36px; font-weight: 600;
+    color: var(--forest); line-height: 1;
+  }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+
+  /* ---- SECTION ---- */
+  .section { padding: 80px 24px; max-width: 1100px; margin: 0 auto; }
+  .section-header { margin-bottom: 40px; }
+  .section-eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--forest); margin-bottom: 10px;
+  }
+  .section-title {
+    font-family: var(--font-serif); font-size: clamp(28px, 4vw, 42px);
+    font-weight: 300; line-height: 1.2; color: var(--ink);
+  }
+  .section-title em { font-style: italic; color: var(--forest); }
+
+  /* ---- CARDS ---- */
+  .cards { display: grid; gap: 20px; }
+  .cards-2 { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .cards-3 { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px;
+    box-shadow: var(--shadow); transition: box-shadow .2s, transform .2s;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+
+  /* ---- RISK SCORE DISPLAY ---- */
+  .risk-display {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; margin-bottom: 24px;
+  }
+  .risk-score-big {
+    font-family: var(--font-serif); font-size: 80px; font-weight: 600;
+    line-height: 1; margin-bottom: 4px;
+  }
+  .risk-label { font-size: 13px; font-weight: 500; letter-spacing: .4px; text-transform: uppercase; }
+  .risk-bar-wrap { margin: 20px 0 8px; }
+  .risk-bar-track {
+    height: 8px; background: var(--border); border-radius: 4px; position: relative;
+  }
+  .risk-bar-fill {
+    height: 100%; border-radius: 4px; transition: width .8s cubic-bezier(.4,0,.2,1);
+  }
+  .risk-ci {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--muted); margin-top: 6px;
+    font-family: var(--font-mono);
+  }
+
+  /* risk colours */
+  .risk-low  { color: var(--sage);  }
+  .risk-mid  { color: var(--amber); }
+  .risk-high { color: var(--red);   }
+  .fill-low  { background: var(--sage);  }
+  .fill-mid  { background: var(--amber); }
+  .fill-high { background: var(--red);   }
+  .bg-low    { background: var(--sage-lt); }
+  .bg-mid    { background: var(--amber-lt); }
+  .bg-high   { background: var(--red-lt); }
+
+  /* ---- BADGE ---- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 500;
+  }
+  .badge-tested { background: var(--sage-lt); color: var(--forest); }
+  .badge-inferred { background: var(--amber-lt); color: #92400E; }
+  .badge-insufficient { background: var(--border); color: var(--muted); }
+
+  /* ---- TABLE ---- */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    text-align: left; padding: 12px 16px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 11.5px; letter-spacing: .4px; text-transform: uppercase; color: var(--muted);
+  }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+
+  /* ---- FORM ---- */
+  .form-group { margin-bottom: 20px; }
+  .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--ink); }
+  .form-input {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+    border-radius: 8px; font-size: 14px; background: var(--bg-card);
+    color: var(--ink); outline: none; transition: border-color .15s;
+  }
+  .form-input:focus { border-color: var(--forest); }
+  .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%2378716C'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+
+  .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--forest); color: #fff; }
+  .btn-primary:hover { background: var(--forest-lt); }
+  .btn-outline { border: 1.5px solid var(--border); color: var(--ink); background: var(--bg-card); }
+  .btn-outline:hover { border-color: var(--forest); color: var(--forest); }
+  .btn-danger { background: var(--red-lt); color: var(--red); }
+
+  /* ---- TABS ---- */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  .tab {
+    padding: 10px 20px; font-size: 14px; font-weight: 500; color: var(--muted);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: all .15s; cursor: pointer;
+  }
+  .tab.active { color: var(--forest); border-bottom-color: var(--forest); }
+  .tab:hover:not(.active) { color: var(--ink); }
+
+  /* ---- DISCLAIMER ---- */
+  .disclaimer {
+    background: var(--amber-lt); border: 1px solid #FDE68A;
+    border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: #78350F;
+    line-height: 1.5;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  /* ---- ALERT TICKER ---- */
+  .ticker {
+    background: var(--forest); color: #fff; padding: 10px 0;
+    overflow: hidden; position: relative;
+  }
+  .ticker-inner { display: flex; gap: 64px; animation: ticker 30s linear infinite; white-space: nowrap; }
+  @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  .ticker-item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ticker-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+
+  /* ---- MAP PLACEHOLDER ---- */
+  .map-container {
+    width: 100%; aspect-ratio: 16/9; max-height: 480px;
+    background: linear-gradient(135deg, var(--forest-pale) 0%, var(--bg) 100%);
+    border: 1px solid var(--border); border-radius: 16px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; color: var(--muted); position: relative; overflow: hidden;
+  }
+  .map-india {
+    width: 200px; opacity: .18;
+  }
+  .map-dots {
+    position: absolute; inset: 0; pointer-events: none;
+  }
+  .map-dot {
+    position: absolute; border-radius: 50%;
+    animation: mapDot 3s ease-in-out infinite;
+    transform: translate(-50%, -50%);
+  }
+  @keyframes mapDot {
+    0%,100%{opacity:.6;transform:translate(-50%,-50%) scale(1)}
+    50%{opacity:1;transform:translate(-50%,-50%) scale(1.4)}
+  }
+
+  /* ---- SUPPLY CHAIN VIZ ---- */
+  .supply-chain { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+  .sc-node {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; text-align: center; font-size: 12.5px;
+  }
+  .sc-node-type { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .sc-arrow { color: var(--muted); padding: 0 8px; font-size: 18px; }
+
+  /* ---- MODALS ---- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(28,25,23,.5);
+    z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal {
+    background: var(--bg-card); border-radius: 16px; padding: 32px;
+    max-width: 480px; width: 100%; box-shadow: var(--shadow-lg);
+    position: relative; animation: modalIn .2s ease;
+  }
+  @keyframes modalIn { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--muted); cursor: pointer;
+  }
+  .modal-title { font-family: var(--font-serif); font-size: 24px; font-weight: 400; margin-bottom: 20px; }
+
+  /* ---- LOADING ---- */
+  .spinner {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--forest);
+    animation: spin .7s linear infinite; display: inline-block;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .skeleton {
+    background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+    background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px;
+  }
+  @keyframes shimmer { from{background-position:200% 0} to{background-position:-200% 0} }
+
+  /* ---- PAGE LAYOUT ---- */
+  .page { min-height: calc(100vh - 60px); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .grid-sidebar { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; }
+  @media(max-width:768px){ .grid-sidebar{grid-template-columns:1fr} .nav-links{display:none} }
+
+  /* ---- FOOTER ---- */
+  footer {
+    border-top: 1px solid var(--border); padding: 40px 32px;
+    display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between; align-items: center;
+    font-size: 12.5px; color: var(--muted);
+  }
+  footer a:hover { color: var(--forest); }
+
+  /* ---- ANIMATIONS ---- */
+  .fade-in { animation: fadeIn .4s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .slide-in { animation: slideIn .3s ease; }
+  @keyframes slideIn { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:translateX(0)} }
+
+  /* ---- ONBOARDING ---- */
+  .onboard-step {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 24px; text-align: center; padding: 40px 24px; min-height: 400px;
+  }
+  .onboard-icon { font-size: 48px; }
+  .onboard-title { font-family: var(--font-serif); font-size: 28px; font-weight: 400; }
+  .onboard-sub { color: var(--muted); max-width: 360px; }
+  .step-dots { display: flex; gap: 6px; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background .2s; }
+  .step-dot.active { background: var(--forest); }
+
+  .chip-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip {
+    padding: 6px 14px; border-radius: 20px; font-size: 13.5px;
+    border: 1.5px solid var(--border); cursor: pointer; transition: all .15s;
+  }
+  .chip.selected { border-color: var(--forest); background: var(--forest-pale); color: var(--forest); font-weight: 500; }
+  .chip:hover:not(.selected) { border-color: var(--muted); }
+
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 32px; }
+  .progress-fill { height: 100%; background: var(--forest); border-radius: 2px; transition: width .4s ease; }
+
+  /* ---- TAG ---- */
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 500; font-family: var(--font-mono);
+  }
+  .tag-source { background: var(--forest-pale); color: var(--forest); }
+  .tag-fail { background: var(--red-lt); color: var(--red); }
+  .tag-pass { background: var(--sage-lt); color: #166534; }
+
+  /* ---- METRIC ROW ---- */
+  .metric-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .metric {
+    flex: 1; min-width: 120px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .metric-val { font-family: var(--font-serif); font-size: 28px; font-weight: 600; line-height: 1; color: var(--forest); }
+  .metric-key { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect, useCallback, useRef } = React;
+
+/* ============================================================
+   MOCK DATA — replace with real API calls
+   ============================================================ */
+const MOCK = {
+  alerts: [
+    { commodity:'Rice', contaminant:'Aflatoxin B1', value_ppb:45.2, state:'Maharashtra', brand:'—', source_type:'FSSAI' },
+    { commodity:'Chilli Powder', contaminant:'Lead', value_ppb:620, state:'Gujarat', brand:'SpiceMart', source_type:'FSSAI' },
+    { commodity:'Milk', contaminant:'Melamine', value_ppb:3100, state:'Uttar Pradesh', brand:'DairyFresh', source_type:'USFDA' },
+    { commodity:'Groundnut', contaminant:'Aflatoxin Total', value_ppb:88, state:'Rajasthan', brand:'—', source_type:'FSSAI' },
+    { commodity:'Turmeric', contaminant:'Lead', value_ppb:1240, state:'Tamil Nadu', brand:'GoldenSpice', source_type:'APEDA' },
+    { commodity:'Paneer', contaminant:'Coliform', value_ppb:0, state:'Delhi', brand:'FreshDairy', source_type:'State Health' },
+  ],
+  districts: [
+    {id:1,name:'Mumbai',state:'Maharashtra',risk:72,n:234,lat:19.07,lon:72.87},
+    {id:2,name:'Pune',state:'Maharashtra',risk:41,n:178,lat:18.52,lon:73.86},
+    {id:3,name:'Nagpur',state:'Maharashtra',risk:58,n:92,lat:21.14,lon:79.08},
+    {id:4,name:'Nashik',state:'Maharashtra',risk:35,n:67,lat:19.99,lon:73.79},
+    {id:5,name:'Ahmedabad',state:'Gujarat',risk:63,n:145,lat:23.02,lon:72.57},
+    {id:6,name:'Surat',state:'Gujarat',risk:48,n:98,lat:21.17,lon:72.83},
+    {id:7,name:'Delhi',state:'Delhi',risk:81,n:312,lat:28.70,lon:77.10},
+    {id:8,name:'Noida',state:'Uttar Pradesh',risk:67,n:89,lat:28.53,lon:77.39},
+    {id:9,name:'Lucknow',state:'Uttar Pradesh',risk:54,n:123,lat:26.84,lon:80.94},
+    {id:10,name:'Chennai',state:'Tamil Nadu',risk:44,n:201,lat:13.08,lon:80.27},
+    {id:11,name:'Coimbatore',state:'Tamil Nadu',risk:31,n:87,lat:11.01,lon:76.96},
+    {id:12,name:'Bengaluru',state:'Karnataka',risk:38,n:267,lat:12.97,lon:77.59},
+  ],
+  commodities: [
+    {id:1,name:'Rice',category:'grain'},{id:2,name:'Wheat',category:'grain'},
+    {id:3,name:'Milk',category:'dairy'},{id:4,name:'Groundnut',category:'produce'},
+    {id:5,name:'Chilli',category:'spice'},{id:6,name:'Turmeric',category:'spice'},
+    {id:7,name:'Mustard Oil',category:'oil'},{id:8,name:'Paneer',category:'dairy'},
+    {id:9,name:'Onion',category:'produce'},{id:10,name:'Potato',category:'produce'},
+  ],
+  riskReport: {
+    district_name:'Mumbai', state:'Maharashtra',
+    commodity_name:'Rice', risk_score:72.4, ci_lower:63.1, ci_upper:81.7,
+    n_tests:234, fail_rate:0.148,
+    top_contaminants:[{name:'aflatoxin_b1',fail_rate:0.09},{name:'lead',fail_rate:0.04},{name:'pesticide_chlorpyrifos',fail_rate:0.015}],
+    inference_type:'direct_test',
+    enforcement_events:[
+      {test_date:'2024-11-12',contaminant:'aflatoxin_b1',value_ppb:45.2,legal_limit_ppb:10,pass_fail:false,source_type:'fssai',source_url:'https://fssai.gov.in',lab_name:'CFTRI'},
+      {test_date:'2024-10-05',contaminant:'lead',value_ppb:88,legal_limit_ppb:100,pass_fail:true,source_type:'fssai',source_url:'https://fssai.gov.in',lab_name:'NABL Lab 02'},
+      {test_date:'2024-09-22',contaminant:'aflatoxin_b1',value_ppb:12.1,legal_limit_ppb:10,pass_fail:false,source_type:'fssai',source_url:'https://fssai.gov.in',lab_name:'ICAR Pune'},
+      {test_date:'2024-08-14',contaminant:'pesticide_chlorpyrifos',value_ppb:3.2,legal_limit_ppb:20,pass_fail:true,source_type:'usfda',source_url:'https://fda.gov',lab_name:'—'},
+    ]
+  },
+  brands:[
+    {id:1,name:'India Gate',commodity:'Rice',risk:28,inference:'direct_test',n:45},
+    {id:2,name:'Fortune',commodity:'Mustard Oil',risk:41,inference:'direct_test',n:32},
+    {id:3,name:'Amul',commodity:'Milk',risk:19,inference:'direct_test',n:178},
+    {id:4,name:'Haldiram\'s',commodity:'Groundnut',risk:55,inference:'propagated',n:0},
+    {id:5,name:'MDH',commodity:'Chilli',risk:68,inference:'direct_test',n:23},
+    {id:6,name:'Everest',commodity:'Turmeric',risk:62,inference:'direct_test',n:19},
+  ],
+  marketGaps:[
+    {district:'Mysuru',state:'Karnataka',commodity:'Paneer',risk:12,brand_count:1,n_tests:14},
+    {district:'Madurai',state:'Tamil Nadu',commodity:'Rice',risk:18,brand_count:2,n_tests:28},
+    {district:'Surat',state:'Gujarat',commodity:'Milk',risk:21,brand_count:1,n_tests:19},
+    {district:'Kochi',state:'Kerala',commodity:'Groundnut',risk:9,brand_count:0,n_tests:11},
+    {district:'Chandigarh',state:'Punjab',commodity:'Wheat',risk:16,brand_count:3,n_tests:32},
+  ]
+};
+
+/* ---- helpers ---- */
+function riskColor(score) {
+  if (!score && score !== 0) return '';
+  if (score >= 60) return 'high';
+  if (score >= 35) return 'mid';
+  return 'low';
+}
+function riskLabel(score) {
+  if (!score && score !== 0) return 'No Data';
+  if (score >= 60) return 'Elevated Risk';
+  if (score >= 35) return 'Moderate Risk';
+  return 'Low Risk';
+}
+function fmt(n, decimals=1) {
+  return n != null ? Number(n).toFixed(decimals) : '—';
+}
+
+/* ============================================================
+   COMPONENTS
+   ============================================================ */
+
+function Nav({ page, setPage, onAuth }) {
+  return (
+    React.createElement('nav', { className: 'nav' },
+      React.createElement('div', { className: 'nav-logo', style:{cursor:'pointer'}, onClick:()=>setPage('home') },
+        React.createElement('span', { className: 'nav-logo-dot' }),
+        'FoodSafe India'
+      ),
+      React.createElement('div', { className: 'nav-links' },
+        ['home','risk','brands','fmcg','about'].map(p =>
+          React.createElement('button', {
+            key: p, className: `nav-btn ${page===p?'active':''}`,
+            onClick: ()=>setPage(p)
+          }, p === 'home' ? 'Home' : p === 'risk' ? 'Risk Report' : p === 'brands' ? 'Brands' : p === 'fmcg' ? 'FMCG' : 'About')
+        )
+      ),
+      React.createElement('button', { className: 'nav-cta', onClick: onAuth }, 'Sign In')
+    )
+  );
+}
+
+function Ticker() {
+  const items = [...MOCK.alerts, ...MOCK.alerts];
+  return (
+    React.createElement('div', { className: 'ticker' },
+      React.createElement('div', { className: 'ticker-inner' },
+        items.map((a,i) =>
+          React.createElement('span', { key: i, className: 'ticker-item' },
+            React.createElement('span', { className: 'ticker-dot' }),
+            React.createElement('strong', null, a.commodity),
+            ' · ', a.contaminant, ' · ', a.state, ' · ',
+            React.createElement('span', { style:{opacity:.7} }, a.source_type)
+          )
+        )
+      )
+    )
+  );
+}
+
+function RiskBadge({ score }) {
+  const c = riskColor(score);
+  return React.createElement('span', {
+    className: `badge badge-${c === 'low' ? 'tested' : c === 'high' ? '' : ''}`,
+    style: c === 'high' ? {background:'var(--red-lt)',color:'var(--red)'} :
+           c === 'mid'  ? {background:'var(--amber-lt)',color:'#92400E'} :
+                          {background:'var(--sage-lt)',color:'var(--forest)'}
+  }, riskLabel(score));
+}
+
+function RiskMeter({ score, ciLower, ciUpper, size = 'large' }) {
+  const c = riskColor(score);
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let frame; let start = null; const target = score || 0; const dur = 900;
+    function step(ts) {
+      if (!start) start = ts;
+      const p = Math.min((ts - start) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setDisplay(Math.round(target * ease));
+      if (p < 1) frame = requestAnimationFrame(step);
+    }
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [score]);
+
+  return React.createElement('div', { className: 'risk-display' },
+    React.createElement('div', { className: `risk-score-big risk-${c}` }, score != null ? display : '—'),
+    React.createElement('div', { className: `risk-label risk-${c}` }, riskLabel(score), ' / 100'),
+    React.createElement('div', { className: 'risk-bar-wrap' },
+      React.createElement('div', { className: 'risk-bar-track' },
+        React.createElement('div', {
+          className: `risk-bar-fill fill-${c}`,
+          style: { width: `${score || 0}%` }
+        })
+      )
+    ),
+    ciLower != null && ciUpper != null &&
+      React.createElement('div', { className: 'risk-ci' },
+        React.createElement('span', null, `95% CI: ${fmt(ciLower)} – ${fmt(ciUpper)}`),
+        React.createElement('span', null, 'bootstrapped interval')
+      )
+  );
+}
+
+function EnforcementTable({ events }) {
+  if (!events?.length) return React.createElement('p', {style:{color:'var(--muted)',padding:'24px 0'}}, 'No enforcement records found for this selection.');
+  return React.createElement('div', { className: 'table-wrap' },
+    React.createElement('table', null,
+      React.createElement('thead', null,
+        React.createElement('tr', null,
+          ['Date','Contaminant','Value (PPB)','Limit (PPB)','Result','Source','Lab'].map(h =>
+            React.createElement('th', {key:h}, h)
+          )
+        )
+      ),
+      React.createElement('tbody', null,
+        events.map((e,i) =>
+          React.createElement('tr', {key:i, className:'fade-in'},
+            React.createElement('td', null, React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:'12px'}}, e.test_date)),
+            React.createElement('td', null, e.contaminant.replace(/_/g,' ')),
+            React.createElement('td', null,
+              React.createElement('strong', {style:{fontFamily:'var(--font-mono)'}}, fmt(e.value_ppb,2))
+            ),
+            React.createElement('td', null, e.legal_limit_ppb != null ? fmt(e.legal_limit_ppb,1) : '—'),
+            React.createElement('td', null,
+              React.createElement('span', {className:`tag ${e.pass_fail===false?'tag-fail':'tag-pass'}`},
+                e.pass_fail === false ? 'FAIL' : e.pass_fail === true ? 'PASS' : '—'
+              )
+            ),
+            React.createElement('td', null,
+              React.createElement('span', {className:'tag tag-source'}, e.source_type.toUpperCase()),
+              e.source_url && React.createElement('a', {href:e.source_url,target:'_blank',style:{marginLeft:6,fontSize:11,color:'var(--forest)'}}, '↗')
+            ),
+            React.createElement('td', null, React.createElement('span', {style:{fontSize:12,color:'var(--muted)'}}, e.lab_name || '—'))
+          )
+        )
+      )
+    )
+  );
+}
+
+/* ============================================================
+   PAGES
+   ============================================================ */
+
+function HomePage({ setPage }) {
+  const [query, setQuery] = useState('');
+  const [commodity, setCommodity] = useState('1');
+
+  function handleSearch(e) {
+    e.preventDefault();
+    if (query.trim()) setPage('risk');
+  }
+
+  const dots = MOCK.districts.map(d => ({
+    left: `${((d.lon - 68) / (98 - 68)) * 100}%`,
+    top:  `${((35 - d.lat) / (35 - 8)) * 100}%`,
+    r: d.risk, n: d.name
+  }));
+
+  return React.createElement('div', { className: 'page fade-in' },
+    React.createElement(Ticker),
+
+    /* Hero */
+    React.createElement('div', { className: 'hero' },
+      React.createElement('div', { className: 'hero-bg' }),
+      React.createElement('div', { className: 'hero-grain' }),
+      React.createElement('div', { className: 'hero-badge' },
+        React.createElement('span', { className: 'hero-badge-dot' }),
+        'Real enforcement data · FSSAI · USFDA · EFSA'
+      ),
+      React.createElement('h1', { className: 'hero-h1' },
+        'Know what\'s in your food.',
+        React.createElement('br'),
+        React.createElement('em', null, 'Before you eat it.')
+      ),
+      React.createElement('p', { className: 'hero-sub' },
+        'India\'s first food safety intelligence platform — mapping contamination risk by geography, commodity, and brand using public enforcement data.'
+      ),
+      React.createElement('form', { className: 'search-bar', onSubmit: handleSearch },
+        React.createElement('input', {
+          className: 'search-input',
+          placeholder: 'Search commodity, brand, or district…',
+          value: query, onChange: e => setQuery(e.target.value)
+        }),
+        React.createElement('select', { className: 'search-select form-select', value: commodity, onChange: e => setCommodity(e.target.value) },
+          MOCK.commodities.map(c => React.createElement('option', {key:c.id, value:c.id}, c.name))
+        ),
+        React.createElement('button', { className: 'search-btn', type: 'submit' }, 'Check Risk →')
+      ),
+
+      /* Stats */
+      React.createElement('div', { className: 'stats-bar' },
+        [{n:'12,400+',l:'Enforcement Records'},{n:'736',l:'Districts Covered'},{n:'28',l:'States & UTs'},{n:'8',l:'Data Sources'}]
+          .map(s => React.createElement('div', { className: 'stat', key: s.l },
+            React.createElement('div', { className: 'stat-num' }, s.n),
+            React.createElement('div', { className: 'stat-label' }, s.l)
+          ))
+      )
+    ),
+
+    /* Map section */
+    React.createElement('div', { className: 'section' },
+      React.createElement('div', { className: 'section-header' },
+        React.createElement('div', { className: 'section-eyebrow' }, 'Risk Heatmap'),
+        React.createElement('h2', { className: 'section-title' }, 'Contamination risk across ', React.createElement('em', null, 'India'))
+      ),
+      React.createElement('div', { className: 'map-container' },
+        React.createElement('div', { className: 'map-dots' },
+          dots.map((d,i) => React.createElement('div', {
+            key: i, className: 'map-dot',
+            style: {
+              left: d.left, top: d.top,
+              width: `${10 + d.r * 0.2}px`, height: `${10 + d.r * 0.2}px`,
+              background: d.r >= 60 ? 'var(--red)' : d.r >= 35 ? 'var(--amber)' : 'var(--sage)',
+              opacity: 0.7, animationDelay: `${i * 0.2}s`
+            },
+            title: `${d.n}: ${d.r}/100`
+          }))
+        ),
+        React.createElement('svg', { className: 'map-india', viewBox:'0 0 200 240', fill:'none', xmlns:'http://www.w3.org/2000/svg' },
+          React.createElement('path', {d:'M100 10 L160 40 L175 80 L165 120 L150 150 L130 180 L100 220 L70 190 L50 160 L35 120 L25 80 L40 40 Z', stroke:'var(--forest)', strokeWidth:'2', fill:'var(--forest-pale)'})
+        ),
+        React.createElement('div', { style:{position:'relative',zIndex:1,textAlign:'center'} },
+          React.createElement('p', { style:{color:'var(--forest)',fontWeight:500,fontSize:15} }, 'Interactive district map'),
+          React.createElement('p', { style:{color:'var(--muted)',fontSize:13,marginTop:4} }, 'Connect to real geodata API or embed Leaflet.js for production')
+        )
+      ),
+      /* Legend */
+      React.createElement('div', { style:{display:'flex',gap:24,marginTop:16,flexWrap:'wrap'} },
+        [{c:'var(--sage)',l:'Low Risk (0–35)'},{c:'var(--amber)',l:'Moderate (35–60)'},{c:'var(--red)',l:'Elevated (60+)'}]
+          .map(({c,l}) => React.createElement('div', {key:l, style:{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--muted)'}},
+            React.createElement('div', {style:{width:10,height:10,borderRadius:'50%',background:c}}), l
+          ))
+      )
+    ),
+
+    /* District table */
+    React.createElement('div', { className: 'section', style:{paddingTop:0} },
+      React.createElement('div', { className: 'section-header' },
+        React.createElement('div', { className: 'section-eyebrow' }, 'Latest Scores'),
+        React.createElement('h2', { className: 'section-title' }, 'District risk scores — ', React.createElement('em', null, 'Rice'))
+      ),
+      React.createElement('div', { className: 'table-wrap' },
+        React.createElement('table', null,
+          React.createElement('thead', null,
+            React.createElement('tr', null,
+              ['District','State','Risk Score','Tests','Assessment'].map(h => React.createElement('th', {key:h}, h))
+            )
+          ),
+          React.createElement('tbody', null,
+            MOCK.districts.sort((a,b)=>b.risk-a.risk).map(d =>
+              React.createElement('tr', {key:d.id, className:'fade-in', style:{cursor:'pointer'}, onClick:()=>setPage('risk')},
+                React.createElement('td', null, React.createElement('strong', null, d.name)),
+                React.createElement('td', null, d.state),
+                React.createElement('td', null,
+                  React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8}},
+                    React.createElement('div', {style:{width:60,height:6,background:'var(--border)',borderRadius:3}},
+                      React.createElement('div', {style:{width:`${d.risk}%`,height:'100%',borderRadius:3,background:d.risk>=60?'var(--red)':d.risk>=35?'var(--amber)':'var(--sage)'}})
+                    ),
+                    React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:13,fontWeight:500}}, d.risk)
+                  )
+                ),
+                React.createElement('td', null, React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:12}}, d.n)),
+                React.createElement('td', null, React.createElement(RiskBadge, {score:d.risk}))
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function RiskPage() {
+  const [district, setDistrict] = useState(MOCK.districts[0]);
+  const [commodity, setCommodity] = useState(MOCK.commodities[0]);
+  const [tab, setTab] = useState('tests');
+  const r = MOCK.riskReport;
+
+  return React.createElement('div', { className: 'page fade-in' },
+    React.createElement('div', { className: 'container', style:{paddingTop:40} },
+      /* Selectors */
+      React.createElement('div', {style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:32}},
+        React.createElement('select', {
+          className:'form-input form-select', style:{maxWidth:220},
+          value:district.id, onChange:e=>setDistrict(MOCK.districts.find(d=>d.id==e.target.value)||MOCK.districts[0])
+        }, MOCK.districts.map(d=>React.createElement('option',{key:d.id,value:d.id},`${d.name}, ${d.state}`))),
+        React.createElement('select', {
+          className:'form-input form-select', style:{maxWidth:180},
+          value:commodity.id, onChange:e=>setCommodity(MOCK.commodities.find(c=>c.id==e.target.value)||MOCK.commodities[0])
+        }, MOCK.commodities.map(c=>React.createElement('option',{key:c.id,value:c.id},c.name)))
+      ),
+
+      React.createElement('div', {className:'grid-sidebar'},
+        /* Main */
+        React.createElement('div', null,
+          React.createElement('div', {style:{marginBottom:8,display:'flex',alignItems:'center',gap:10}},
+            React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:32,fontWeight:300}}, district.name, ' · ', commodity.name),
+            React.createElement('span', {
+              className:`badge ${r.inference_type==='direct_test'?'badge-tested':'badge-inferred'}`
+            }, r.inference_type==='direct_test'?'✓ Tested':'⚡ Inferred')
+          ),
+          React.createElement('p', {style:{color:'var(--muted)',marginBottom:24}}, district.state, ' · Latest quarter'),
+
+          React.createElement(RiskMeter, {score:r.risk_score, ciLower:r.ci_lower, ciUpper:r.ci_upper}),
+
+          /* Metric row */
+          React.createElement('div', {className:'metric-row'},
+            [{v:`${(r.fail_rate*100).toFixed(1)}%`,k:'Fail Rate'},{v:r.n_tests,k:'Total Tests'},{v:r.top_contaminants[0].name.replace(/_/g,' '),k:'Top Contaminant'}]
+              .map(m=>React.createElement('div',{key:m.k,className:'metric'},
+                React.createElement('div',{className:'metric-val',style:{fontSize:m.k==='Top Contaminant'?16:28}},m.v),
+                React.createElement('div',{className:'metric-key'},m.k)
+              ))
+          ),
+
+          /* Tabs */
+          React.createElement('div', {className:'tabs'},
+            ['tests','contaminants','supply'].map(t=>
+              React.createElement('button',{key:t,className:`tab ${tab===t?'active':''}`,onClick:()=>setTab(t)},
+                t==='tests'?'Direct Tests':t==='contaminants'?'Contaminants':'Supply Chain'
+              )
+            )
+          ),
+
+          tab==='tests' && React.createElement(EnforcementTable, {events:r.enforcement_events}),
+          tab==='contaminants' && React.createElement('div',{className:'cards cards-3'},
+            r.top_contaminants.map((c,i)=>
+              React.createElement('div',{key:i,className:'card'},
+                React.createElement('div',{style:{fontWeight:600,marginBottom:6}},c.name.replace(/_/g,' ')),
+                React.createElement('div',{style:{fontFamily:'var(--font-mono)',fontSize:22,color:'var(--red)',marginBottom:4}},`${(c.fail_rate*100).toFixed(1)}%`),
+                React.createElement('div',{style:{fontSize:12,color:'var(--muted)'}}, 'Failure rate')
+              )
+            )
+          ),
+          tab==='supply' && React.createElement('div',null,
+            React.createElement('div',{className:'supply-chain',style:{gap:0}},
+              [
+                {type:'Farm',name:'Vidarbha Region',risk:68},
+                null,
+                {type:'Mandi',name:'Nagpur Mandi',risk:45},
+                null,
+                {type:'Processor',name:'Mill, Nagpur',risk:51},
+                null,
+                {type:'Brand',name:commodity.name,risk:r.risk_score},
+              ].map((n,i)=>n
+                ? React.createElement('div',{key:i,className:'sc-node'},
+                    React.createElement('div',{className:'sc-node-type'},n.type),
+                    React.createElement('div',{style:{fontWeight:500,margin:'4px 0'}},n.name),
+                    React.createElement('div',{style:{fontFamily:'var(--font-mono)',fontSize:13,color:n.risk>=60?'var(--red)':n.risk>=35?'var(--amber)':'var(--sage)'}},`Risk: ${n.risk}`)
+                  )
+                : React.createElement('div',{key:i,className:'sc-arrow'},'→')
+              )
+            ),
+            React.createElement('p',{style:{fontSize:12,color:'var(--muted)',marginTop:16}},'Contamination propagated through supply chain using Bayesian updating. Retention factors applied per processing step.')
+          )
+        ),
+
+        /* Sidebar */
+        React.createElement('div', null,
+          React.createElement('div', {className:'card', style:{marginBottom:16}},
+            React.createElement('h3',{style:{fontFamily:'var(--font-serif)',fontSize:18,marginBottom:12}},'Top Contaminants'),
+            r.top_contaminants.map((c,i)=>
+              React.createElement('div',{key:i,style:{marginBottom:10}},
+                React.createElement('div',{style:{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:4}},
+                  React.createElement('span',null,c.name.replace(/_/g,' ')),
+                  React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontWeight:500}},`${(c.fail_rate*100).toFixed(1)}%`)
+                ),
+                React.createElement('div',{style:{height:4,background:'var(--border)',borderRadius:2}},
+                  React.createElement('div',{style:{height:'100%',borderRadius:2,background:i===0?'var(--red)':i===1?'var(--amber)':'var(--sage)',width:`${c.fail_rate*600}%`}})
+                )
+              )
+            )
+          ),
+          React.createElement('div', {className:'disclaimer'},
+            React.createElement('strong',null,'⚠ Disclaimer. '),
+            'Statistical model estimate based on public enforcement data. Not a laboratory test result. Not medical or legal advice. Sources linked for every claim. ',
+            React.createElement('a',{href:'https://fssai.gov.in',target:'_blank',style:{color:'var(--amber)',textDecoration:'underline'}}, 'FSSAI ↗')
+          )
+        )
+      )
+    )
+  );
+}
+
+function BrandsPage() {
+  const [search, setSearch] = useState('');
+  const filtered = MOCK.brands.filter(b => b.name.toLowerCase().includes(search.toLowerCase()));
+
+  return React.createElement('div', {className:'page fade-in'},
+    React.createElement('div', {className:'container', style:{paddingTop:40}},
+      React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:36,fontWeight:300,marginBottom:8}}, 'Brand Safety Profiles'),
+      React.createElement('p', {style:{color:'var(--muted)',marginBottom:32}}, 'Direct test data and supply-chain inferred scores for major brands.'),
+      React.createElement('input', {
+        className:'form-input', style:{maxWidth:400,marginBottom:24},
+        placeholder:'Search brand…', value:search, onChange:e=>setSearch(e.target.value)
+      }),
+      React.createElement('div', {className:'cards cards-2'},
+        filtered.map(b =>
+          React.createElement('div', {key:b.id, className:'card'},
+            React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}},
+              React.createElement('div', null,
+                React.createElement('h3', {style:{fontWeight:600,marginBottom:2}}, b.name),
+                React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, b.commodity)
+              ),
+              React.createElement('span', {
+                className:`badge ${b.inference==='direct_test'?'badge-tested':'badge-inferred'}`
+              }, b.inference==='direct_test'?'Tested':'Inferred')
+            ),
+            React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12,marginBottom:12}},
+              React.createElement('div', {
+                style:{
+                  width:56,height:56,borderRadius:'50%',
+                  background:b.risk>=60?'var(--red-lt)':b.risk>=35?'var(--amber-lt)':'var(--sage-lt)',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  fontFamily:'var(--font-serif)',fontSize:22,fontWeight:600,
+                  color:b.risk>=60?'var(--red)':b.risk>=35?'var(--amber)':'var(--sage)'
+                }
+              }, b.risk),
+              React.createElement('div', null,
+                React.createElement('div', {style:{fontSize:13,fontWeight:500}}, riskLabel(b.risk)),
+                React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, b.n > 0 ? `${b.n} tests` : 'Inferred — no direct tests')
+              )
+            ),
+            b.inference==='propagated' &&
+              React.createElement('div', {style:{fontSize:11.5,color:'#92400E',background:'var(--amber-lt)',borderRadius:6,padding:'6px 10px'}},
+                '⚡ Inferred from supply chain data — no direct test on this product'
+              ),
+            React.createElement('button', {className:'btn btn-outline',style:{marginTop:12,width:'100%',fontSize:13}}, 'View Full Report →')
+          )
+        )
+      )
+    )
+  );
+}
+
+function FMCGPage() {
+  return React.createElement('div', {className:'page fade-in'},
+    React.createElement('div', {className:'container',style:{paddingTop:40}},
+      React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12,marginBottom:8}},
+        React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:36,fontWeight:300}}, 'FMCG Market Intelligence'),
+        React.createElement('span', {className:'badge badge-inferred'}, 'Business Tier')
+      ),
+      React.createElement('p', {style:{color:'var(--muted)',marginBottom:32}}, 'Districts with low brand penetration and clean safety records — your next market opportunity.'),
+
+      React.createElement('div', {style:{display:'flex',gap:12,marginBottom:24,flexWrap:'wrap'}},
+        React.createElement('select', {className:'form-input form-select',style:{maxWidth:180}},
+          ['All States','Maharashtra','Gujarat','Tamil Nadu','Karnataka'].map(s=>React.createElement('option',{key:s},s))
+        ),
+        React.createElement('select', {className:'form-input form-select',style:{maxWidth:180}},
+          ['All Categories','Dairy','Grain','Produce','Spice','Oil'].map(s=>React.createElement('option',{key:s},s))
+        ),
+        React.createElement('button', {className:'btn btn-primary'}, '⬇ Export CSV')
+      ),
+
+      React.createElement('div', {className:'table-wrap',style:{marginBottom:32}},
+        React.createElement('table', null,
+          React.createElement('thead',null,
+            React.createElement('tr',null,
+              ['District','State','Commodity','Risk Score','Brands Present','Opportunity'].map(h=>React.createElement('th',{key:h},h))
+            )
+          ),
+          React.createElement('tbody',null,
+            MOCK.marketGaps.map((g,i)=>
+              React.createElement('tr',{key:i,className:'fade-in'},
+                React.createElement('td',null,React.createElement('strong',null,g.district)),
+                React.createElement('td',null,g.state),
+                React.createElement('td',null,g.commodity),
+                React.createElement('td',null,
+                  React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontSize:13,color:'var(--sage)',fontWeight:600}},g.risk)
+                ),
+                React.createElement('td',null,
+                  React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontSize:13}},g.brand_count)
+                ),
+                React.createElement('td',null,
+                  React.createElement('span',{className:'badge badge-tested'}, g.brand_count===0?'🔥 Uncontested':g.brand_count<=2?'Strong':'Competitive')
+                )
+              )
+            )
+          )
+        )
+      ),
+
+      React.createElement('div', {className:'section-header'},
+        React.createElement('div', {className:'section-eyebrow'},'How it works'),
+        React.createElement('h2', {className:'section-title'},'Identify districts with ', React.createElement('em',null,'clean records + low competition'))
+      ),
+      React.createElement('div', {className:'cards cards-3'},
+        [
+          {icon:'🔬',title:'Safety Filter',desc:'Only districts with risk score below 30 and minimum 5 enforcement tests.'},
+          {icon:'📊',title:'Brand Penetration',desc:'Count of brands with direct enforcement test records in that district.'},
+          {icon:'🎯',title:'Opportunity Score',desc:'Low brand count + clean record = prime entry point for your category.'},
+        ].map(c=>React.createElement('div',{key:c.title,className:'card'},
+          React.createElement('div',{style:{fontSize:28,marginBottom:12}},c.icon),
+          React.createElement('h3',{style:{fontWeight:600,marginBottom:8}},c.title),
+          React.createElement('p',{style:{fontSize:13.5,color:'var(--muted)',lineHeight:1.6}},c.desc)
+        ))
+      )
+    )
+  );
+}
+
+function AboutPage() {
+  return React.createElement('div', {className:'page fade-in'},
+    React.createElement('div', {className:'container',style:{paddingTop:48,maxWidth:760}},
+      React.createElement('div', {className:'section-eyebrow',style:{marginBottom:12}},'Methodology & Sources'),
+      React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:42,fontWeight:300,lineHeight:1.2,marginBottom:24}},
+        'How ', React.createElement('em',null,'FoodSafe India'), ' works'
+      ),
+      [
+        {title:'Data Sources',body:'We ingest enforcement records from FSSAI (weekly PDF scrapes and RTI responses), USFDA import alert RSS feeds, EFSA rapid alerts, APEDA export rejections, state health department outbreak records, AGMARKNET commodity data, CGWB water quality data, and CPCB industrial discharge records. All raw files are archived in S3 with 7-year retention.'},
+        {title:'Processing Pipeline',body:'PDFs are OCR\'d using Tesseract (primary) and AWS Textract (fallback). Named-entity recognition extracts product, brand, contaminant, value, unit, date, state, district, and lab ID. Values are standardised to PPB. Geographies are matched to Census 2021 canonical names. Duplicate records across sources are flagged (not deleted) using SHA-256 hashing.'},
+        {title:'Confidence Scoring',body:'Every record receives a confidence score: base 0.70, +0.15 if manually verified, +0.10 if from a Tier-1 lab (ICAR/NABL), +0.05 if value is in typical range for that commodity, −0.10 if OCR confidence is below 80%. Only records scoring ≥ 0.75 are used in downstream models.'},
+        {title:'Risk Scores',body:'District risk scores are generated by a Random Forest model trained with geographic holdout cross-validation (never tested on the same region as training). Features include 12-month failure rate, test count, water quality index, industrial proximity, and seasonal factors. 95% confidence intervals are bootstrapped across model trees.'},
+        {title:'Supply Chain Propagation',body:'When no direct test exists for a brand/product, we propagate contamination estimates from upstream nodes (farms, mandis) using a Bayesian directed acyclic graph. Propagated scores are capped at 60% confidence and clearly labeled "Inferred — no direct test on this product."'},
+        {title:'What We Will Never Do',body:'We will never state a product is "unsafe" without a direct government enforcement source. We will never name a brand negatively based solely on supply chain inference. We never sell user data. All disclaimers are permanent and non-dismissible.'},
+      ].map(s=>React.createElement('div',{key:s.title,style:{marginBottom:32}},
+        React.createElement('h2',{style:{fontFamily:'var(--font-serif)',fontSize:22,fontWeight:400,marginBottom:10,color:'var(--forest)'}},s.title),
+        React.createElement('p',{style:{lineHeight:1.75,color:'#44403C'}},s.body)
+      )),
+
+      React.createElement('div',{className:'disclaimer'},
+        React.createElement('strong',null,'Legal notice. '),
+        'This platform provides statistical risk estimates based on publicly available government enforcement data. It is not a laboratory testing service. All risk scores include 95% confidence intervals. Inference-based scores are clearly distinguished from direct-test scores at all times. This platform complies with the DPDP Act 2023. For disputes, contact disputes@foodsafe.in.'
+      )
+    )
+  );
+}
+
+/* ============================================================
+   AUTH MODAL
+   ============================================================ */
+function AuthModal({ onClose }) {
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [step, setStep] = useState(0); // onboarding
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (mode === 'register') { setStep(1); return; }
+    onClose();
+  }
+
+  if (step > 0) {
+    const steps = [
+      {
+        icon:'📍', title:'Where do you eat?',
+        sub:'Select your home district for personalised alerts.',
+        content: React.createElement('select',{className:'form-input form-select',style:{width:'100%'}},
+          MOCK.districts.map(d=>React.createElement('option',{key:d.id},`${d.name}, ${d.state}`))
+        )
+      },
+      {
+        icon:'🥗', title:'What do you care about?',
+        sub:'Choose the food categories you want to monitor.',
+        content: React.createElement('div',{className:'chip-grid'},
+          MOCK.commodities.map(c=>React.createElement('div',{key:c.id,className:'chip'},c.name))
+        )
+      },
+      {
+        icon:'🔔', title:'Stay informed',
+        sub:'Get alerts when new enforcement data affects your district.',
+        content: React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:12}},
+          ['Weekly digest email','Push notifications (mobile)','Critical alerts only'].map(opt=>
+            React.createElement('label',{key:opt,style:{display:'flex',alignItems:'center',gap:10,cursor:'pointer',fontSize:14}},
+              React.createElement('input',{type:'checkbox',style:{accentColor:'var(--forest)'}}), opt
+            )
+          )
+        )
+      },
+    ];
+    const s = steps[step-1];
+    return React.createElement('div', {className:'modal-overlay', onClick:onClose},
+      React.createElement('div', {className:'modal', onClick:e=>e.stopPropagation()},
+        React.createElement('div',{className:'progress-bar'},
+          React.createElement('div',{className:'progress-fill',style:{width:`${(step/steps.length)*100}%`}})
+        ),
+        React.createElement('div',{className:'onboard-step'},
+          React.createElement('div',{className:'onboard-icon'},s.icon),
+          React.createElement('h2',{className:'onboard-title'},s.title),
+          React.createElement('p',{className:'onboard-sub'},s.sub),
+          s.content,
+          React.createElement('div',{style:{display:'flex',gap:12,marginTop:8}},
+            step > 1 && React.createElement('button',{className:'btn btn-outline',onClick:()=>setStep(step-1)},'Back'),
+            React.createElement('button',{className:'btn btn-primary',onClick:()=>step<steps.length?setStep(step+1):onClose()},
+              step<steps.length?'Continue →':'Get Started →'
+            )
+          ),
+          React.createElement('div',{className:'step-dots'},
+            steps.map((_,i)=>React.createElement('div',{key:i,className:`step-dot ${i<step?'active':''}`}))
+          )
+        )
+      )
+    );
+  }
+
+  return React.createElement('div', {className:'modal-overlay', onClick:onClose},
+    React.createElement('div', {className:'modal', onClick:e=>e.stopPropagation()},
+      React.createElement('div', {className:'modal-close', onClick:onClose}, '✕'),
+      React.createElement('h2', {className:'modal-title'},
+        mode==='login' ? 'Welcome back' : 'Create your account'
+      ),
+      React.createElement('form', {onSubmit:handleSubmit},
+        React.createElement('div',{className:'form-group'},
+          React.createElement('label',{className:'form-label'},'Email'),
+          React.createElement('input',{className:'form-input',type:'email',placeholder:'you@example.com',value:email,onChange:e=>setEmail(e.target.value),required:true})
+        ),
+        React.createElement('div',{className:'form-group'},
+          React.createElement('label',{className:'form-label'},'Password'),
+          React.createElement('input',{className:'form-input',type:'password',placeholder:'••••••••',value:password,onChange:e=>setPassword(e.target.value),required:true})
+        ),
+        mode==='register' && React.createElement('div',{className:'form-group'},
+          React.createElement('label',{className:'form-label'},'Phone (optional, for SMS alerts)'),
+          React.createElement('input',{className:'form-input',type:'tel',placeholder:'+91 98765 43210'})
+        ),
+        React.createElement('button',{className:'btn btn-primary',type:'submit',style:{width:'100%',padding:'12px',fontSize:15}},
+          mode==='login'?'Sign In →':'Create Account →'
+        )
+      ),
+      React.createElement('div',{style:{textAlign:'center',marginTop:16,fontSize:13,color:'var(--muted)'}},
+        mode==='login'?'No account? ':'Already registered? ',
+        React.createElement('button',{style:{color:'var(--forest)',fontWeight:500},onClick:()=>setMode(mode==='login'?'register':'login')},
+          mode==='login'?'Register free':'Sign in'
+        )
+      ),
+      React.createElement('div',{style:{marginTop:20,paddingTop:16,borderTop:'1px solid var(--border)',fontSize:11.5,color:'var(--muted)',textAlign:'center'}},
+        'Free tier: 5 lookups/day · Home district only · No credit card required'
+      )
+    )
+  );
+}
+
+/* ============================================================
+   APP ROOT
+   ============================================================ */
+function App() {
+  const [page, setPage] = useState('home');
+  const [showAuth, setShowAuth] = useState(false);
+
+  const pages = {
+    home:   React.createElement(HomePage, {setPage}),
+    risk:   React.createElement(RiskPage),
+    brands: React.createElement(BrandsPage),
+    fmcg:   React.createElement(FMCGPage),
+    about:  React.createElement(AboutPage),
+  };
+
+  return React.createElement('div', null,
+    React.createElement(Nav, {page, setPage, onAuth:()=>setShowAuth(true)}),
+    pages[page] || pages.home,
+    React.createElement('footer', null,
+      React.createElement('div', null,
+        React.createElement('strong', {style:{fontFamily:'var(--font-serif)',fontSize:16}}, 'FoodSafe India'),
+        React.createElement('br'),
+        React.createElement('span', {style:{fontSize:11.5}}, '© 2025 · Statistical estimates · Not a laboratory service')
+      ),
+      React.createElement('div', {style:{display:'flex',gap:20}},
+        ['Terms','Privacy','Methodology','Disputes','RTI Records'].map(l=>
+          React.createElement('a',{key:l,href:'#',onClick:e=>{e.preventDefault();if(l==='Methodology')setPage('about')}},l)
+        )
+      ),
+      React.createElement('div', {style:{fontSize:11,maxWidth:320,textAlign:'right',lineHeight:1.6}},
+        'Data: FSSAI · USFDA · EFSA · APEDA · AGMARKNET · CGWB · CPCB · NSSO · Census 2021'
+      )
+    ),
+    showAuth && React.createElement(AuthModal, {onClose:()=>setShowAuth(false)})
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>
