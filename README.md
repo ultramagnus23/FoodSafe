@@ -59,9 +59,13 @@ python -m spacy download en_core_web_sm
 createdb foodsafe
 psql foodsafe < schema.sql
 psql foodsafe < schema_migration_002.sql
-# Optional: demo districts/brands/labs + pre-computed aggregation rows so the
-# API returns non-empty results without running the full ingestion pipeline.
-psql foodsafe < seed_demo.sql
+psql foodsafe < seed_demo.sql          # districts, brands, labs, reference data
+
+# Demo data + computed risk scores (set DATABASE_URL first, see step 4):
+python -m pipeline.seed_enforcement    # realistic raw enforcement records
+python -m pipeline.sources.openfda     # real US FDA recalls (optional)
+python -m pipeline.sources.agmarknet   # real Indian districts/commodities (optional)
+python -m models.aggregate             # COMPUTE district + brand risk scores
 ```
 
 > Note: `schema.sql` creates a restricted `foodsafe_app` role and enables
@@ -188,9 +192,21 @@ Stage 4: Confidence Score (ScoredRecord)
      ▼
 PostgreSQL enforcement_records
      │
-     ▼ (nightly Airflow)
-agg_district_commodity_risk
-agg_brand_safety_profile
+     ▼  python -m models.aggregate   (nightly via GitHub Actions)
+agg_district_commodity_risk   ← computed: fail rate, risk score, Wilson CI,
+agg_brand_safety_profile         top contaminants — from the records above
+```
+
+### Live ingestion (in addition to the FSSAI batch pipeline above)
+
+```
+openFDA food enforcement API ──┐
+   (real US FDA recalls)        │  python -m pipeline.sources.openfda
+                                ▼
+data.gov.in / AGMARKNET ──────► enforcement_records / districts / commodities
+   (real Indian mandi data)     python -m pipeline.sources.agmarknet
+                                ▼
+                         python -m models.aggregate  → risk scores
 ```
 
 ## Status
@@ -198,30 +214,45 @@ agg_brand_safety_profile
 **Built and working:**
 - **Pipeline** — Stages 1–4 (extract → standardise → dedup → confidence score),
   FSSAI scraper, 3 Airflow DAGs.
-- **API** — FastAPI with 8 routers (auth, risk, user, search, fmcg, insurance,
-  disputes, admin). JWT + API-key auth, tier enforcement, legal disclaimer
-  baked into risk responses.
-- **Models** — Random Forest district-risk model (`models/district_risk.py`),
-  Bayesian supply-chain propagation graph (`models/supply_chain.py`), fraud
-  detection via Benford's Law + lab reliability (`models/fraud_detection.py`).
+- **Live ingesters** — `pipeline/sources/openfda.py` pulls **real** US FDA food
+  recalls (no key, no OCR); `pipeline/sources/agmarknet.py` pulls **real** Indian
+  district/commodity coverage from data.gov.in. Both idempotent.
+- **Aggregation** — `models/aggregate.py` computes `agg_district_commodity_risk`
+  and `agg_brand_safety_profile` **from `enforcement_records`** (fail rate, risk
+  score via a documented saturating curve, Wilson-score 95% CI, top
+  contaminants). Risk scores are computed, not hand-seeded.
+- **API** — FastAPI with 9 routers (auth, risk, user, search, fmcg, insurance,
+  **meta**, disputes, admin). JWT + API-key auth, tier enforcement, legal
+  disclaimer in risk responses. `risk.py` now returns computed `top_factors`.
+  `/v1/meta/{districts,commodities,brands}` provide reference lists.
+- **Models** — Bayesian supply-chain propagation graph (`models/supply_chain.py`),
+  fraud detection via Benford's Law + lab reliability (`models/fraud_detection.py`),
+  Random Forest district-risk model (`models/district_risk.py`, trains on the
+  aggregation table).
+- **Automated workflow** — `.github/workflows/ingest.yml` runs ingest → aggregate
+  daily in the cloud (Supabase via repo secret), no laptop required.
 - **Web app** — `index.html`, single-file React SPA wired to the live API
-  (home/map, risk report, brands, FMCG market gaps, alerts ticker).
+  (home/map, risk report, brands, FMCG market gaps, alerts ticker), real
+  register/login, Leaflet map fed by computed scores.
 
-**Still stubbed / not yet wired:**
-- The Random Forest and supply-chain models run as standalone CLIs and via
-  Airflow, but their output is **not yet plumbed into the live API responses**:
-  `risk.py` returns `top_factors: []` and `supply_chain: []` (see the
-  `# populated by ... in production` comments). The aggregation tables they would
-  populate are filled by the nightly DAG (or by `seed_demo.sql` for demos).
-- **Production DB role** — the API currently connects as the DB owner; it does
-  not set the `app.user_id` RLS context that the restricted `foodsafe_app` role
-  needs. Wire `SET LOCAL app.user_id` per request before switching to that role.
-- **Disputes → risk feedback loop** — dispute review flags records but does not
-  recompute downstream risk scores.
+**Honest limitations:**
+- **No open API for Indian district-level contamination data** — it exists only
+  in FSSAI PDFs, so the India heatmap is populated by demo records
+  (`pipeline/seed_enforcement.py`) that the aggregation computes over exactly as
+  it would real data. openFDA gives real *US* recalls (national alerts feed, not
+  the India district map). Closing this fully needs the FSSAI OCR path
+  (Tesseract + Poppler + spaCy NER; gov listing URLs also changed).
+- **Random Forest** trains on the aggregation table but needs more data than the
+  demo set to be meaningful; the served scores come from the statistical
+  aggregation, not the RF, until enough records accumulate.
+- **Supply-chain graph** — `supply_chain: []` until `supply_chain_nodes/edges`
+  are populated (no seed graph yet).
+- **Production DB role** — API connects as the DB owner; it does not yet set the
+  `app.user_id` RLS context the restricted `foodsafe_app` role needs.
+- **Disputes → risk feedback loop** — review flags records but does not recompute
+  scores.
 
 **Not started:**
-- NER model fine-tuning on annotated FSSAI PDFs.
-- APEDA and state health department scrapers.
-- Age-gating / DOB collection (pending legal review).
-- Choropleth map rendering (the web app currently plots district risk as
-  positioned dots, not GeoJSON district polygons).
+- NER fine-tuning; APEDA / state-health scrapers; age-gating / DOB collection.
+- Census-2021 district **polygon** choropleth (the map uses risk-coloured
+  markers, not GeoJSON polygons — needs the boundary file + real census codes).

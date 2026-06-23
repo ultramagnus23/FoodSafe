@@ -118,7 +118,9 @@ async def district_risk(
     async with pool.acquire() as conn:
         # District + commodity info
         district = await conn.fetchrow(
-            "SELECT id, name_canonical, state, latitude, longitude FROM districts WHERE id = $1",
+            "SELECT id, name_canonical, state, latitude, longitude, "
+            "water_quality_index, industrial_proximity_score "
+            "FROM districts WHERE id = $1",
             district_id,
         )
         if not district:
@@ -196,6 +198,39 @@ async def district_risk(
         else:
             top_contaminants = list(raw_tc) if raw_tc else []
 
+    # Contributing risk factors, derived from the aggregation + district
+    # context. These are the real signals the score is built from (the
+    # aggregation methodology lives in models/aggregate.py).
+    top_factors: list[dict] = []
+    if agg and agg["fail_rate"] is not None:
+        top_factors.append({
+            "factor": "12-month fail rate",
+            "value": round(float(agg["fail_rate"]) * 100, 1),
+            "unit": "%",
+            "effect": "increases risk",
+        })
+    top_factors.append({
+        "factor": "sample size",
+        "value": n_tests or 0,
+        "unit": "tests",
+        "effect": "narrows confidence interval",
+    })
+    if district["water_quality_index"] is not None:
+        top_factors.append({
+            "factor": "water quality index",
+            "value": float(district["water_quality_index"]),
+            "unit": "0-100 (higher = cleaner)",
+            "effect": "lower water quality raises risk",
+        })
+    if district["industrial_proximity_score"] is not None:
+        top_factors.append({
+            "factor": "industrial proximity",
+            "value": float(district["industrial_proximity_score"]),
+            "unit": "0-100 (higher = more industrial)",
+            "effect": "higher proximity raises risk",
+        })
+    top_factors = top_factors[:3]
+
     return DistrictRiskResponse(
         district_id       = district_id,
         district_name     = district["name_canonical"],
@@ -207,7 +242,7 @@ async def district_risk(
         ci_upper          = float(agg["ci_upper"]) if agg and agg["ci_upper"] is not None else None,
         n_tests           = n_tests or 0,
         fail_rate         = float(agg["fail_rate"]) if agg and agg["fail_rate"] is not None else None,
-        top_factors       = [],   # populated by ML model in production
+        top_factors       = top_factors,
         top_contaminants  = top_contaminants,
         enforcement_events = events,
         inference_type    = inference_type,

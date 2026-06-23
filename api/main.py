@@ -14,7 +14,7 @@ from api.auth import auth_router
 from api.routes.risk import risk_router
 from api.routes.user import user_router
 from api.routes.disputes import disputes_router, admin_router
-from api.other_routes import search_router, fmcg_router, insurance_router
+from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("foodsafe.api")
@@ -49,6 +49,7 @@ app.include_router(user_router,      prefix="/v1/user",      tags=["user"])
 app.include_router(search_router,    prefix="/v1/search",    tags=["search"])
 app.include_router(fmcg_router,      prefix="/v1/fmcg",      tags=["fmcg"])
 app.include_router(insurance_router, prefix="/v1/insurance", tags=["insurance"])
+app.include_router(meta_router,      prefix="/v1/meta",      tags=["meta"])
 app.include_router(disputes_router,  prefix="/v1/disputes",  tags=["disputes"])
 app.include_router(admin_router,     prefix="/v1/admin",     tags=["admin"])
 

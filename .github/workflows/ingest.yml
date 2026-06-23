@@ -29,7 +29,19 @@ jobs:
       - name: Install dependencies
         run: pip install --quiet psycopg2-binary
 
-      - name: Run openFDA ingester
+      - name: Ingest openFDA food enforcement (real US FDA recalls)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.sources.openfda --limit "${{ github.event.inputs.limit || '50' }}"
+
+      - name: Ingest AGMARKNET districts/commodities (data.gov.in)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATA_GOV_IN_KEY: ${{ secrets.DATA_GOV_IN_KEY }}
+        continue-on-error: true   # tangential reference data; don't fail the run
+        run: python -m pipeline.sources.agmarknet --limit 1000
+
+      - name: Recompute aggregation (district + brand risk scores)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m models.aggregate
