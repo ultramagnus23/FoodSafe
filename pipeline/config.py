@@ -7,6 +7,13 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 
+# Load .env (if present) so DATABASE_URL etc. work for pipeline runners too.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ============================================================
 # PATHS
 # ============================================================
@@ -23,6 +30,30 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://foodsafe_app:password@localhost:5432/foodsafe"
 )
+
+
+def pg_connect():
+    """psycopg2 connection from DATABASE_URL, built from parsed components.
+
+    libpq misparses the dotted Supabase pooler username (postgres.<ref>) when
+    passed the raw URI, so we parse and pass keyword args. SSL is required for
+    Supabase; honour an explicit sslmode=require too.
+    """
+    import psycopg2
+    from urllib.parse import urlparse
+
+    u = urlparse(DATABASE_URL)
+    kwargs = dict(
+        host=u.hostname,
+        port=u.port or 5432,
+        dbname=(u.path.lstrip("/") or "postgres"),
+        user=u.username,
+        password=u.password,
+    )
+    if "supabase.com" in (u.hostname or "") or "sslmode=require" in DATABASE_URL:
+        kwargs["sslmode"] = "require"
+    return psycopg2.connect(**kwargs)
+
 
 # ============================================================
 # AWS / S3

@@ -136,6 +136,26 @@ The web app calls the API at `http://localhost:8000` (configurable via the
 `API_BASE` constant at the top of `index.html`). All read endpoints require a
 JWT, so the app has a built-in register/login flow.
 
+### 8. Automated data ingestion (real data)
+
+Most tables are demo-seeded (`seed_demo.sql`). For **real** records there is a
+working ingester for the openFDA food-enforcement API (public, no key, no OCR):
+
+```bash
+python -m pipeline.sources.openfda --limit 50   # pulls real food-recall records
+```
+
+It maps US FDA food recalls (lead/aflatoxin/melamine/… recalls) into
+`enforcement_records` as `source_type='usfda'`, idempotently (dedup on the FDA
+recall number). These surface in the national `/risk/alerts` feed. Note: they
+are US-geographic, so they do **not** populate the India district heatmap — that
+still needs the FSSAI pipeline (PDF OCR, currently blocked on tooling + changed
+gov URLs).
+
+This runs automatically in the cloud via
+[`.github/workflows/ingest.yml`](.github/workflows/ingest.yml) (daily cron +
+manual trigger), using a `DATABASE_URL` repo secret — no laptop required.
+
 ## Data Flow
 
 ```

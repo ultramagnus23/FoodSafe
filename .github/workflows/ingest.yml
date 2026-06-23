@@ -1,0 +1,35 @@
+name: Ingest food enforcement data
+
+# Pulls real food-recall records from the openFDA food enforcement API into the
+# database on a schedule. Runs in the cloud, so data updates automatically
+# without anyone's laptop being on.
+#
+# Requires a repo secret DATABASE_URL (the Supabase Session-pooler URL):
+#   gh secret set DATABASE_URL --body "postgresql://postgres.<ref>:<pwd>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC
+  workflow_dispatch:        # allow manual runs from the Actions tab
+    inputs:
+      limit:
+        description: "records per contaminant search term"
+        default: "50"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary
+
+      - name: Run openFDA ingester
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.sources.openfda --limit "${{ github.event.inputs.limit || '50' }}"
