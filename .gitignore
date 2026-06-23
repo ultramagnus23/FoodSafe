@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 .env
 .claude/
+
+# scratch investigation files
+/arch.html
+/ft.html
+/recall.html
+/foscos.html
+/main.js

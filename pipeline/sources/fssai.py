@@ -34,14 +34,22 @@ from pipeline.config import (
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# KNOWN FSSAI LISTING PAGES
+# FSSAI LISTING PAGES
+#
+# NOTE (2026-06): the old cms/enforcement-reports.php, recall-notices.php,
+# lab-test-results.php and food-safety-mitra-reports.php URLs now 302-redirect
+# to the homepage — FSSAI restructured the site. The current reachable pages
+# are below. See docs/FSSAI_INGESTION.md for the full investigation: the
+# food-recall data is JS-rendered (not in the static HTML / not PDFs) and the
+# "report" PDFs are news clippings, so this scraper currently yields little
+# structured enforcement data. It is kept functional against live URLs; the
+# remaining work (trained NER model, headless render for recalls) is documented.
 # ============================================================
 
 FSSAI_PAGES = {
-    "enforcement_reports": "https://fssai.gov.in/cms/enforcement-reports.php",
-    "recall_notices":      "https://fssai.gov.in/cms/recall-notices.php",
-    "lab_results":         "https://fssai.gov.in/cms/lab-test-results.php",
-    "food_safety_mitra":   "https://fssai.gov.in/cms/food-safety-mitra-reports.php",
+    "food_recall":         "https://fssai.gov.in/cms/food-recall.php",
+    "food_recall_archive": "https://fssai.gov.in/cms/food-recall-archive.php",
+    "food_testing":        "https://fssai.gov.in/index.php?page=food-testing.php",
 }
 
 # ============================================================

@@ -240,8 +240,11 @@ data.gov.in / AGMARKNET ──────► enforcement_records / districts / 
   in FSSAI PDFs, so the India heatmap is populated by demo records
   (`pipeline/seed_enforcement.py`) that the aggregation computes over exactly as
   it would real data. openFDA gives real *US* recalls (national alerts feed, not
-  the India district map). Closing this fully needs the FSSAI OCR path
-  (Tesseract + Poppler + spaCy NER; gov listing URLs also changed).
+  the India district map). The OCR path (Tesseract + Poppler + spaCy NER) is now
+  installed and `extract_pdf` runs end-to-end on real FSSAI PDFs, but FSSAI no
+  longer publishes structured enforcement data (recalls are JS-rendered and
+  qualitative; "reports" are news clippings). Full investigation + roadmap:
+  [`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md).
 - **Random Forest** trains on the aggregation table but needs more data than the
   demo set to be meaningful; the served scores come from the statistical
   aggregation, not the RF, until enough records accumulate.

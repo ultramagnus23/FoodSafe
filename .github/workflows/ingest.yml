@@ -41,6 +41,16 @@ jobs:
         continue-on-error: true   # tangential reference data; don't fail the run
         run: python -m pipeline.sources.agmarknet --limit 1000
 
+      - name: Scrape FoSCoS food recalls (headless browser)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # gov portal can be in its maintenance window
+        # cron is 06:00 UTC = 11:30 IST, outside FoSCoS maintenance (23:30–03:00 IST)
+        run: |
+          pip install --quiet playwright
+          python -m playwright install --with-deps chromium
+          python -m pipeline.sources.fssai_recall --limit 100
+
       - name: Recompute aggregation (district + brand risk scores)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
