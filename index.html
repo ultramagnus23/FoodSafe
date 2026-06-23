@@ -406,71 +406,140 @@
 <div id="root"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useContext } = React;
 
 /* ============================================================
-   MOCK DATA — replace with real API calls
+   API CLIENT  — talks to the FastAPI backend (api/main.py)
+   Override the base URL by setting window.FOODSAFE_API_BASE
+   before this script runs, or edit API_BASE below.
    ============================================================ */
-const MOCK = {
-  alerts: [
-    { commodity:'Rice', contaminant:'Aflatoxin B1', value_ppb:45.2, state:'Maharashtra', brand:'—', source_type:'FSSAI' },
-    { commodity:'Chilli Powder', contaminant:'Lead', value_ppb:620, state:'Gujarat', brand:'SpiceMart', source_type:'FSSAI' },
-    { commodity:'Milk', contaminant:'Melamine', value_ppb:3100, state:'Uttar Pradesh', brand:'DairyFresh', source_type:'USFDA' },
-    { commodity:'Groundnut', contaminant:'Aflatoxin Total', value_ppb:88, state:'Rajasthan', brand:'—', source_type:'FSSAI' },
-    { commodity:'Turmeric', contaminant:'Lead', value_ppb:1240, state:'Tamil Nadu', brand:'GoldenSpice', source_type:'APEDA' },
-    { commodity:'Paneer', contaminant:'Coliform', value_ppb:0, state:'Delhi', brand:'FreshDairy', source_type:'State Health' },
-  ],
-  districts: [
-    {id:1,name:'Mumbai',state:'Maharashtra',risk:72,n:234,lat:19.07,lon:72.87},
-    {id:2,name:'Pune',state:'Maharashtra',risk:41,n:178,lat:18.52,lon:73.86},
-    {id:3,name:'Nagpur',state:'Maharashtra',risk:58,n:92,lat:21.14,lon:79.08},
-    {id:4,name:'Nashik',state:'Maharashtra',risk:35,n:67,lat:19.99,lon:73.79},
-    {id:5,name:'Ahmedabad',state:'Gujarat',risk:63,n:145,lat:23.02,lon:72.57},
-    {id:6,name:'Surat',state:'Gujarat',risk:48,n:98,lat:21.17,lon:72.83},
-    {id:7,name:'Delhi',state:'Delhi',risk:81,n:312,lat:28.70,lon:77.10},
-    {id:8,name:'Noida',state:'Uttar Pradesh',risk:67,n:89,lat:28.53,lon:77.39},
-    {id:9,name:'Lucknow',state:'Uttar Pradesh',risk:54,n:123,lat:26.84,lon:80.94},
-    {id:10,name:'Chennai',state:'Tamil Nadu',risk:44,n:201,lat:13.08,lon:80.27},
-    {id:11,name:'Coimbatore',state:'Tamil Nadu',risk:31,n:87,lat:11.01,lon:76.96},
-    {id:12,name:'Bengaluru',state:'Karnataka',risk:38,n:267,lat:12.97,lon:77.59},
-  ],
-  commodities: [
-    {id:1,name:'Rice',category:'grain'},{id:2,name:'Wheat',category:'grain'},
-    {id:3,name:'Milk',category:'dairy'},{id:4,name:'Groundnut',category:'produce'},
-    {id:5,name:'Chilli',category:'spice'},{id:6,name:'Turmeric',category:'spice'},
-    {id:7,name:'Mustard Oil',category:'oil'},{id:8,name:'Paneer',category:'dairy'},
-    {id:9,name:'Onion',category:'produce'},{id:10,name:'Potato',category:'produce'},
-  ],
-  riskReport: {
-    district_name:'Mumbai', state:'Maharashtra',
-    commodity_name:'Rice', risk_score:72.4, ci_lower:63.1, ci_upper:81.7,
-    n_tests:234, fail_rate:0.148,
-    top_contaminants:[{name:'aflatoxin_b1',fail_rate:0.09},{name:'lead',fail_rate:0.04},{name:'pesticide_chlorpyrifos',fail_rate:0.015}],
-    inference_type:'direct_test',
-    enforcement_events:[
-      {test_date:'2024-11-12',contaminant:'aflatoxin_b1',value_ppb:45.2,legal_limit_ppb:10,pass_fail:false,source_type:'fssai',source_url:'https://fssai.gov.in',lab_name:'CFTRI'},
-      {test_date:'2024-10-05',contaminant:'lead',value_ppb:88,legal_limit_ppb:100,pass_fail:true,source_type:'fssai',source_url:'https://fssai.gov.in',lab_name:'NABL Lab 02'},
-      {test_date:'2024-09-22',contaminant:'aflatoxin_b1',value_ppb:12.1,legal_limit_ppb:10,pass_fail:false,source_type:'fssai',source_url:'https://fssai.gov.in',lab_name:'ICAR Pune'},
-      {test_date:'2024-08-14',contaminant:'pesticide_chlorpyrifos',value_ppb:3.2,legal_limit_ppb:20,pass_fail:true,source_type:'usfda',source_url:'https://fda.gov',lab_name:'—'},
-    ]
-  },
-  brands:[
-    {id:1,name:'India Gate',commodity:'Rice',risk:28,inference:'direct_test',n:45},
-    {id:2,name:'Fortune',commodity:'Mustard Oil',risk:41,inference:'direct_test',n:32},
-    {id:3,name:'Amul',commodity:'Milk',risk:19,inference:'direct_test',n:178},
-    {id:4,name:'Haldiram\'s',commodity:'Groundnut',risk:55,inference:'propagated',n:0},
-    {id:5,name:'MDH',commodity:'Chilli',risk:68,inference:'direct_test',n:23},
-    {id:6,name:'Everest',commodity:'Turmeric',risk:62,inference:'direct_test',n:19},
-  ],
-  marketGaps:[
-    {district:'Mysuru',state:'Karnataka',commodity:'Paneer',risk:12,brand_count:1,n_tests:14},
-    {district:'Madurai',state:'Tamil Nadu',commodity:'Rice',risk:18,brand_count:2,n_tests:28},
-    {district:'Surat',state:'Gujarat',commodity:'Milk',risk:21,brand_count:1,n_tests:19},
-    {district:'Kochi',state:'Kerala',commodity:'Groundnut',risk:9,brand_count:0,n_tests:11},
-    {district:'Chandigarh',state:'Punjab',commodity:'Wheat',risk:16,brand_count:3,n_tests:32},
-  ]
+const API_BASE = (typeof window !== 'undefined' && window.FOODSAFE_API_BASE) || 'http://127.0.0.1:8000';
+
+/* Static reference lookups (ids/names only — match schema.sql seed).
+   These are NOT risk data; every risk number on screen comes from the API. */
+const COMMODITIES = [
+  {id:1,name:'Rice'},{id:2,name:'Wheat'},{id:3,name:'Milk'},{id:4,name:'Groundnut'},
+  {id:5,name:'Chilli'},{id:6,name:'Turmeric'},{id:7,name:'Mustard Oil'},{id:8,name:'Onion'},
+  {id:9,name:'Potato'},{id:10,name:'Paneer'},
+];
+
+/* ---- token storage (JWT from /v1/auth/login) ---- */
+const TOKEN_KEY = 'foodsafe_token';
+const tokenStore = {
+  get(){ try { return localStorage.getItem(TOKEN_KEY); } catch(e){ return null; } },
+  set(t){ try { localStorage.setItem(TOKEN_KEY, t); } catch(e){} },
+  clear(){ try { localStorage.removeItem(TOKEN_KEY); } catch(e){} },
 };
+
+class ApiError extends Error {
+  constructor(message, status){ super(message); this.status = status; }
+}
+
+async function apiFetch(path, opts){
+  opts = opts || {};
+  const headers = { 'Content-Type': 'application/json' };
+  const token = tokenStore.get();
+  if (opts.auth !== false && token) headers['Authorization'] = 'Bearer ' + token;
+  let res;
+  try {
+    res = await fetch(API_BASE + path, {
+      method: opts.method || 'GET',
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch(e){
+    throw new ApiError('Could not reach the API at ' + API_BASE + '. Is the backend running?', 0);
+  }
+  if (res.status === 401){
+    tokenStore.clear();
+    throw new ApiError('Please sign in to view live data.', 401);
+  }
+  let data = null;
+  try { data = await res.json(); } catch(e){}
+  if (!res.ok){
+    const detail = data && data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : null;
+    throw new ApiError(detail || ('Request failed (' + res.status + ')'), res.status);
+  }
+  return data;
+}
+
+/* typed endpoint helpers */
+const api = {
+  register: (email, password) => apiFetch('/v1/auth/register', { method:'POST', auth:false, body:{ email, password } }),
+  login:    (email, password) => apiFetch('/v1/auth/login',    { method:'POST', auth:false, body:{ email, password } }),
+  profile:  () => apiFetch('/v1/user/profile'),
+  setLocation: (district_id) => apiFetch('/v1/user/location', { method:'POST', body:{ district_id } }),
+  map:      (commodityId=1) => apiFetch('/v1/risk/map?commodity_id=' + commodityId),
+  alerts:   (limit=12) => apiFetch('/v1/risk/alerts?limit=' + limit),
+  districtRisk: (d, c) => apiFetch('/v1/risk/district/' + d + '/commodity/' + c),
+  brandRisk: (b, c, d) => apiFetch('/v1/risk/brand/' + b + '/product/' + c + '/district/' + d),
+  search:   (q) => apiFetch('/v1/search?q=' + encodeURIComponent(q || '')),
+  marketGaps: (state, category) => {
+    const p = [];
+    if (state) p.push('state=' + encodeURIComponent(state));
+    if (category) p.push('category=' + encodeURIComponent(category));
+    return apiFetch('/v1/fmcg/market-gaps' + (p.length ? '?' + p.join('&') : ''));
+  },
+};
+
+const AuthContext = React.createContext(null);
+
+/* ---- data-fetching hook: returns {data, loading, error, reload} ---- */
+function useApi(fetcher, deps, enabled){
+  enabled = enabled !== false;
+  const [state, setState] = useState({ data:null, loading:enabled, error:null });
+  const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => setNonce(n => n + 1), []);
+  useEffect(() => {
+    if (!enabled){ setState({ data:null, loading:false, error:null }); return; }
+    let alive = true;
+    setState(s => ({ data:s.data, loading:true, error:null }));
+    Promise.resolve().then(fetcher)
+      .then(d => { if (alive) setState({ data:d, loading:false, error:null }); })
+      .catch(e => { if (alive) setState({ data:null, loading:false, error:e }); });
+    return () => { alive = false; };
+  }, (deps || []).concat([nonce, enabled]));
+  return Object.assign(state, { reload });
+}
+
+/* ---- shared loading / empty / error / sign-in UI ---- */
+function Loading({ label }){
+  return React.createElement('div', { style:{padding:'40px 0',textAlign:'center',color:'var(--muted)',fontSize:14} },
+    React.createElement('span', { className:'fade-in' }, label || 'Loading live data…'));
+}
+function ErrorState({ error, onRetry }){
+  const auth = useContext(AuthContext);
+  const isAuth = error && error.status === 401;
+  return React.createElement('div', { style:{padding:'28px',textAlign:'center',background:'var(--red-lt)',borderRadius:10,color:'var(--red)'} },
+    React.createElement('div', { style:{marginBottom:12,fontSize:14} }, '⚠ ' + ((error && error.message) || 'Something went wrong')),
+    isAuth
+      ? React.createElement('button', { className:'btn btn-primary', onClick:auth && auth.openAuth }, 'Sign In →')
+      : (onRetry && React.createElement('button', { className:'btn btn-outline', onClick:onRetry }, 'Retry')));
+}
+function EmptyState({ msg }){
+  return React.createElement('p', { style:{padding:'32px 0',textAlign:'center',color:'var(--muted)'} }, msg || 'No data available for this selection yet.');
+}
+function SignInPrompt({ label }){
+  const auth = useContext(AuthContext);
+  return React.createElement('div', { style:{padding:'48px 24px',textAlign:'center',background:'var(--forest-pale)',borderRadius:12} },
+    React.createElement('p', { style:{fontSize:15,color:'var(--forest)',marginBottom:14,fontWeight:500} }, label || 'Sign in to load live data from the API.'),
+    React.createElement('button', { className:'btn btn-primary', onClick:auth && auth.openAuth }, 'Sign In →'));
+}
+
+/* render helper: pick loading / error / empty / content */
+function asyncView(state, render, opts){
+  opts = opts || {};
+  if (opts.needsAuth) return React.createElement(SignInPrompt, { label:opts.authLabel });
+  if (state.loading) return React.createElement(Loading, { label:opts.loadingLabel });
+  if (state.error) return React.createElement(ErrorState, { error:state.error, onRetry:state.reload });
+  const data = state.data;
+  const isEmpty = data == null || (Array.isArray(data) && data.length === 0);
+  if (isEmpty) return React.createElement(EmptyState, { msg:opts.emptyMsg });
+  return render(data);
+}
 
 /* ---- helpers ---- */
 function riskColor(score) {
@@ -488,12 +557,14 @@ function riskLabel(score) {
 function fmt(n, decimals=1) {
   return n != null ? Number(n).toFixed(decimals) : '—';
 }
+function cap(s){ s = (s==null?'':String(s)); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; }
 
 /* ============================================================
    COMPONENTS
    ============================================================ */
 
-function Nav({ page, setPage, onAuth }) {
+function Nav({ page, setPage }) {
+  const auth = useContext(AuthContext);
   return (
     React.createElement('nav', { className: 'nav' },
       React.createElement('div', { className: 'nav-logo', style:{cursor:'pointer'}, onClick:()=>setPage('home') },
@@ -508,22 +579,32 @@ function Nav({ page, setPage, onAuth }) {
           }, p === 'home' ? 'Home' : p === 'risk' ? 'Risk Report' : p === 'brands' ? 'Brands' : p === 'fmcg' ? 'FMCG' : 'About')
         )
       ),
-      React.createElement('button', { className: 'nav-cta', onClick: onAuth }, 'Sign In')
+      auth && auth.user
+        ? React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12} },
+            React.createElement('span', { style:{fontSize:13,color:'var(--muted)'} }, auth.user.email),
+            React.createElement('button', { className: 'nav-cta', onClick: auth.logout }, 'Sign Out'))
+        : React.createElement('button', { className: 'nav-cta', onClick: auth && auth.openAuth }, 'Sign In')
     )
   );
 }
 
 function Ticker() {
-  const items = [...MOCK.alerts, ...MOCK.alerts];
+  const auth = useContext(AuthContext);
+  const state = useApi(() => api.alerts(12), [], !!(auth && auth.token));
+  if (!auth || !auth.token || state.loading || state.error || !state.data || !state.data.length) {
+    // Ticker is decorative; stay quiet until we have real alerts.
+    return null;
+  }
+  const items = [...state.data, ...state.data];
   return (
     React.createElement('div', { className: 'ticker' },
       React.createElement('div', { className: 'ticker-inner' },
         items.map((a,i) =>
           React.createElement('span', { key: i, className: 'ticker-item' },
             React.createElement('span', { className: 'ticker-dot' }),
-            React.createElement('strong', null, a.commodity),
-            ' · ', a.contaminant, ' · ', a.state, ' · ',
-            React.createElement('span', { style:{opacity:.7} }, a.source_type)
+            React.createElement('strong', null, cap(a.commodity)),
+            ' · ', cap((a.contaminant||'').replace(/_/g,' ')), ' · ', a.state || a.district || '—', ' · ',
+            React.createElement('span', { style:{opacity:.7} }, (a.source_type||'').toUpperCase())
           )
         )
       )
@@ -545,7 +626,7 @@ function RiskMeter({ score, ciLower, ciUpper, size = 'large' }) {
   const c = riskColor(score);
   const [display, setDisplay] = useState(0);
   useEffect(() => {
-    let frame; let start = null; const target = score || 0; const dur = 900;
+    let frame; let start = null; const target = Math.round(score || 0); const dur = 900;
     function step(ts) {
       if (!start) start = ts;
       const p = Math.min((ts - start) / dur, 1);
@@ -554,7 +635,10 @@ function RiskMeter({ score, ciLower, ciUpper, size = 'large' }) {
       if (p < 1) frame = requestAnimationFrame(step);
     }
     frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
+    // Fallback: guarantee the final value even if rAF is throttled
+    // (hidden tab, reduced-motion, etc.).
+    const settle = setTimeout(() => setDisplay(target), dur + 100);
+    return () => { cancelAnimationFrame(frame); clearTimeout(settle); };
   }, [score]);
 
   return React.createElement('div', { className: 'risk-display' },
@@ -613,24 +697,80 @@ function EnforcementTable({ events }) {
   );
 }
 
+/* Leaflet choropleth-style map fed by the live /risk/map endpoint.
+   Markers are sized + coloured by the real risk score. Swapping these
+   circle markers for Census-2021 district polygons only needs (a) an India
+   district GeoJSON and (b) real census_2021_code values on the districts
+   table to join on — see README "Still stubbed". */
+function LeafletMap({ points, loading }) {
+  const elRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+
+  useEffect(() => {
+    if (!elRef.current || typeof L === 'undefined' || mapRef.current) return;
+    const map = L.map(elRef.current, { scrollWheelZoom:false }).setView([22.8, 80.0], 4.4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 10, attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    setTimeout(() => map.invalidateSize(), 120);
+  }, []);
+
+  useEffect(() => {
+    const lg = layerRef.current;
+    if (!lg) return;
+    lg.clearLayers();
+    const pts = (points || []).filter(d => d.latitude != null && d.longitude != null);
+    pts.forEach(d => {
+      const score = d.risk_score || 0;
+      const color = score >= 60 ? '#C2410C' : score >= 35 ? '#B45309' : '#4D7C5A';
+      const m = L.circleMarker([d.latitude, d.longitude], {
+        radius: 6 + score * 0.12, color, fillColor: color, fillOpacity: 0.62, weight: 1.5
+      });
+      m.bindPopup('<strong>' + d.district_name + '</strong><br>' + d.state +
+        '<br>Risk: ' + score.toFixed(0) + '/100 · ' + (d.n_tests || 0) + ' tests');
+      m.addTo(lg);
+    });
+    if (mapRef.current && pts.length) {
+      try { mapRef.current.fitBounds(pts.map(d => [d.latitude, d.longitude]), { padding:[40,40], maxZoom:6 }); } catch(e){}
+    }
+  }, [points]);
+
+  return React.createElement('div', { style:{position:'relative'} },
+    React.createElement('div', { ref:elRef, style:{height:'440px',width:'100%',borderRadius:'12px',overflow:'hidden',zIndex:0,border:'1px solid var(--border)'} }),
+    loading && React.createElement('div', {
+      style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+             color:'var(--muted)',background:'rgba(255,255,255,0.5)',borderRadius:'12px',zIndex:1}
+    }, 'Loading map…')
+  );
+}
+
 /* ============================================================
    PAGES
    ============================================================ */
 
 function HomePage({ setPage }) {
+  const auth = useContext(AuthContext);
   const [query, setQuery] = useState('');
   const [commodity, setCommodity] = useState('1');
+  const loggedIn = !!(auth && auth.token);
+  const mapState = useApi(() => api.map(1), [], loggedIn);
 
   function handleSearch(e) {
     e.preventDefault();
     if (query.trim()) setPage('risk');
   }
 
-  const dots = MOCK.districts.map(d => ({
-    left: `${((d.lon - 68) / (98 - 68)) * 100}%`,
-    top:  `${((35 - d.lat) / (35 - 8)) * 100}%`,
-    r: d.risk, n: d.name
-  }));
+  const districts = (mapState.data || []);
+
+  // Home stats derived live from the rice heatmap (data sources is a system constant).
+  const totalTests = districts.reduce((s,d)=> s + (d.n_tests||0), 0);
+  const stateCount = new Set(districts.map(d=>d.state)).size;
+  const stats = loggedIn && districts.length
+    ? [{n:totalTests.toLocaleString(),l:'Rice Tests Scored'},{n:String(districts.length),l:'Districts Scored'},{n:String(stateCount),l:'States & UTs'},{n:'8',l:'Data Sources'}]
+    : [{n:'—',l:'Rice Tests Scored'},{n:'—',l:'Districts Scored'},{n:'—',l:'States & UTs'},{n:'8',l:'Data Sources'}];
 
   return React.createElement('div', { className: 'page fade-in' },
     React.createElement(Ticker),
@@ -658,14 +798,14 @@ function HomePage({ setPage }) {
           value: query, onChange: e => setQuery(e.target.value)
         }),
         React.createElement('select', { className: 'search-select form-select', value: commodity, onChange: e => setCommodity(e.target.value) },
-          MOCK.commodities.map(c => React.createElement('option', {key:c.id, value:c.id}, c.name))
+          COMMODITIES.map(c => React.createElement('option', {key:c.id, value:c.id}, c.name))
         ),
         React.createElement('button', { className: 'search-btn', type: 'submit' }, 'Check Risk →')
       ),
 
       /* Stats */
       React.createElement('div', { className: 'stats-bar' },
-        [{n:'12,400+',l:'Enforcement Records'},{n:'736',l:'Districts Covered'},{n:'28',l:'States & UTs'},{n:'8',l:'Data Sources'}]
+        stats
           .map(s => React.createElement('div', { className: 'stat', key: s.l },
             React.createElement('div', { className: 'stat-num' }, s.n),
             React.createElement('div', { className: 'stat-label' }, s.l)
@@ -679,26 +819,9 @@ function HomePage({ setPage }) {
         React.createElement('div', { className: 'section-eyebrow' }, 'Risk Heatmap'),
         React.createElement('h2', { className: 'section-title' }, 'Contamination risk across ', React.createElement('em', null, 'India'))
       ),
-      React.createElement('div', { className: 'map-container' },
-        React.createElement('div', { className: 'map-dots' },
-          dots.map((d,i) => React.createElement('div', {
-            key: i, className: 'map-dot',
-            style: {
-              left: d.left, top: d.top,
-              width: `${10 + d.r * 0.2}px`, height: `${10 + d.r * 0.2}px`,
-              background: d.r >= 60 ? 'var(--red)' : d.r >= 35 ? 'var(--amber)' : 'var(--sage)',
-              opacity: 0.7, animationDelay: `${i * 0.2}s`
-            },
-            title: `${d.n}: ${d.r}/100`
-          }))
-        ),
-        React.createElement('svg', { className: 'map-india', viewBox:'0 0 200 240', fill:'none', xmlns:'http://www.w3.org/2000/svg' },
-          React.createElement('path', {d:'M100 10 L160 40 L175 80 L165 120 L150 150 L130 180 L100 220 L70 190 L50 160 L35 120 L25 80 L40 40 Z', stroke:'var(--forest)', strokeWidth:'2', fill:'var(--forest-pale)'})
-        ),
-        React.createElement('div', { style:{position:'relative',zIndex:1,textAlign:'center'} },
-          React.createElement('p', { style:{color:'var(--forest)',fontWeight:500,fontSize:15} }, 'Interactive district map'),
-          React.createElement('p', { style:{color:'var(--muted)',fontSize:13,marginTop:4} }, 'Connect to real geodata API or embed Leaflet.js for production')
-        )
+      loggedIn
+        ? React.createElement(LeafletMap, { points: districts, loading: mapState.loading })
+        : React.createElement(SignInPrompt, { label:'Sign in to load the live risk heatmap.' }
       ),
       /* Legend */
       React.createElement('div', { style:{display:'flex',gap:24,marginTop:16,flexWrap:'wrap'} },
@@ -715,200 +838,240 @@ function HomePage({ setPage }) {
         React.createElement('div', { className: 'section-eyebrow' }, 'Latest Scores'),
         React.createElement('h2', { className: 'section-title' }, 'District risk scores — ', React.createElement('em', null, 'Rice'))
       ),
-      React.createElement('div', { className: 'table-wrap' },
-        React.createElement('table', null,
-          React.createElement('thead', null,
-            React.createElement('tr', null,
-              ['District','State','Risk Score','Tests','Assessment'].map(h => React.createElement('th', {key:h}, h))
-            )
-          ),
-          React.createElement('tbody', null,
-            MOCK.districts.sort((a,b)=>b.risk-a.risk).map(d =>
-              React.createElement('tr', {key:d.id, className:'fade-in', style:{cursor:'pointer'}, onClick:()=>setPage('risk')},
-                React.createElement('td', null, React.createElement('strong', null, d.name)),
-                React.createElement('td', null, d.state),
-                React.createElement('td', null,
-                  React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8}},
-                    React.createElement('div', {style:{width:60,height:6,background:'var(--border)',borderRadius:3}},
-                      React.createElement('div', {style:{width:`${d.risk}%`,height:'100%',borderRadius:3,background:d.risk>=60?'var(--red)':d.risk>=35?'var(--amber)':'var(--sage)'}})
-                    ),
-                    React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:13,fontWeight:500}}, d.risk)
-                  )
-                ),
-                React.createElement('td', null, React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:12}}, d.n)),
-                React.createElement('td', null, React.createElement(RiskBadge, {score:d.risk}))
+      asyncView(mapState, (rows) =>
+        React.createElement('div', { className: 'table-wrap' },
+          React.createElement('table', null,
+            React.createElement('thead', null,
+              React.createElement('tr', null,
+                ['District','State','Risk Score','Tests','Assessment'].map(h => React.createElement('th', {key:h}, h))
+              )
+            ),
+            React.createElement('tbody', null,
+              rows.slice().sort((a,b)=>(b.risk_score||0)-(a.risk_score||0)).map(d =>
+                React.createElement('tr', {key:d.district_id, className:'fade-in', style:{cursor:'pointer'}, onClick:()=>setPage('risk')},
+                  React.createElement('td', null, React.createElement('strong', null, d.district_name)),
+                  React.createElement('td', null, d.state),
+                  React.createElement('td', null,
+                    React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8}},
+                      React.createElement('div', {style:{width:60,height:6,background:'var(--border)',borderRadius:3}},
+                        React.createElement('div', {style:{width:`${d.risk_score||0}%`,height:'100%',borderRadius:3,background:(d.risk_score||0)>=60?'var(--red)':(d.risk_score||0)>=35?'var(--amber)':'var(--sage)'}})
+                      ),
+                      React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:13,fontWeight:500}}, fmt(d.risk_score,0))
+                    )
+                  ),
+                  React.createElement('td', null, React.createElement('span', {style:{fontFamily:'var(--font-mono)',fontSize:12}}, d.n_tests)),
+                  React.createElement('td', null, React.createElement(RiskBadge, {score:d.risk_score}))
+                )
               )
             )
           )
-        )
+        ),
+        { needsAuth: !loggedIn, authLabel:'Sign in to load live district risk scores.', emptyMsg:'No district risk scores available yet. Seed the database or run the aggregation pipeline.' }
       )
     )
   );
 }
 
 function RiskPage() {
-  const [district, setDistrict] = useState(MOCK.districts[0]);
-  const [commodity, setCommodity] = useState(MOCK.commodities[0]);
+  const auth = useContext(AuthContext);
+  const loggedIn = !!(auth && auth.token);
+  const [districtId, setDistrictId] = useState(1);
+  const [commodityId, setCommodityId] = useState(1);
   const [tab, setTab] = useState('tests');
-  const r = MOCK.riskReport;
+
+  // District list comes from the live map endpoint (no dedicated list endpoint exists).
+  const districtList = useApi(() => api.map(1), [], loggedIn);
+  const districts = districtList.data || [];
+  const riskState = useApi(() => api.districtRisk(districtId, commodityId), [districtId, commodityId], loggedIn);
+
+  const commodityName = (COMMODITIES.find(c=>c.id==commodityId)||{}).name || '';
 
   return React.createElement('div', { className: 'page fade-in' },
     React.createElement('div', { className: 'container', style:{paddingTop:40} },
       /* Selectors */
       React.createElement('div', {style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:32}},
         React.createElement('select', {
-          className:'form-input form-select', style:{maxWidth:220},
-          value:district.id, onChange:e=>setDistrict(MOCK.districts.find(d=>d.id==e.target.value)||MOCK.districts[0])
-        }, MOCK.districts.map(d=>React.createElement('option',{key:d.id,value:d.id},`${d.name}, ${d.state}`))),
+          className:'form-input form-select', style:{maxWidth:240},
+          value:districtId, onChange:e=>setDistrictId(Number(e.target.value)), disabled:!districts.length
+        }, (districts.length ? districts : [{district_id:districtId, district_name:'Loading…', state:''}])
+            .map(d=>React.createElement('option',{key:d.district_id,value:d.district_id},`${d.district_name}${d.state?', '+d.state:''}`))),
         React.createElement('select', {
           className:'form-input form-select', style:{maxWidth:180},
-          value:commodity.id, onChange:e=>setCommodity(MOCK.commodities.find(c=>c.id==e.target.value)||MOCK.commodities[0])
-        }, MOCK.commodities.map(c=>React.createElement('option',{key:c.id,value:c.id},c.name)))
+          value:commodityId, onChange:e=>setCommodityId(Number(e.target.value))
+        }, COMMODITIES.map(c=>React.createElement('option',{key:c.id,value:c.id},c.name)))
       ),
 
-      React.createElement('div', {className:'grid-sidebar'},
-        /* Main */
-        React.createElement('div', null,
-          React.createElement('div', {style:{marginBottom:8,display:'flex',alignItems:'center',gap:10}},
-            React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:32,fontWeight:300}}, district.name, ' · ', commodity.name),
-            React.createElement('span', {
-              className:`badge ${r.inference_type==='direct_test'?'badge-tested':'badge-inferred'}`
-            }, r.inference_type==='direct_test'?'✓ Tested':'⚡ Inferred')
-          ),
-          React.createElement('p', {style:{color:'var(--muted)',marginBottom:24}}, district.state, ' · Latest quarter'),
-
-          React.createElement(RiskMeter, {score:r.risk_score, ciLower:r.ci_lower, ciUpper:r.ci_upper}),
-
-          /* Metric row */
-          React.createElement('div', {className:'metric-row'},
-            [{v:`${(r.fail_rate*100).toFixed(1)}%`,k:'Fail Rate'},{v:r.n_tests,k:'Total Tests'},{v:r.top_contaminants[0].name.replace(/_/g,' '),k:'Top Contaminant'}]
-              .map(m=>React.createElement('div',{key:m.k,className:'metric'},
-                React.createElement('div',{className:'metric-val',style:{fontSize:m.k==='Top Contaminant'?16:28}},m.v),
-                React.createElement('div',{className:'metric-key'},m.k)
-              ))
-          ),
-
-          /* Tabs */
-          React.createElement('div', {className:'tabs'},
-            ['tests','contaminants','supply'].map(t=>
-              React.createElement('button',{key:t,className:`tab ${tab===t?'active':''}`,onClick:()=>setTab(t)},
-                t==='tests'?'Direct Tests':t==='contaminants'?'Contaminants':'Supply Chain'
-              )
-            )
-          ),
-
-          tab==='tests' && React.createElement(EnforcementTable, {events:r.enforcement_events}),
-          tab==='contaminants' && React.createElement('div',{className:'cards cards-3'},
-            r.top_contaminants.map((c,i)=>
-              React.createElement('div',{key:i,className:'card'},
-                React.createElement('div',{style:{fontWeight:600,marginBottom:6}},c.name.replace(/_/g,' ')),
-                React.createElement('div',{style:{fontFamily:'var(--font-mono)',fontSize:22,color:'var(--red)',marginBottom:4}},`${(c.fail_rate*100).toFixed(1)}%`),
-                React.createElement('div',{style:{fontSize:12,color:'var(--muted)'}}, 'Failure rate')
-              )
-            )
-          ),
-          tab==='supply' && React.createElement('div',null,
-            React.createElement('div',{className:'supply-chain',style:{gap:0}},
-              [
-                {type:'Farm',name:'Vidarbha Region',risk:68},
-                null,
-                {type:'Mandi',name:'Nagpur Mandi',risk:45},
-                null,
-                {type:'Processor',name:'Mill, Nagpur',risk:51},
-                null,
-                {type:'Brand',name:commodity.name,risk:r.risk_score},
-              ].map((n,i)=>n
-                ? React.createElement('div',{key:i,className:'sc-node'},
-                    React.createElement('div',{className:'sc-node-type'},n.type),
-                    React.createElement('div',{style:{fontWeight:500,margin:'4px 0'}},n.name),
-                    React.createElement('div',{style:{fontFamily:'var(--font-mono)',fontSize:13,color:n.risk>=60?'var(--red)':n.risk>=35?'var(--amber)':'var(--sage)'}},`Risk: ${n.risk}`)
-                  )
-                : React.createElement('div',{key:i,className:'sc-arrow'},'→')
-              )
+      asyncView(riskState, (r) => {
+        const tc = r.top_contaminants || [];
+        const disclaimer = r.disclaimer || 'Statistical model estimate based on public enforcement data. Not a laboratory test result. Not medical or legal advice.';
+        const tested = r.inference_type === 'direct_test';
+        return React.createElement('div', {className:'grid-sidebar'},
+          /* Main */
+          React.createElement('div', null,
+            React.createElement('div', {style:{marginBottom:8,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
+              React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:32,fontWeight:300}}, r.district_name, ' · ', r.commodity_name),
+              React.createElement('span', {
+                className:`badge ${tested?'badge-tested':'badge-inferred'}`
+              }, tested?'✓ Tested':'⚡ Insufficient data')
             ),
-            React.createElement('p',{style:{fontSize:12,color:'var(--muted)',marginTop:16}},'Contamination propagated through supply chain using Bayesian updating. Retention factors applied per processing step.')
-          )
-        ),
+            React.createElement('p', {style:{color:'var(--muted)',marginBottom:24}}, r.state, r.last_updated?` · Updated ${String(r.last_updated).slice(0,10)}`:' · Latest quarter'),
 
-        /* Sidebar */
-        React.createElement('div', null,
-          React.createElement('div', {className:'card', style:{marginBottom:16}},
-            React.createElement('h3',{style:{fontFamily:'var(--font-serif)',fontSize:18,marginBottom:12}},'Top Contaminants'),
-            r.top_contaminants.map((c,i)=>
-              React.createElement('div',{key:i,style:{marginBottom:10}},
-                React.createElement('div',{style:{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:4}},
-                  React.createElement('span',null,c.name.replace(/_/g,' ')),
-                  React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontWeight:500}},`${(c.fail_rate*100).toFixed(1)}%`)
-                ),
-                React.createElement('div',{style:{height:4,background:'var(--border)',borderRadius:2}},
-                  React.createElement('div',{style:{height:'100%',borderRadius:2,background:i===0?'var(--red)':i===1?'var(--amber)':'var(--sage)',width:`${c.fail_rate*600}%`}})
+            r.risk_score != null
+              ? React.createElement(RiskMeter, {score:r.risk_score, ciLower:r.ci_lower, ciUpper:r.ci_upper})
+              : React.createElement('div', {className:'card', style:{textAlign:'center',color:'var(--muted)',padding:'28px'}}, 'No model risk score yet for this district/commodity — showing any direct enforcement records below.'),
+
+            /* Metric row */
+            React.createElement('div', {className:'metric-row'},
+              [{v: r.fail_rate!=null ? `${(r.fail_rate*100).toFixed(1)}%` : '—', k:'Fail Rate'},
+               {v: r.n_tests, k:'Total Tests'},
+               {v: tc.length ? cap(tc[0].name.replace(/_/g,' ')) : '—', k:'Top Contaminant'}]
+                .map(m=>React.createElement('div',{key:m.k,className:'metric'},
+                  React.createElement('div',{className:'metric-val',style:{fontSize:m.k==='Top Contaminant'?16:28}},m.v),
+                  React.createElement('div',{className:'metric-key'},m.k)
+                ))
+            ),
+
+            /* Tabs */
+            React.createElement('div', {className:'tabs'},
+              ['tests','contaminants','supply'].map(t=>
+                React.createElement('button',{key:t,className:`tab ${tab===t?'active':''}`,onClick:()=>setTab(t)},
+                  t==='tests'?'Direct Tests':t==='contaminants'?'Contaminants':'Supply Chain'
                 )
               )
+            ),
+
+            tab==='tests' && React.createElement(EnforcementTable, {events:r.enforcement_events}),
+            tab==='contaminants' && (tc.length
+              ? React.createElement('div',{className:'cards cards-3'},
+                  tc.map((c,i)=>
+                    React.createElement('div',{key:i,className:'card'},
+                      React.createElement('div',{style:{fontWeight:600,marginBottom:6}},cap(c.name.replace(/_/g,' '))),
+                      React.createElement('div',{style:{fontFamily:'var(--font-mono)',fontSize:22,color:'var(--red)',marginBottom:4}},`${((c.fail_rate||0)*100).toFixed(1)}%`),
+                      React.createElement('div',{style:{fontSize:12,color:'var(--muted)'}}, 'Failure rate')
+                    )
+                  )
+                )
+              : React.createElement(EmptyState, {msg:'No contaminant breakdown for this selection.'})),
+            tab==='supply' && React.createElement('div', {style:{padding:'28px',textAlign:'center',background:'var(--forest-pale)',borderRadius:10}},
+              React.createElement('p',{style:{color:'var(--forest)',fontWeight:500,marginBottom:6}}, 'Supply-chain propagation not yet wired into the API'),
+              React.createElement('p',{style:{fontSize:13,color:'var(--muted)',lineHeight:1.6}}, 'The Bayesian propagation graph (models/supply_chain.py) runs offline; the risk endpoint currently returns an empty supply_chain array. This view will populate once the model output is plumbed into the API.')
             )
           ),
-          React.createElement('div', {className:'disclaimer'},
-            React.createElement('strong',null,'⚠ Disclaimer. '),
-            'Statistical model estimate based on public enforcement data. Not a laboratory test result. Not medical or legal advice. Sources linked for every claim. ',
-            React.createElement('a',{href:'https://fssai.gov.in',target:'_blank',style:{color:'var(--amber)',textDecoration:'underline'}}, 'FSSAI ↗')
+
+          /* Sidebar */
+          React.createElement('div', null,
+            React.createElement('div', {className:'card', style:{marginBottom:16}},
+              React.createElement('h3',{style:{fontFamily:'var(--font-serif)',fontSize:18,marginBottom:12}},'Top Contaminants'),
+              tc.length ? tc.map((c,i)=>
+                React.createElement('div',{key:i,style:{marginBottom:10}},
+                  React.createElement('div',{style:{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:4}},
+                    React.createElement('span',null,cap(c.name.replace(/_/g,' '))),
+                    React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontWeight:500}},`${((c.fail_rate||0)*100).toFixed(1)}%`)
+                  ),
+                  React.createElement('div',{style:{height:4,background:'var(--border)',borderRadius:2}},
+                    React.createElement('div',{style:{height:'100%',borderRadius:2,background:i===0?'var(--red)':i===1?'var(--amber)':'var(--sage)',width:`${Math.min((c.fail_rate||0)*600,100)}%`}})
+                  )
+                )
+              ) : React.createElement('p',{style:{fontSize:13,color:'var(--muted)'}},'No contaminant data.')
+            ),
+            React.createElement('div', {className:'disclaimer'},
+              React.createElement('strong',null,'⚠ Disclaimer. '),
+              disclaimer, ' ',
+              React.createElement('a',{href:'https://fssai.gov.in',target:'_blank',style:{color:'var(--amber)',textDecoration:'underline'}}, 'FSSAI ↗')
+            )
           )
-        )
-      )
+        );
+      }, { needsAuth: !loggedIn, authLabel:'Sign in to view risk reports.', emptyMsg:'No data for this district/commodity.' })
     )
   );
 }
 
 function BrandsPage() {
+  const auth = useContext(AuthContext);
+  const loggedIn = !!(auth && auth.token);
   const [search, setSearch] = useState('');
-  const filtered = MOCK.brands.filter(b => b.name.toLowerCase().includes(search.toLowerCase()));
+  const [debounced, setDebounced] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // /v1/search returns commodities + brands; we keep the brand rows.
+  const state = useApi(() => api.search(debounced), [debounced], loggedIn);
+  const brands = (state.data || []).filter(x => x.type === 'brand');
 
   return React.createElement('div', {className:'page fade-in'},
     React.createElement('div', {className:'container', style:{paddingTop:40}},
       React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:36,fontWeight:300,marginBottom:8}}, 'Brand Safety Profiles'),
-      React.createElement('p', {style:{color:'var(--muted)',marginBottom:32}}, 'Direct test data and supply-chain inferred scores for major brands.'),
+      React.createElement('p', {style:{color:'var(--muted)',marginBottom:32}}, 'Aggregated enforcement test data for major brands, scored by the risk model.'),
       React.createElement('input', {
         className:'form-input', style:{maxWidth:400,marginBottom:24},
         placeholder:'Search brand…', value:search, onChange:e=>setSearch(e.target.value)
       }),
-      React.createElement('div', {className:'cards cards-2'},
-        filtered.map(b =>
-          React.createElement('div', {key:b.id, className:'card'},
-            React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}},
-              React.createElement('div', null,
-                React.createElement('h3', {style:{fontWeight:600,marginBottom:2}}, b.name),
-                React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, b.commodity)
+      asyncView(Object.assign({}, state, { data: brands, reload: state.reload }), (rows) =>
+        React.createElement('div', {className:'cards cards-2'},
+          rows.map(b => {
+            const risk = b.risk_score;
+            const hasTests = b.n_tests != null && b.n_tests > 0;
+            const c = riskColor(risk);
+            return React.createElement('div', {key:b.id, className:'card'},
+              React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}},
+                React.createElement('div', null,
+                  React.createElement('h3', {style:{fontWeight:600,marginBottom:2}}, b.name),
+                  React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, hasTests ? `${b.n_tests} enforcement tests` : 'No direct tests')
+                ),
+                React.createElement('span', {
+                  className:`badge ${hasTests?'badge-tested':'badge-inferred'}`
+                }, hasTests?'Tested':'Inferred')
               ),
-              React.createElement('span', {
-                className:`badge ${b.inference==='direct_test'?'badge-tested':'badge-inferred'}`
-              }, b.inference==='direct_test'?'Tested':'Inferred')
-            ),
-            React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12,marginBottom:12}},
-              React.createElement('div', {
-                style:{
-                  width:56,height:56,borderRadius:'50%',
-                  background:b.risk>=60?'var(--red-lt)':b.risk>=35?'var(--amber-lt)':'var(--sage-lt)',
-                  display:'flex',alignItems:'center',justifyContent:'center',
-                  fontFamily:'var(--font-serif)',fontSize:22,fontWeight:600,
-                  color:b.risk>=60?'var(--red)':b.risk>=35?'var(--amber)':'var(--sage)'
-                }
-              }, b.risk),
-              React.createElement('div', null,
-                React.createElement('div', {style:{fontSize:13,fontWeight:500}}, riskLabel(b.risk)),
-                React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, b.n > 0 ? `${b.n} tests` : 'Inferred — no direct tests')
-              )
-            ),
-            b.inference==='propagated' &&
-              React.createElement('div', {style:{fontSize:11.5,color:'#92400E',background:'var(--amber-lt)',borderRadius:6,padding:'6px 10px'}},
-                '⚡ Inferred from supply chain data — no direct test on this product'
+              React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12,marginBottom:12}},
+                React.createElement('div', {
+                  style:{
+                    width:56,height:56,borderRadius:'50%',
+                    background:c==='high'?'var(--red-lt)':c==='mid'?'var(--amber-lt)':'var(--sage-lt)',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontFamily:'var(--font-serif)',fontSize:22,fontWeight:600,
+                    color:c==='high'?'var(--red)':c==='mid'?'var(--amber)':'var(--sage)'
+                  }
+                }, risk!=null ? fmt(risk,0) : '—'),
+                React.createElement('div', null,
+                  React.createElement('div', {style:{fontSize:13,fontWeight:500}}, riskLabel(risk)),
+                  React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, hasTests ? `${b.n_tests} tests` : 'Inferred — no direct tests')
+                )
               ),
-            React.createElement('button', {className:'btn btn-outline',style:{marginTop:12,width:'100%',fontSize:13}}, 'View Full Report →')
-          )
-        )
+              !hasTests &&
+                React.createElement('div', {style:{fontSize:11.5,color:'#92400E',background:'var(--amber-lt)',borderRadius:6,padding:'6px 10px'}},
+                  '⚡ Inferred from supply chain data — no direct test on this product'
+                )
+            );
+          })
+        ),
+        { needsAuth: !loggedIn, authLabel:'Sign in to view brand safety profiles.', emptyMsg: debounced ? `No brands match “${debounced}”.` : 'No brands found.' }
       )
     )
   );
 }
 
 function FMCGPage() {
+  const auth = useContext(AuthContext);
+  const loggedIn = !!(auth && auth.token);
+  const [stateFilter, setStateFilter] = useState('');
+  const [category, setCategory] = useState('');
+  const gaps = useApi(() => api.marketGaps(stateFilter, category), [stateFilter, category], loggedIn);
+
+  function exportCsv(rows){
+    const head = ['district','state','commodity','risk_score','brand_count','n_tests'];
+    const lines = [head.join(',')].concat(rows.map(g =>
+      [g.district_name, g.state, g.commodity, g.risk_score, g.brand_count, g.n_tests]
+        .map(v => `"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')));
+    const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'foodsafe_market_gaps.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return React.createElement('div', {className:'page fade-in'},
     React.createElement('div', {className:'container',style:{paddingTop:40}},
       React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12,marginBottom:8}},
@@ -918,41 +1081,46 @@ function FMCGPage() {
       React.createElement('p', {style:{color:'var(--muted)',marginBottom:32}}, 'Districts with low brand penetration and clean safety records — your next market opportunity.'),
 
       React.createElement('div', {style:{display:'flex',gap:12,marginBottom:24,flexWrap:'wrap'}},
-        React.createElement('select', {className:'form-input form-select',style:{maxWidth:180}},
-          ['All States','Maharashtra','Gujarat','Tamil Nadu','Karnataka'].map(s=>React.createElement('option',{key:s},s))
+        React.createElement('select', {className:'form-input form-select',style:{maxWidth:180},value:stateFilter,onChange:e=>setStateFilter(e.target.value)},
+          [['','All States'],['Maharashtra','Maharashtra'],['Gujarat','Gujarat'],['Tamil Nadu','Tamil Nadu'],['Karnataka','Karnataka'],['Uttar Pradesh','Uttar Pradesh'],['Delhi','Delhi']]
+            .map(([v,l])=>React.createElement('option',{key:l,value:v},l))
         ),
-        React.createElement('select', {className:'form-input form-select',style:{maxWidth:180}},
-          ['All Categories','Dairy','Grain','Produce','Spice','Oil'].map(s=>React.createElement('option',{key:s},s))
+        React.createElement('select', {className:'form-input form-select',style:{maxWidth:180},value:category,onChange:e=>setCategory(e.target.value)},
+          [['','All Categories'],['dairy','Dairy'],['grain','Grain'],['produce','Produce'],['spice','Spice'],['oil','Oil']]
+            .map(([v,l])=>React.createElement('option',{key:l,value:v},l))
         ),
-        React.createElement('button', {className:'btn btn-primary'}, '⬇ Export CSV')
+        React.createElement('button', {className:'btn btn-primary', disabled:!(gaps.data&&gaps.data.length), onClick:()=>exportCsv(gaps.data||[])}, '⬇ Export CSV')
       ),
 
-      React.createElement('div', {className:'table-wrap',style:{marginBottom:32}},
-        React.createElement('table', null,
-          React.createElement('thead',null,
-            React.createElement('tr',null,
-              ['District','State','Commodity','Risk Score','Brands Present','Opportunity'].map(h=>React.createElement('th',{key:h},h))
-            )
-          ),
-          React.createElement('tbody',null,
-            MOCK.marketGaps.map((g,i)=>
-              React.createElement('tr',{key:i,className:'fade-in'},
-                React.createElement('td',null,React.createElement('strong',null,g.district)),
-                React.createElement('td',null,g.state),
-                React.createElement('td',null,g.commodity),
-                React.createElement('td',null,
-                  React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontSize:13,color:'var(--sage)',fontWeight:600}},g.risk)
-                ),
-                React.createElement('td',null,
-                  React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontSize:13}},g.brand_count)
-                ),
-                React.createElement('td',null,
-                  React.createElement('span',{className:'badge badge-tested'}, g.brand_count===0?'🔥 Uncontested':g.brand_count<=2?'Strong':'Competitive')
+      asyncView(gaps, (rows) =>
+        React.createElement('div', {className:'table-wrap',style:{marginBottom:32}},
+          React.createElement('table', null,
+            React.createElement('thead',null,
+              React.createElement('tr',null,
+                ['District','State','Commodity','Risk Score','Brands Present','Opportunity'].map(h=>React.createElement('th',{key:h},h))
+              )
+            ),
+            React.createElement('tbody',null,
+              rows.map((g,i)=>
+                React.createElement('tr',{key:i,className:'fade-in'},
+                  React.createElement('td',null,React.createElement('strong',null,g.district_name)),
+                  React.createElement('td',null,g.state),
+                  React.createElement('td',null,cap(g.commodity)),
+                  React.createElement('td',null,
+                    React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontSize:13,color:'var(--sage)',fontWeight:600}},fmt(g.risk_score,0))
+                  ),
+                  React.createElement('td',null,
+                    React.createElement('span',{style:{fontFamily:'var(--font-mono)',fontSize:13}},g.brand_count)
+                  ),
+                  React.createElement('td',null,
+                    React.createElement('span',{className:'badge badge-tested'}, g.brand_count===0?'🔥 Uncontested':g.brand_count<=2?'Strong':'Competitive')
+                  )
                 )
               )
             )
           )
-        )
+        ),
+        { needsAuth: !loggedIn, authLabel:'Sign in to view market intelligence.', emptyMsg:'No market gaps match these filters (need risk < 30 and ≥ 5 tests).' }
       ),
 
       React.createElement('div', {className:'section-header'},
@@ -1005,14 +1173,38 @@ function AboutPage() {
    AUTH MODAL
    ============================================================ */
 function AuthModal({ onClose }) {
+  const auth = useContext(AuthContext);
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [step, setStep] = useState(0); // onboarding
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [homeDistrict, setHomeDistrict] = useState(null);
 
-  function handleSubmit(e) {
+  // Districts for the onboarding location step (loaded once authenticated).
+  const districtState = useApi(() => api.map(1), [step], step > 0);
+  const districts = districtState.data || [];
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (mode === 'register') { setStep(1); return; }
+    setError(null); setBusy(true);
+    try {
+      const resp = mode === 'register'
+        ? await api.register(email, password)
+        : await api.login(email, password);
+      auth.onAuthenticated(resp.access_token, { email, tier: resp.tier, user_id: resp.user_id });
+      if (mode === 'register') { setStep(1); }
+      else { onClose(); }
+    } catch(err) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishOnboarding() {
+    if (homeDistrict) { try { await api.setLocation(Number(homeDistrict)); } catch(e){} }
     onClose();
   }
 
@@ -1021,15 +1213,17 @@ function AuthModal({ onClose }) {
       {
         icon:'📍', title:'Where do you eat?',
         sub:'Select your home district for personalised alerts.',
-        content: React.createElement('select',{className:'form-input form-select',style:{width:'100%'}},
-          MOCK.districts.map(d=>React.createElement('option',{key:d.id},`${d.name}, ${d.state}`))
+        content: React.createElement('select',{className:'form-input form-select',style:{width:'100%'},
+            value:homeDistrict||'', onChange:e=>setHomeDistrict(e.target.value)},
+          [React.createElement('option',{key:'_',value:''}, districts.length?'Select a district…':'Loading districts…')].concat(
+            districts.map(d=>React.createElement('option',{key:d.district_id,value:d.district_id},`${d.district_name}, ${d.state}`)))
         )
       },
       {
         icon:'🥗', title:'What do you care about?',
         sub:'Choose the food categories you want to monitor.',
         content: React.createElement('div',{className:'chip-grid'},
-          MOCK.commodities.map(c=>React.createElement('div',{key:c.id,className:'chip'},c.name))
+          COMMODITIES.map(c=>React.createElement('div',{key:c.id,className:'chip'},c.name))
         )
       },
       {
@@ -1057,7 +1251,7 @@ function AuthModal({ onClose }) {
           s.content,
           React.createElement('div',{style:{display:'flex',gap:12,marginTop:8}},
             step > 1 && React.createElement('button',{className:'btn btn-outline',onClick:()=>setStep(step-1)},'Back'),
-            React.createElement('button',{className:'btn btn-primary',onClick:()=>step<steps.length?setStep(step+1):onClose()},
+            React.createElement('button',{className:'btn btn-primary',onClick:()=>step<steps.length?setStep(step+1):finishOnboarding()},
               step<steps.length?'Continue →':'Get Started →'
             )
           ),
@@ -1088,8 +1282,9 @@ function AuthModal({ onClose }) {
           React.createElement('label',{className:'form-label'},'Phone (optional, for SMS alerts)'),
           React.createElement('input',{className:'form-input',type:'tel',placeholder:'+91 98765 43210'})
         ),
-        React.createElement('button',{className:'btn btn-primary',type:'submit',style:{width:'100%',padding:'12px',fontSize:15}},
-          mode==='login'?'Sign In →':'Create Account →'
+        error && React.createElement('div',{style:{fontSize:13,color:'var(--red)',background:'var(--red-lt)',borderRadius:6,padding:'8px 12px',marginBottom:12}}, error),
+        React.createElement('button',{className:'btn btn-primary',type:'submit',disabled:busy,style:{width:'100%',padding:'12px',fontSize:15,opacity:busy?0.7:1}},
+          busy ? 'Please wait…' : (mode==='login'?'Sign In →':'Create Account →')
         )
       ),
       React.createElement('div',{style:{textAlign:'center',marginTop:16,fontSize:13,color:'var(--muted)'}},
@@ -1111,6 +1306,28 @@ function AuthModal({ onClose }) {
 function App() {
   const [page, setPage] = useState('home');
   const [showAuth, setShowAuth] = useState(false);
+  const [token, setToken] = useState(() => tokenStore.get());
+  const [user, setUser] = useState(null);
+
+  // Restore session: if we have a stored token, confirm it and load the profile.
+  useEffect(() => {
+    if (!token) return;
+    let alive = true;
+    api.profile()
+      .then(p => { if (alive) setUser({ email: p.email, tier: p.tier, user_id: p.user_id }); })
+      .catch(() => { if (alive) { tokenStore.clear(); setToken(null); setUser(null); } });
+  }, []);
+
+  const auth = {
+    token, user,
+    openAuth: () => setShowAuth(true),
+    onAuthenticated: (accessToken, profile) => {
+      tokenStore.set(accessToken);
+      setToken(accessToken);
+      setUser(profile);
+    },
+    logout: () => { tokenStore.clear(); setToken(null); setUser(null); setPage('home'); },
+  };
 
   const pages = {
     home:   React.createElement(HomePage, {setPage}),
@@ -1120,8 +1337,9 @@ function App() {
     about:  React.createElement(AboutPage),
   };
 
-  return React.createElement('div', null,
-    React.createElement(Nav, {page, setPage, onAuth:()=>setShowAuth(true)}),
+  return React.createElement(AuthContext.Provider, { value: auth },
+    React.createElement('div', null,
+    React.createElement(Nav, {page, setPage}),
     pages[page] || pages.home,
     React.createElement('footer', null,
       React.createElement('div', null,
@@ -1139,7 +1357,7 @@ function App() {
       )
     ),
     showAuth && React.createElement(AuthModal, {onClose:()=>setShowAuth(false)})
-  );
+  ));
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));

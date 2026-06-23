@@ -9,6 +9,15 @@ import asyncpg
 import os
 import logging
 
+# Load a local .env (if present) so DATABASE_URL etc. are available without
+# having to export them. Optional dependency — if python-dotenv isn't
+# installed we just fall back to the real process environment.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger("foodsafe.db")
 
 _pool: asyncpg.Pool | None = None
