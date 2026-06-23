@@ -21,7 +21,8 @@ longer holds.
 | Source | Status |
 | --- | --- |
 | `cms/enforcement-reports.php`, `recall-notices.php`, `lab-test-results.php`, `food-safety-mitra-reports.php` | **Dead** — all 302-redirect to the homepage. The site was restructured. |
-| `cms/food-recall.php` | Reachable, but the recall list is **JS-rendered** (DataTables) — not in the static HTML and not PDFs. Recall entries are also **qualitative** (product / brand / reason / date), with **no contaminant ppb values**. |
+| `cms/food-recall.php` | A pointer page — it says the recall data lives on **FoSCoS**: `https://foscos.fssai.gov.in/food-recall`. |
+| `foscos.fssai.gov.in/food-recall` | **The real recall source.** An Angular app that loads recalls from an **AES-encrypted API** (`getFoodRecallProductHomepage`, AES-ECB/PKCS7) and renders them client-side. Entries are **qualitative** (product / firm / nature + reason of recall / date / state) — **no contaminant ppb, no district**. Has a **daily maintenance window ≈ 23:30–03:00 IST** (API returns 503). |
 | `cms/food-recall-archive.php` | Reachable, but exposes only admin PDFs (citizens' charter, application status), **no recall data**. |
 | `index.php?page=food-testing.php` | Exposes ~hundreds of PDFs, but they are **news clippings** (`FSSAI_News_*`) and narrative documents — **not test-result tables**. |
 | `knowledge-hub.php` (Annual Report, etc.) | JS-rendered; no static report PDFs. |
@@ -29,6 +30,26 @@ longer holds.
 **Conclusion:** there is no open, structured feed of Indian district-level
 contamination test data on the FSSAI site. The data that exists is either
 JS-rendered and qualitative (recalls) or unstructured (news / narrative PDFs).
+
+## Recall scraper (headless browser) — `pipeline/sources/fssai_recall.py`
+
+Because the recall data is behind FoSCoS's obfuscated client-side crypto, we
+drive a **headless Chromium (Playwright)**: the Angular app decrypts + renders,
+and we read the result. The scraper:
+- loads `foscos.fssai.gov.in/food-recall`, **detects the maintenance window**
+  (and 5xx) and exits cleanly,
+- extracts rendered recall rows from the DOM,
+- maps each to `enforcement_records` as `source_type='fssai'`, qualitative
+  (`raw_value_ppb=0`, `pass_fail=FALSE`), **only when the recall reason names a
+  contaminant we model** — same shape as the openFDA feed. Idempotent.
+
+**Validation status:** the browser flow + maintenance detection are verified
+end-to-end (it correctly detected the 23:30–03:00 IST maintenance window and
+exited). The **DOM-extraction selectors are not yet validated against the live
+recall layout** because FoSCoS was in maintenance during development — they may
+need adjusting on a first daytime run. Run:
+`python -m pipeline.sources.fssai_recall --limit 100` (outside the maintenance
+window). Requires `pip install playwright && python -m playwright install chromium`.
 
 ## What now works (this attempt)
 
