@@ -27,6 +27,21 @@ DISCLAIMER = (
 )
 
 
+def build_disclaimer(commodity: Optional[str] = None, district: Optional[str] = None) -> str:
+    """Legal disclaimer required on every risk/disease response. Geographic
+    framing only — never names a brand, manufacturer, or batch."""
+    scope = ""
+    if commodity and district:
+        scope = f" for {commodity} sourced from {district}"
+    elif commodity:
+        scope = f" for {commodity}"
+    return (
+        f"Statistical estimate based on public enforcement records{scope}. "
+        "Not a product test result. Not a verdict on any specific brand, "
+        "manufacturer, or batch. Not medical or legal advice."
+    )
+
+
 # ============================================================
 # RESPONSE MODELS
 # ============================================================
@@ -57,6 +72,10 @@ class DistrictRiskResponse(BaseModel):
     top_contaminants:  list[dict]
     enforcement_events: list[EnforcementEvent]
     inference_type:    str   # "direct_test" | "insufficient_data"
+    codex_compliant_fraction: Optional[float]
+    eu_compliant_fraction:    Optional[float]
+    twi_exceedance_fraction:  Optional[float]
+    fssai_vs_codex_flag:      Optional[bool]
     disclaimer:        str
     last_updated:      Optional[str]
 
@@ -137,7 +156,9 @@ async def district_risk(
         agg = await conn.fetchrow(
             """
             SELECT risk_score, ci_lower, ci_upper, n_tests, fail_rate,
-                   top_contaminants, last_updated
+                   top_contaminants, last_updated,
+                   codex_compliant_fraction, eu_compliant_fraction,
+                   twi_exceedance_fraction, fssai_vs_codex_flag
             FROM agg_district_commodity_risk
             WHERE district_id = $1 AND commodity_id = $2
             ORDER BY quarter DESC LIMIT 1
@@ -246,7 +267,11 @@ async def district_risk(
         top_contaminants  = top_contaminants,
         enforcement_events = events,
         inference_type    = inference_type,
-        disclaimer        = DISCLAIMER,
+        codex_compliant_fraction = float(agg["codex_compliant_fraction"]) if agg and agg["codex_compliant_fraction"] is not None else None,
+        eu_compliant_fraction    = float(agg["eu_compliant_fraction"]) if agg and agg["eu_compliant_fraction"] is not None else None,
+        twi_exceedance_fraction  = float(agg["twi_exceedance_fraction"]) if agg and agg["twi_exceedance_fraction"] is not None else None,
+        fssai_vs_codex_flag      = agg["fssai_vs_codex_flag"] if agg else None,
+        disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
         last_updated      = str(agg["last_updated"]) if agg else None,
     )
 
@@ -351,7 +376,7 @@ async def brand_risk(
         inference_label   = inference_label,
         supply_chain      = [],   # populated by supply_chain.py in production
         enforcement_events = events,
-        disclaimer        = DISCLAIMER,
+        disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
     )
 
 

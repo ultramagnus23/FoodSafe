@@ -4,7 +4,7 @@ Run: uvicorn api.main:app --reload --port 8000
 """
 
 from __future__ import annotations
-import logging, time
+import logging, os, time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ from api.auth import auth_router
 from api.routes.risk import risk_router
 from api.routes.user import user_router
 from api.routes.disputes import disputes_router, admin_router
+from api.routes.disease import disease_router
 from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -27,8 +28,22 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 app = FastAPI(title="FoodSafe India API", version="1.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000","https://foodsafe.in"],
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# CORS: local dev origins are always allowed; the deployed Vercel frontend is
+# added via FRONTEND_URL (set in Render's env, see render.yaml). Vercel
+# preview deploys (*.vercel.app) are matched by regex so PR previews work
+# without listing every preview URL by hand.
+_default_origins = ["http://localhost:3000", "https://foodsafe.in"]
+_frontend_url = os.environ.get("FRONTEND_URL")
+if _frontend_url and _frontend_url not in _default_origins:
+    _default_origins.append(_frontend_url)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_default_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -52,6 +67,7 @@ app.include_router(insurance_router, prefix="/v1/insurance", tags=["insurance"])
 app.include_router(meta_router,      prefix="/v1/meta",      tags=["meta"])
 app.include_router(disputes_router,  prefix="/v1/disputes",  tags=["disputes"])
 app.include_router(admin_router,     prefix="/v1/admin",     tags=["admin"])
+app.include_router(disease_router,   prefix="/v1/disease",   tags=["disease"])
 
 @app.get("/", include_in_schema=False)
 async def root():

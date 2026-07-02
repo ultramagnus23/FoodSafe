@@ -1,0 +1,19 @@
+# FoodSafe India — API-only requirements (used by Render's web service).
+# The full pipeline/ML stack in requirements.txt (Airflow, Celery, Playwright,
+# spaCy, scikit-learn...) is for local dev and the GitHub Actions ingest job —
+# none of it is imported by api.main. Keeping this list minimal makes the
+# Render build fast and avoids apache-airflow's unpinned dependency conflicts.
+#
+# pip install -r requirements-api.txt
+
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+asyncpg>=0.29.0           # async PostgreSQL driver used by api/db.py
+pydantic[email]>=2.7.0    # EmailStr needs the email-validator extra
+PyJWT>=2.8.0              # JWT create/verify in api/auth_utils.py
+bcrypt>=4.1.0             # password hashing in api/auth.py
+python-dotenv>=1.0.0      # loads .env (DATABASE_URL, JWT_SECRET) in prod too
+
+# api/routes/disease.py's benchmark endpoint opens its own sync connection
+# via models/dietary_exposure.py + pipeline/config.py's pg_connect().
+psycopg2-binary>=2.9.9

@@ -61,10 +61,20 @@ def _connect_kwargs() -> dict:
 
 async def init_pool(min_size: int = 2, max_size: int = 10) -> None:
     global _pool
+    # statement_cache_size=0: Supabase's pooler on port 6543 is PgBouncer/
+    # Supavisor in *transaction* mode, which hands out a different backend
+    # connection per transaction. asyncpg's default server-side prepared
+    # statement cache assumes a stable backend connection, so under
+    # transaction pooling it causes "prepared statement already exists" /
+    # "does not exist" errors intermittently. Disabling it falls back to
+    # asyncpg re-preparing per-call, which is the documented pgbouncer/
+    # Supavisor-transaction-mode workaround. If DATABASE_URL points at the
+    # *session* pooler (port 5432) instead, this is unnecessary but harmless.
     _pool = await asyncpg.create_pool(
         min_size=min_size,
         max_size=max_size,
         command_timeout=30,
+        statement_cache_size=0,
         **_connect_kwargs(),
     )
     logger.info("DB pool initialised (min=%d max=%d)", min_size, max_size)

@@ -189,6 +189,37 @@ def run_aggregation(conn) -> dict:
     d = aggregate_districts(conn, records)
     b = aggregate_brands(conn, records)
     summary = {"records": len(records), "district_rows": d, "brand_rows": b}
+
+    # Codex/EU/WHO benchmark columns on agg_district_commodity_risk, and the
+    # "passed FSSAI but fails Codex" alerts — see models/codex_benchmark.py.
+    try:
+        from models.codex_benchmark import compute_district_commodity_codex_fractions, write_codex_gap_alerts
+
+        groups = defaultdict(list)
+        for r in records:
+            if r["district_id"] is not None:
+                groups[(r["district_id"], r["commodity_id"], _quarter(r["test_date"]))].append(r)
+        fractions = compute_district_commodity_codex_fractions(conn, groups)
+        with conn.cursor() as cur:
+            for (district_id, commodity_id, quarter), vals in fractions.items():
+                cur.execute(
+                    """
+                    UPDATE agg_district_commodity_risk
+                    SET codex_compliant_fraction = %s, eu_compliant_fraction = %s,
+                        twi_exceedance_fraction = %s, fssai_vs_codex_flag = %s
+                    WHERE district_id = %s AND commodity_id = %s AND quarter = %s
+                    """,
+                    (vals["codex_compliant_fraction"], vals["eu_compliant_fraction"],
+                     vals["twi_exceedance_fraction"], vals["fssai_vs_codex_flag"],
+                     district_id, commodity_id, quarter),
+                )
+        n_alerts = write_codex_gap_alerts(conn, records)
+        conn.commit()
+        summary["codex_fraction_groups"] = len(fractions)
+        summary["codex_gap_alerts"] = n_alerts
+    except Exception:
+        logger.exception("Codex benchmark step failed; district/brand aggregation still committed")
+
     logger.info("Aggregation complete: %s", summary)
     return summary
 
