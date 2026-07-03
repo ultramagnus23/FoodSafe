@@ -4,9 +4,9 @@ Adapted from other_routes.py to use asyncpg pool.
 """
 from __future__ import annotations
 from typing import Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from api.auth_utils import get_current_user, CurrentUser
+from api.auth_utils import get_current_user, require_tier, CurrentUser
 from api.db import get_pool
 
 search_router = APIRouter()
@@ -94,6 +94,39 @@ async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = 
                 risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"]))
     return results
 
+class AutocompleteResult(BaseModel):
+    id: int
+    name: str
+    type: str
+
+@search_router.get("/autocomplete", response_model=list[AutocompleteResult])
+async def autocomplete(q: str):
+    """Lightweight, unauthenticated typeahead — pg_trgm similarity across
+    commodities, districts, and contaminants. Capped at 5 results total."""
+    if not q or len(q) < 2:
+        return []
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            (SELECT id, name_canonical AS name, 'commodity' AS type,
+                    similarity(name_canonical, $1) AS score
+             FROM commodities WHERE name_canonical % $1)
+            UNION ALL
+            (SELECT id, name_canonical AS name, 'district' AS type,
+                    similarity(name_canonical, $1) AS score
+             FROM districts WHERE name_canonical % $1)
+            UNION ALL
+            (SELECT id, name_canonical AS name, 'contaminant' AS type,
+                    similarity(name_canonical, $1) AS score
+             FROM contaminants WHERE name_canonical % $1)
+            ORDER BY score DESC
+            LIMIT 5
+            """,
+            q,
+        )
+    return [AutocompleteResult(id=r["id"], name=r["name"], type=r["type"]) for r in rows]
+
 # ---- FMCG ----
 class MarketGap(BaseModel):
     district_id: int
@@ -127,6 +160,115 @@ async def market_gaps(state: Optional[str]=None, category: Optional[str]=None, l
     return [MarketGap(district_id=r["district_id"], district_name=r["district_name"], state=r["state"],
                       commodity=r["commodity"], risk_score=float(r["risk_score"]),
                       n_tests=r["n_tests"], brand_count=r["brand_count"]) for r in rows]
+
+class ProcurementRiskRequest(BaseModel):
+    commodity_id: int
+    district_ids: list[int]
+    volume_weights: Optional[list[float]] = None  # same length as district_ids; defaults to equal weight
+
+class DistrictContribution(BaseModel):
+    district_id: int
+    district_name: str
+    weight: float
+    risk_score: Optional[float]
+    n_tests: int
+    codex_compliant_fraction: Optional[float]
+    top_contaminant: Optional[str]
+
+class ProcurementRiskResponse(BaseModel):
+    commodity_id: int
+    commodity_name: str
+    blended_risk_score: Optional[float]
+    blended_ci: Optional[list[float]]
+    by_district: list[DistrictContribution]
+    inference_type: str
+    disclaimer: str
+
+@fmcg_router.post("/procurement-risk", response_model=ProcurementRiskResponse)
+async def procurement_risk(req: ProcurementRiskRequest, user: CurrentUser = Depends(require_tier("fmcg", "insurance"))):
+    """Blended sourcing risk for procuring a commodity across multiple
+    districts, weighted by volume share — e.g. "60% of our groundnut comes
+    from Bikaner, 40% from Hardoi"."""
+    if not req.district_ids:
+        raise HTTPException(400, "district_ids must not be empty")
+    weights = req.volume_weights or [1.0 / len(req.district_ids)] * len(req.district_ids)
+    if len(weights) != len(req.district_ids):
+        raise HTTPException(400, "volume_weights must be the same length as district_ids")
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        commodity = await conn.fetchrow("SELECT id, name_canonical FROM commodities WHERE id = $1", req.commodity_id)
+        if not commodity:
+            raise HTTPException(404, "Commodity not found")
+
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT ON (agg.district_id)
+                d.id AS district_id, d.name_canonical AS district_name,
+                agg.risk_score, agg.ci_lower, agg.ci_upper, agg.n_tests,
+                agg.codex_compliant_fraction, agg.top_contaminants
+            FROM agg_district_commodity_risk agg
+            JOIN districts d ON d.id = agg.district_id
+            WHERE agg.commodity_id = $1 AND agg.district_id = ANY($2::int[])
+            ORDER BY agg.district_id, agg.quarter DESC
+            """,
+            req.commodity_id, req.district_ids,
+        )
+    by_district_id = {r["district_id"]: r for r in rows}
+
+    import json
+    contributions = []
+    weighted_risk_sum = 0.0
+    weighted_ci_lo_sum = 0.0
+    weighted_ci_hi_sum = 0.0
+    total_weight_with_data = 0.0
+    any_data = False
+
+    for district_id, weight in zip(req.district_ids, weights):
+        r = by_district_id.get(district_id)
+        if r is None or r["risk_score"] is None:
+            contributions.append(DistrictContribution(
+                district_id=district_id, district_name=(r["district_name"] if r else "Unknown"),
+                weight=weight, risk_score=None, n_tests=(r["n_tests"] if r else 0),
+                codex_compliant_fraction=None, top_contaminant=None,
+            ))
+            continue
+        any_data = True
+        top_contaminants = json.loads(r["top_contaminants"]) if isinstance(r["top_contaminants"], str) else (r["top_contaminants"] or [])
+        top_contaminant = top_contaminants[0]["name"] if top_contaminants else None
+        risk = float(r["risk_score"])
+        weighted_risk_sum += risk * weight
+        weighted_ci_lo_sum += float(r["ci_lower"] or risk) * weight
+        weighted_ci_hi_sum += float(r["ci_upper"] or risk) * weight
+        total_weight_with_data += weight
+        contributions.append(DistrictContribution(
+            district_id=district_id, district_name=r["district_name"], weight=weight,
+            risk_score=risk, n_tests=r["n_tests"],
+            codex_compliant_fraction=float(r["codex_compliant_fraction"]) if r["codex_compliant_fraction"] is not None else None,
+            top_contaminant=top_contaminant,
+        ))
+
+    blended = None
+    blended_ci = None
+    if any_data and total_weight_with_data > 0:
+        blended = round(weighted_risk_sum / total_weight_with_data, 2)
+        blended_ci = [round(weighted_ci_lo_sum / total_weight_with_data, 2),
+                       round(weighted_ci_hi_sum / total_weight_with_data, 2)]
+
+    return ProcurementRiskResponse(
+        commodity_id=req.commodity_id,
+        commodity_name=commodity["name_canonical"],
+        blended_risk_score=blended,
+        blended_ci=blended_ci,
+        by_district=contributions,
+        inference_type="direct_test" if any_data else "insufficient_data",
+        disclaimer=(
+            f"Statistical estimate based on public enforcement records for "
+            f"{commodity['name_canonical']} sourced from the specified districts. "
+            "Not a product test result. Not a verdict on any specific brand, "
+            "manufacturer, or batch. Not medical or legal advice."
+        ),
+    )
 
 # ---- Insurance ----
 class DistrictRiskProfile(BaseModel):
