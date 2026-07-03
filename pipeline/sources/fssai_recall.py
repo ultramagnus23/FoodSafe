@@ -75,12 +75,32 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
             page.goto(RECALL_URL, wait_until="networkidle", timeout=timeout_ms)
         except Exception as e:  # noqa: BLE001
             logger.warning("page load warning: %s", e)
-        page.wait_for_timeout(6000)
+        page.wait_for_timeout(3000)
 
         body_text = page.inner_text("body")
         if "Maintenance" in body_text and "unavailable" in body_text:
             logger.warning("FoSCoS is in its daily maintenance window — try again "
                            "outside ~23:30–03:00 IST.")
+            browser.close()
+            return []
+
+        # The page is a filter/search form, not an auto-loading list — the
+        # recall table only populates after Search is clicked (discovered
+        # 2026-07-04; the original assumption was that it rendered on load).
+        try:
+            search_btn = page.query_selector("button:has-text('Search')")
+            if search_btn:
+                search_btn.click()
+                page.wait_for_timeout(8000)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not click Search: %s", e)
+
+        if api_status["status"] == 401:
+            logger.warning(
+                "recall API returned 401 Unauthorized — this 'public' endpoint now appears "
+                "to require auth our headless session doesn't have. Not a maintenance-window "
+                "issue; see docs/FSSAI_INGESTION.md."
+            )
             browser.close()
             return []
         if api_status["status"] and api_status["status"] >= 500:
