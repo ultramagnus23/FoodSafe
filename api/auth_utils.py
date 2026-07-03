@@ -6,7 +6,9 @@ JWT token creation + verification + rate limiting + tier enforcement.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -17,6 +19,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 
 from api.db import get_pool
+
+logger = logging.getLogger("foodsafe.auth_utils")
 
 SECRET_KEY  = os.environ.get("JWT_SECRET", "change-me-in-production-use-env")
 ALGORITHM   = "HS256"
@@ -55,6 +59,10 @@ def create_refresh_token(user_id: str) -> str:
         "iat":  int(now.timestamp()),
         "exp":  int((now + timedelta(seconds=REFRESH_TTL)).timestamp()),
         "type": "refresh",
+        # jti: without this, two logins within the same second produce an
+        # identical token (same claims -> same signature), which collides
+        # on refresh_tokens.token_hash's UNIQUE constraint and 500s.
+        "jti":  secrets.token_hex(8),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -109,16 +117,43 @@ async def get_current_user(
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT ak.user_id, ak.tier, ak.rate_limit_per_day, ak.revoked_at
+                SELECT ak.id, ak.user_id, ak.tier, ak.rate_limit_per_day, ak.revoked_at, ak.expires_at
                 FROM api_keys ak
                 WHERE ak.key_hash = $1
                 """,
                 key_hash,
             )
-        if not row or row["revoked_at"] is not None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-        user_id = str(row["user_id"])
-        tier    = row["tier"]
+            if not row or row["revoked_at"] is not None:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+            if row["expires_at"] is not None and row["expires_at"] < datetime.now(timezone.utc):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired")
+            user_id = str(row["user_id"])
+            tier    = row["tier"]
+
+            # Rate limit: count actual calls in the trailing 24h against
+            # rate_limit_per_day (backed by api_key_usage, populated below —
+            # persists across restarts, unlike the in-memory limiter used
+            # for JWT/anonymous requests in api/main.py's middleware).
+            calls_today = await conn.fetchval(
+                "SELECT COUNT(*) FROM api_key_usage WHERE key_id = $1 AND created_at >= NOW() - INTERVAL '24 hours'",
+                row["id"],
+            )
+            if calls_today >= row["rate_limit_per_day"]:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"API key rate limit exceeded ({row['rate_limit_per_day']}/day)",
+                )
+
+            # Usage tracking for the B2B dashboard — best-effort, never blocks
+            # or fails the actual request.
+            try:
+                await conn.execute("UPDATE api_keys SET last_used = NOW() WHERE id = $1", row["id"])
+                await conn.execute(
+                    "INSERT INTO api_key_usage (key_id, endpoint, method) VALUES ($1, $2, $3)",
+                    row["id"], request.url.path, request.method,
+                )
+            except Exception:
+                logger.warning("Failed to record API key usage for key %s", row["id"], exc_info=True)
 
     else:
         raise HTTPException(

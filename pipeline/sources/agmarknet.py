@@ -15,6 +15,13 @@ aggregation-driven) until real test data exists for them.
 Uses the documented data.gov.in sample API key by default; override with the
 DATA_GOV_IN_KEY env var for higher rate limits.
 
+The public sample key caps each request at ~10 records regardless of the
+requested `limit` and is frequently rate-limited/flaky, so `_fetch` paginates
+with `offset` across several requests and tolerates individual page failures
+(returns whatever it collected rather than raising) — coverage compounds
+across repeated runs (this ingester already runs daily via
+.github/workflows/ingest.yml) rather than needing one big successful call.
+
 Run:  python -m pipeline.sources.agmarknet --limit 1000
 """
 
@@ -24,6 +31,7 @@ import argparse
 import json
 import logging
 import os
+import time
 import urllib.parse
 import urllib.request
 
@@ -35,15 +43,37 @@ logger = logging.getLogger("foodsafe.agmarknet")
 RESOURCE_ID = "9ef84268-d588-465a-a308-a864a43d0070"
 DEFAULT_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"  # public sample key
 API = "https://api.data.gov.in/resource/"
+PAGE_SIZE = 10  # observed effective cap for the public sample key
+
+
+def _fetch_page(offset: int, page_size: int = PAGE_SIZE, retries: int = 2) -> list[dict]:
+    key = os.environ.get("DATA_GOV_IN_KEY", DEFAULT_KEY)
+    params = urllib.parse.urlencode({"api-key": key, "format": "json", "limit": page_size, "offset": offset})
+    url = f"{API}{RESOURCE_ID}?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "FoodSafe-India/1.0"})
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode()).get("records", [])
+        except Exception as e:
+            if attempt == retries:
+                logger.warning("AGMARKNET page offset=%d failed after retries: %s", offset, e)
+                return []
+            time.sleep(2)
+    return []
 
 
 def _fetch(limit: int) -> list[dict]:
-    key = os.environ.get("DATA_GOV_IN_KEY", DEFAULT_KEY)
-    params = urllib.parse.urlencode({"api-key": key, "format": "json", "limit": limit})
-    url = f"{API}{RESOURCE_ID}?{params}"
-    req = urllib.request.Request(url, headers={"User-Agent": "FoodSafe-India/1.0"})
-    with urllib.request.urlopen(req, timeout=40) as resp:
-        return json.loads(resp.read().decode()).get("records", [])
+    records: list[dict] = []
+    offset = 0
+    while len(records) < limit:
+        page = _fetch_page(offset)
+        if not page:
+            break  # empty page or failure — stop, don't loop forever on a dead endpoint
+        records.extend(page)
+        offset += PAGE_SIZE
+        time.sleep(1)  # be polite to a free public endpoint
+    return records[:limit]
 
 
 def _canon_state(s: str) -> str:

@@ -225,7 +225,10 @@ def _dispute_row_to_model(row, redact_email: bool = False) -> DisputeResponse:
 # ============================================================
 
 async def _require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    if user.tier not in ("fmcg", "insurance"):
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        is_superuser = await conn.fetchval("SELECT is_superuser FROM users WHERE id = $1", user.user_id)
+    if not is_superuser:
         raise HTTPException(403, "Admin access required")
     return user
 

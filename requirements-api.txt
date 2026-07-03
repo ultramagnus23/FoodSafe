@@ -21,3 +21,8 @@ psycopg2-binary>=2.9.9
 # api/routes/risk.py's brand_risk endpoint lazily imports
 # models/supply_chain.py's Bayesian propagation graph.
 networkx>=3.3.0
+
+# api/routes/trends.py's endpoints use models/trend_analysis.py
+# (Mann-Kendall via scipy.stats.kendalltau + Sen's slope via numpy).
+numpy>=1.26.0
+scipy>=1.11.0

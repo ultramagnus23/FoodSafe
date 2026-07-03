@@ -32,7 +32,8 @@ async def get_profile(user: CurrentUser = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT email, tier, home_district_id, created_at FROM users WHERE id = $1", user.user_id
+            "SELECT email, tier, home_district_id, created_at, is_superuser FROM users WHERE id = $1", user.user_id
         )
     return {"user_id": user.user_id, "email": row["email"], "tier": row["tier"],
-            "home_district_id": row["home_district_id"], "created_at": str(row["created_at"])}
+            "home_district_id": row["home_district_id"], "created_at": str(row["created_at"]),
+            "is_superuser": row["is_superuser"]}

@@ -5,6 +5,19 @@
 scrapable data. So this path cannot currently feed the India risk model. This
 document records what was tried, what works, and exactly what remains.
 
+**Update (2026-07-04):** re-ran `pipeline/sources/fssai_recall.py` end to end.
+The page itself loads fine (no maintenance banner) and is a filter/search
+form, not an auto-loading list — the earlier assumption that recalls render
+on page load was wrong; you have to click "Search" first (the scraper now
+does this). Once triggered, the actual data call
+`webgateway/commonauth_readonly/commonapi/getFoodRecallProductHomepage/1`
+returns **401 Unauthorized**, not the previously-documented 503-during-
+maintenance. So the access model changed: this "public" endpoint now appears
+to require an auth token/session our headless browser doesn't have. Did not
+attempt to work around the 401 (would mean reverse-engineering an auth flow
+for a government portal, out of scope). This source is effectively blocked
+until FSSAI opens it back up or publishes recall data another way.
+
 ## What the pipeline expects
 
 `pipeline/sources/fssai.py` → `pipeline/stage1_extract.py` was designed to:

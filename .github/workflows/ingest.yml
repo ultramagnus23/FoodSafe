@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install --quiet psycopg2-binary
+        run: pip install --quiet psycopg2-binary numpy scipy networkx
 
       - name: Ingest openFDA food enforcement (real US FDA recalls)
         env:
@@ -55,3 +55,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m models.aggregate
+
+      - name: Recompute disease burden estimates
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # don't let a modelling error block ingestion
+        run: python -m models.disease_burden compute_all
+
+      - name: Send pending alert-subscription notifications
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        continue-on-error: true   # RESEND_API_KEY may be unset — that's a no-op, not a failure
+        run: python -m models.notifications

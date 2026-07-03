@@ -38,6 +38,28 @@ DISTRICTS = {
     10: ("Tamil Nadu",    0.075,201, [(6, 0.5), (1, 0.5)]),   # Chennai: turmeric, rice
     11: ("Tamil Nadu",    0.02,  87, [(1, 1.0)]),             # Coimbatore
     12: ("Karnataka",     0.02, 267, [(1, 0.7), (3, 0.3)]),   # Bengaluru: rice, milk
+    # Real districts added via pipeline/sources/agmarknet.py (data.gov.in) —
+    # these are genuine Indian district/state names, but no open contamination
+    # test source exists for them (see docs/FSSAI_INGESTION.md), so, like the
+    # 12 above, their test volumes/fail rates here are synthetic placeholders,
+    # not measurements. Extended so the app isn't empty for districts AGMARKNET
+    # actually reports.
+    13: ("Odisha",          0.06,  58, [(1, 0.6), (4, 0.4)]),   # Mayurbhanja
+    14: ("Keralam",         0.09,  71, [(6, 0.5), (1, 0.5)]),   # Alappuzha
+    15: ("Keralam",         0.04,  64, [(1, 0.7), (3, 0.3)]),   # Ernakulam
+    16: ("Keralam",         0.11,  49, [(6, 0.6), (5, 0.4)]),   # Thirssur
+    17: ("Gujarat",         0.14,  53, [(5, 0.7), (1, 0.3)]),   # Banaskanth
+    18: ("Tripura",         0.08,  41, [(1, 1.0)]),             # Dhalai
+    19: ("Madhya Pradesh",  0.10,  62, [(4, 0.6), (1, 0.4)]),   # Seoni
+    20: ("Madhya Pradesh",  0.05,  45, [(1, 0.8), (3, 0.2)]),   # Narsinghpur
+    21: ("Madhya Pradesh",  0.17,  57, [(5, 0.5), (1, 0.5)]),   # Shehdol
+    23: ("Tamil Nadu",      0.03,  68, [(6, 0.5), (1, 0.5)]),   # Madurai
+    24: ("Gujarat",         0.13,  47, [(5, 0.6), (4, 0.4)]),   # Dahod
+    25: ("Punjab",          0.06,  73, [(1, 0.7), (3, 0.3)]),   # Hoshiarpur
+    26: ("Keralam",         0.08,  40, [(6, 0.6), (1, 0.4)]),   # Pathanamthitta
+    27: ("Gujarat",         0.16,  38, [(4, 0.5), (5, 0.5)]),   # Narmada
+    28: ("Gujarat",         0.07,  55, [(1, 0.6), (5, 0.4)]),   # Navsari
+    30: ("Gujarat",         0.05,  60, [(3, 0.5), (1, 0.5)]),   # Kheda
 }
 
 # commodity_id -> contaminant choices [(contaminant_id, weight)]
