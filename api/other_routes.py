@@ -12,6 +12,50 @@ from api.db import get_pool
 search_router = APIRouter()
 fmcg_router = APIRouter()
 insurance_router = APIRouter()
+meta_router = APIRouter()
+
+# ---- Reference lists (public — no auth; used to populate UI selectors) ----
+
+class DistrictOut(BaseModel):
+    id: int
+    name: str
+    state: str
+
+class CommodityOut(BaseModel):
+    id: int
+    name: str
+    category: str
+
+class BrandOut(BaseModel):
+    id: int
+    name: str
+
+@meta_router.get("/districts", response_model=list[DistrictOut])
+async def list_districts():
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, name_canonical, state FROM districts ORDER BY state, name_canonical"
+        )
+    return [DistrictOut(id=r["id"], name=r["name_canonical"], state=r["state"]) for r in rows]
+
+@meta_router.get("/commodities", response_model=list[CommodityOut])
+async def list_commodities():
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, name_canonical, category FROM commodities ORDER BY id"
+        )
+    return [CommodityOut(id=r["id"], name=r["name_canonical"], category=r["category"]) for r in rows]
+
+@meta_router.get("/brands", response_model=list[BrandOut])
+async def list_brands(limit: int = 200):
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, name_canonical FROM brands ORDER BY name_canonical LIMIT $1", limit
+        )
+    return [BrandOut(id=r["id"], name=r["name_canonical"]) for r in rows]
 
 # ---- Search ----
 class SearchResult(BaseModel):

@@ -20,7 +20,7 @@ from typing import Optional
 import psycopg2
 import psycopg2.extras
 
-from pipeline.config import DATABASE_URL
+from pipeline.config import DATABASE_URL, pg_connect
 from pipeline.stage1_extract import extract_pdf, RawRecord
 from pipeline.stage2_standardise import standardise_batch, StandardisedRecord
 from pipeline.stage3_and_4 import dedup_and_score, ScoredRecord
@@ -39,7 +39,7 @@ logger = logging.getLogger("foodsafe.ingest")
 
 @contextmanager
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = pg_connect()
     try:
         yield conn
         conn.commit()

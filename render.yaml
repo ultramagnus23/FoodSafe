@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: foodsafe-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      # Vercel frontend URL, so the API's CORS allows it — see api/main.py.
+      # *.vercel.app preview deploys are already allowed via regex; set this
+      # to the production domain (foodsafe.in or the .vercel.app prod URL).
+      - key: FRONTEND_URL
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9

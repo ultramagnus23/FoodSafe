@@ -27,6 +27,21 @@ DISCLAIMER = (
 )
 
 
+def build_disclaimer(commodity: Optional[str] = None, district: Optional[str] = None) -> str:
+    """Legal disclaimer required on every risk/disease response. Geographic
+    framing only — never names a brand, manufacturer, or batch."""
+    scope = ""
+    if commodity and district:
+        scope = f" for {commodity} sourced from {district}"
+    elif commodity:
+        scope = f" for {commodity}"
+    return (
+        f"Statistical estimate based on public enforcement records{scope}. "
+        "Not a product test result. Not a verdict on any specific brand, "
+        "manufacturer, or batch. Not medical or legal advice."
+    )
+
+
 # ============================================================
 # RESPONSE MODELS
 # ============================================================
@@ -57,6 +72,10 @@ class DistrictRiskResponse(BaseModel):
     top_contaminants:  list[dict]
     enforcement_events: list[EnforcementEvent]
     inference_type:    str   # "direct_test" | "insufficient_data"
+    codex_compliant_fraction: Optional[float]
+    eu_compliant_fraction:    Optional[float]
+    twi_exceedance_fraction:  Optional[float]
+    fssai_vs_codex_flag:      Optional[bool]
     disclaimer:        str
     last_updated:      Optional[str]
 
@@ -118,7 +137,9 @@ async def district_risk(
     async with pool.acquire() as conn:
         # District + commodity info
         district = await conn.fetchrow(
-            "SELECT id, name_canonical, state, latitude, longitude FROM districts WHERE id = $1",
+            "SELECT id, name_canonical, state, latitude, longitude, "
+            "water_quality_index, industrial_proximity_score "
+            "FROM districts WHERE id = $1",
             district_id,
         )
         if not district:
@@ -135,7 +156,9 @@ async def district_risk(
         agg = await conn.fetchrow(
             """
             SELECT risk_score, ci_lower, ci_upper, n_tests, fail_rate,
-                   top_contaminants, last_updated
+                   top_contaminants, last_updated,
+                   codex_compliant_fraction, eu_compliant_fraction,
+                   twi_exceedance_fraction, fssai_vs_codex_flag
             FROM agg_district_commodity_risk
             WHERE district_id = $1 AND commodity_id = $2
             ORDER BY quarter DESC LIMIT 1
@@ -196,6 +219,39 @@ async def district_risk(
         else:
             top_contaminants = list(raw_tc) if raw_tc else []
 
+    # Contributing risk factors, derived from the aggregation + district
+    # context. These are the real signals the score is built from (the
+    # aggregation methodology lives in models/aggregate.py).
+    top_factors: list[dict] = []
+    if agg and agg["fail_rate"] is not None:
+        top_factors.append({
+            "factor": "12-month fail rate",
+            "value": round(float(agg["fail_rate"]) * 100, 1),
+            "unit": "%",
+            "effect": "increases risk",
+        })
+    top_factors.append({
+        "factor": "sample size",
+        "value": n_tests or 0,
+        "unit": "tests",
+        "effect": "narrows confidence interval",
+    })
+    if district["water_quality_index"] is not None:
+        top_factors.append({
+            "factor": "water quality index",
+            "value": float(district["water_quality_index"]),
+            "unit": "0-100 (higher = cleaner)",
+            "effect": "lower water quality raises risk",
+        })
+    if district["industrial_proximity_score"] is not None:
+        top_factors.append({
+            "factor": "industrial proximity",
+            "value": float(district["industrial_proximity_score"]),
+            "unit": "0-100 (higher = more industrial)",
+            "effect": "higher proximity raises risk",
+        })
+    top_factors = top_factors[:3]
+
     return DistrictRiskResponse(
         district_id       = district_id,
         district_name     = district["name_canonical"],
@@ -207,11 +263,15 @@ async def district_risk(
         ci_upper          = float(agg["ci_upper"]) if agg and agg["ci_upper"] is not None else None,
         n_tests           = n_tests or 0,
         fail_rate         = float(agg["fail_rate"]) if agg and agg["fail_rate"] is not None else None,
-        top_factors       = [],   # populated by ML model in production
+        top_factors       = top_factors,
         top_contaminants  = top_contaminants,
         enforcement_events = events,
         inference_type    = inference_type,
-        disclaimer        = DISCLAIMER,
+        codex_compliant_fraction = float(agg["codex_compliant_fraction"]) if agg and agg["codex_compliant_fraction"] is not None else None,
+        eu_compliant_fraction    = float(agg["eu_compliant_fraction"]) if agg and agg["eu_compliant_fraction"] is not None else None,
+        twi_exceedance_fraction  = float(agg["twi_exceedance_fraction"]) if agg and agg["twi_exceedance_fraction"] is not None else None,
+        fssai_vs_codex_flag      = agg["fssai_vs_codex_flag"] if agg else None,
+        disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
         last_updated      = str(agg["last_updated"]) if agg else None,
     )
 
@@ -316,7 +376,7 @@ async def brand_risk(
         inference_label   = inference_label,
         supply_chain      = [],   # populated by supply_chain.py in production
         enforcement_events = events,
-        disclaimer        = DISCLAIMER,
+        disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
     )
 
 

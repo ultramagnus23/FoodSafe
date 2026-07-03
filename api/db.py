@@ -31,13 +31,51 @@ DATABASE_URL = os.environ.get(
 _ASYNCPG_URL = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
 
 
+def _connect_kwargs() -> dict:
+    """Build explicit asyncpg connect kwargs from DATABASE_URL.
+
+    We pass parsed components (not the raw DSN) because libpq/asyncpg can
+    misparse the dotted Supabase pooler username (postgres.<ref>) from a URI,
+    causing intermittent 'password authentication failed'. We also attach an
+    SSL context (sslmode=require semantics) for Supabase/any remote host.
+    """
+    from urllib.parse import urlparse
+
+    u = urlparse(_ASYNCPG_URL)
+    kwargs: dict = dict(
+        host=u.hostname,
+        port=u.port or 5432,
+        user=u.username,
+        password=u.password,
+        database=(u.path.lstrip("/") or "postgres"),
+    )
+    host = u.hostname or ""
+    if "supabase.com" in host or "sslmode=require" in _ASYNCPG_URL:
+        import ssl as _ssl
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        kwargs["ssl"] = ctx
+    return kwargs
+
+
 async def init_pool(min_size: int = 2, max_size: int = 10) -> None:
     global _pool
+    # statement_cache_size=0: Supabase's pooler on port 6543 is PgBouncer/
+    # Supavisor in *transaction* mode, which hands out a different backend
+    # connection per transaction. asyncpg's default server-side prepared
+    # statement cache assumes a stable backend connection, so under
+    # transaction pooling it causes "prepared statement already exists" /
+    # "does not exist" errors intermittently. Disabling it falls back to
+    # asyncpg re-preparing per-call, which is the documented pgbouncer/
+    # Supavisor-transaction-mode workaround. If DATABASE_URL points at the
+    # *session* pooler (port 5432) instead, this is unnecessary but harmless.
     _pool = await asyncpg.create_pool(
-        _ASYNCPG_URL,
         min_size=min_size,
         max_size=max_size,
         command_timeout=30,
+        statement_cache_size=0,
+        **_connect_kwargs(),
     )
     logger.info("DB pool initialised (min=%d max=%d)", min_size, max_size)
 

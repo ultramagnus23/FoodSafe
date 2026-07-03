@@ -404,6 +404,10 @@
 </head>
 <body>
 <div id="root"></div>
+<!-- env.js is generated at Vercel build time from BACKEND_LINK (see vercel.json)
+     and sets window.FOODSAFE_API_BASE. Not present in local dev — the 404 is
+     harmless, the app falls back to http://127.0.0.1:8000 below. -->
+<script src="env.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -483,6 +487,12 @@ const api = {
     if (category) p.push('category=' + encodeURIComponent(category));
     return apiFetch('/v1/fmcg/market-gaps' + (p.length ? '?' + p.join('&') : ''));
   },
+  diseaseDistrict: (districtId) => apiFetch('/v1/disease/district/' + districtId),
+  diseaseAlerts: (filters) => {
+    filters = filters || {};
+    const p = Object.entries(filters).filter(([,v]) => v).map(([k,v]) => k + '=' + encodeURIComponent(v));
+    return apiFetch('/v1/disease/alerts' + (p.length ? '?' + p.join('&') : ''));
+  },
 };
 
 const AuthContext = React.createContext(null);
@@ -558,6 +568,10 @@ function fmt(n, decimals=1) {
   return n != null ? Number(n).toFixed(decimals) : '—';
 }
 function cap(s){ s = (s==null?'':String(s)); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; }
+function evidenceGradeLabel(g){
+  return { iarc_group_1:'IARC Group 1', iarc_group_2a:'IARC Group 2A', iarc_group_2b:'IARC Group 2B',
+           jecfa_established:'JECFA Established' }[g] || (g || '—');
+}
 
 /* ============================================================
    COMPONENTS
@@ -572,11 +586,11 @@ function Nav({ page, setPage }) {
         'FoodSafe India'
       ),
       React.createElement('div', { className: 'nav-links' },
-        ['home','risk','brands','fmcg','about'].map(p =>
+        ['home','risk','alerts','brands','fmcg','about'].map(p =>
           React.createElement('button', {
             key: p, className: `nav-btn ${page===p?'active':''}`,
             onClick: ()=>setPage(p)
-          }, p === 'home' ? 'Home' : p === 'risk' ? 'Risk Report' : p === 'brands' ? 'Brands' : p === 'fmcg' ? 'FMCG' : 'About')
+          }, p === 'home' ? 'Home' : p === 'risk' ? 'Risk Report' : p === 'alerts' ? 'Alerts' : p === 'brands' ? 'Brands' : p === 'fmcg' ? 'FMCG' : 'About')
         )
       ),
       auth && auth.user
@@ -620,6 +634,20 @@ function RiskBadge({ score }) {
            c === 'mid'  ? {background:'var(--amber-lt)',color:'#92400E'} :
                           {background:'var(--sage-lt)',color:'var(--forest)'}
   }, riskLabel(score));
+}
+
+/* Side-by-side FSSAI vs Codex compliance badges — the "Mother Dairy problem":
+   a sample can pass India's own limit while failing the Codex Alimentarius
+   international benchmark. null means no benchmark data, not "safe". */
+function CompliancePair({ fssaiCompliant, codexCompliant }) {
+  function chip(label, ok) {
+    const style = ok === true ? { background:'var(--sage-lt)', color:'var(--forest)' }
+                 : ok === false ? { background:'var(--red-lt)', color:'var(--red)' }
+                 : { background:'var(--border)', color:'var(--muted)' };
+    return React.createElement('span', { className:'badge', style }, label + ': ' + (ok === true ? 'Pass' : ok === false ? 'Fail' : '—'));
+  }
+  return React.createElement('div', { style:{display:'flex',gap:6,flexWrap:'wrap'} },
+    chip('FSSAI', fssaiCompliant), chip('Codex', codexCompliant));
 }
 
 function RiskMeter({ score, ciLower, ciUpper, size = 'large' }) {
@@ -872,17 +900,18 @@ function HomePage({ setPage }) {
   );
 }
 
-function RiskPage() {
+function RiskPage({ initialDistrictId, initialCommodityId }) {
   const auth = useContext(AuthContext);
   const loggedIn = !!(auth && auth.token);
-  const [districtId, setDistrictId] = useState(1);
-  const [commodityId, setCommodityId] = useState(1);
+  const [districtId, setDistrictId] = useState(initialDistrictId || 1);
+  const [commodityId, setCommodityId] = useState(initialCommodityId || 1);
   const [tab, setTab] = useState('tests');
 
   // District list comes from the live map endpoint (no dedicated list endpoint exists).
   const districtList = useApi(() => api.map(1), [], loggedIn);
   const districts = districtList.data || [];
   const riskState = useApi(() => api.districtRisk(districtId, commodityId), [districtId, commodityId], loggedIn);
+  const diseaseState = useApi(() => api.diseaseDistrict(districtId), [districtId], loggedIn && tab === 'disease');
 
   const commodityName = (COMMODITIES.find(c=>c.id==commodityId)||{}).name || '';
 
@@ -933,14 +962,51 @@ function RiskPage() {
 
             /* Tabs */
             React.createElement('div', {className:'tabs'},
-              ['tests','contaminants','supply'].map(t=>
+              ['tests','contaminants','disease','supply'].map(t=>
                 React.createElement('button',{key:t,className:`tab ${tab===t?'active':''}`,onClick:()=>setTab(t)},
-                  t==='tests'?'Direct Tests':t==='contaminants'?'Contaminants':'Supply Chain'
+                  t==='tests'?'Direct Tests':t==='contaminants'?'Contaminants':t==='disease'?'Disease Burden':'Supply Chain'
                 )
               )
             ),
 
             tab==='tests' && React.createElement(EnforcementTable, {events:r.enforcement_events}),
+            tab==='disease' && asyncView(diseaseState, (d) => {
+              const rows = d.rows || [];
+              if (!rows.length) return React.createElement(EmptyState, {msg:'No disease-burden estimates for this district yet — needs at least 3 confidence-scored enforcement records per contaminant.'});
+              return React.createElement('div', {className:'cards cards-2'},
+                rows.map((row,i) => {
+                  const lowConf = row.n_records < 10;
+                  return React.createElement('div', {key:i, className:'card'},
+                    React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}},
+                      React.createElement('div', null,
+                        React.createElement('div', {style:{fontWeight:600}}, row.disease_name),
+                        React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, cap(row.contaminant_name.replace(/_/g,' ')), ' in ', row.commodity_name, ' · ', row.disease_icd10)
+                      ),
+                      React.createElement('span', {className:'badge badge-inferred'}, evidenceGradeLabel(row.evidence_grade))
+                    ),
+                    row.paf_estimate != null
+                      ? React.createElement('div', {style:{marginBottom:8}},
+                          React.createElement('div', {style:{fontFamily:'var(--font-serif)',fontSize:28,fontWeight:600,color:'var(--forest)'}},
+                            (row.paf_estimate*100).toFixed(2) + '%',
+                            React.createElement('span', {style:{fontSize:13,color:'var(--muted)',fontFamily:'var(--font-sans)',fontWeight:400,marginLeft:8}}, 'population attributable fraction')
+                          ),
+                          row.paf_ci && React.createElement('div', {style:{fontSize:11,color:'var(--muted)',fontFamily:'var(--font-mono)'}},
+                            `95% CI: ${(row.paf_ci[0]*100).toFixed(2)}% – ${(row.paf_ci[1]*100).toFixed(2)}%`),
+                          row.attributable_cases_per_100k != null && React.createElement('div', {style:{fontSize:12,color:'var(--muted)',marginTop:4}},
+                            `≈ ${fmt(row.attributable_cases_per_100k,2)} estimated attributable cases / 100,000 population`)
+                        )
+                      : React.createElement('div', {style:{fontSize:13,color:'var(--muted)',marginBottom:8}}, 'Threshold contaminant — no single PAF; see hazard quotient below.'),
+                    React.createElement(CompliancePair, {fssaiCompliant:row.fssai_compliant, codexCompliant:row.codex_compliant}),
+                    row.fssai_vs_codex_gap != null && row.fssai_vs_codex_gap > 1 &&
+                      React.createElement('div', {style:{fontSize:11.5,marginTop:8,color:'#92400E',background:'var(--amber-lt)',borderRadius:6,padding:'6px 10px'}},
+                        `⚡ FSSAI's limit here is ${row.fssai_vs_codex_gap.toFixed(1)}x more permissive than Codex Alimentarius.`),
+                    React.createElement('div', {style:{fontSize:11,color:'var(--muted)',marginTop:8}},
+                      row.latency_years ? `Latency: ${row.latency_years} · ` : '',
+                      lowConf ? `⚠ Based on ${row.n_records} samples — low confidence` : `Based on ${row.n_records} samples`)
+                  );
+                })
+              );
+            }, { needsAuth: !loggedIn, authLabel:'Sign in to view disease burden estimates.', loadingLabel:'Computing disease burden…' }),
             tab==='contaminants' && (tc.length
               ? React.createElement('div',{className:'cards cards-3'},
                   tc.map((c,i)=>
@@ -1142,6 +1208,72 @@ function FMCGPage() {
   );
 }
 
+function AlertsPage() {
+  const auth = useContext(AuthContext);
+  const loggedIn = !!(auth && auth.token);
+  const [severity, setSeverity] = useState('');
+  const [alertType, setAlertType] = useState('');
+  const state = useApi(() => api.diseaseAlerts({ severity, alert_type: alertType }), [severity, alertType], loggedIn);
+
+  const ALERT_META = {
+    twi_exceedance: { icon:'🔴', label:'TWI Exceedance', sub:'Estimated dietary intake exceeds WHO tolerable level' },
+    codex_exceedance_fssai_compliant: { icon:'🟡', label:'Codex Gap', sub:'Passed FSSAI testing but would fail international Codex standard' },
+    trend_worsening: { icon:'🟠', label:'Worsening Trend', sub:'Contamination trend rising over recent quarters' },
+  };
+
+  return React.createElement('div', {className:'page fade-in'},
+    React.createElement('div', {className:'container', style:{paddingTop:40}},
+      React.createElement('h1', {style:{fontFamily:'var(--font-serif)',fontSize:36,fontWeight:300,marginBottom:8}}, 'Exposure Alerts'),
+      React.createElement('p', {style:{color:'var(--muted)',marginBottom:24,maxWidth:640,lineHeight:1.6}},
+        'Districts where estimated dietary exposure exceeds WHO/JECFA tolerable intake, or where samples passed FSSAI\'s own limit but would have failed the international Codex Alimentarius benchmark.'),
+
+      React.createElement('div', {style:{display:'flex',gap:12,marginBottom:24,flexWrap:'wrap'}},
+        React.createElement('select', {className:'form-input form-select',style:{maxWidth:200},value:alertType,onChange:e=>setAlertType(e.target.value)},
+          [['','All Alert Types'],['twi_exceedance','🔴 TWI Exceedance'],['codex_exceedance_fssai_compliant','🟡 Codex Gap'],['trend_worsening','🟠 Worsening Trend']]
+            .map(([v,l])=>React.createElement('option',{key:l,value:v},l))
+        ),
+        React.createElement('select', {className:'form-input form-select',style:{maxWidth:160},value:severity,onChange:e=>setSeverity(e.target.value)},
+          [['','All Severities'],['critical','Critical'],['high','High'],['moderate','Moderate']]
+            .map(([v,l])=>React.createElement('option',{key:l,value:v},l))
+        )
+      ),
+
+      asyncView(state, (rows) =>
+        React.createElement('div', {className:'cards cards-2'},
+          rows.map(a => {
+            const meta = ALERT_META[a.alert_type] || { icon:'⚠', label:a.alert_type, sub:'' };
+            return React.createElement('div', {key:a.id, className:'card', style:{cursor:'pointer'},
+              onClick: () => auth && auth.goToDistrict && auth.goToDistrict(a.district_id)},
+              React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}},
+                React.createElement('div', null,
+                  React.createElement('div', {style:{fontWeight:600}}, meta.icon + ' ' + meta.label),
+                  React.createElement('div', {style:{fontSize:12,color:'var(--muted)'}}, meta.sub)
+                ),
+                React.createElement('span', {className:`badge ${a.severity==='critical'?'':'badge-inferred'}`,
+                  style:a.severity==='critical'?{background:'var(--red-lt)',color:'var(--red)'}:undefined}, cap(a.severity))
+              ),
+              React.createElement('div', {style:{fontSize:14,marginBottom:6}},
+                React.createElement('strong', null, a.district_name), ', ', a.state, ' · ', cap(a.commodity), ' · ', cap((a.contaminant||'').replace(/_/g,' '))),
+              React.createElement('div', {style:{fontSize:12,color:'var(--muted)',fontFamily:'var(--font-mono)'}},
+                a.mean_exposure_ppb != null ? `Mean: ${fmt(a.mean_exposure_ppb,2)} PPB` : '',
+                a.fssai_limit_ppb != null ? ` · FSSAI limit: ${fmt(a.fssai_limit_ppb,1)}` : '',
+                a.codex_limit_ppb != null ? ` · Codex limit: ${fmt(a.codex_limit_ppb,1)}` : '',
+                a.n_samples != null ? ` · ${a.n_samples} samples` : ''
+              )
+            );
+          })
+        ),
+        { needsAuth: !loggedIn, authLabel:'Sign in to view exposure alerts.', emptyMsg:'No active alerts match these filters.' }
+      ),
+
+      React.createElement('div', {className:'disclaimer', style:{marginTop:24}},
+        React.createElement('strong',null,'⚠ Disclaimer. '),
+        'Statistical estimates based on public enforcement records. Not a product test result. Not a verdict on any specific brand, manufacturer, or batch. Not medical or legal advice.'
+      )
+    )
+  );
+}
+
 function AboutPage() {
   return React.createElement('div', {className:'page fade-in'},
     React.createElement('div', {className:'container',style:{paddingTop:48,maxWidth:760}},
@@ -1308,6 +1440,7 @@ function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [token, setToken] = useState(() => tokenStore.get());
   const [user, setUser] = useState(null);
+  const [riskTarget, setRiskTarget] = useState({ districtId: 1, commodityId: 1 });
 
   // Restore session: if we have a stored token, confirm it and load the profile.
   useEffect(() => {
@@ -1327,11 +1460,16 @@ function App() {
       setUser(profile);
     },
     logout: () => { tokenStore.clear(); setToken(null); setUser(null); setPage('home'); },
+    goToDistrict: (districtId, commodityId) => {
+      setRiskTarget({ districtId, commodityId: commodityId || 1 });
+      setPage('risk');
+    },
   };
 
   const pages = {
     home:   React.createElement(HomePage, {setPage}),
-    risk:   React.createElement(RiskPage),
+    risk:   React.createElement(RiskPage, {key:`${riskTarget.districtId}-${riskTarget.commodityId}`, initialDistrictId:riskTarget.districtId, initialCommodityId:riskTarget.commodityId}),
+    alerts: React.createElement(AlertsPage),
     brands: React.createElement(BrandsPage),
     fmcg:   React.createElement(FMCGPage),
     about:  React.createElement(AboutPage),

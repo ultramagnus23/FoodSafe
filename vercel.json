@@ -1,0 +1,13 @@
+{
+  "buildCommand": "node -e \"require('fs').writeFileSync('env.js', 'window.FOODSAFE_API_BASE = ' + JSON.stringify(process.env.BACKEND_LINK || '') + ';')\"",
+  "outputDirectory": ".",
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/env.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}
