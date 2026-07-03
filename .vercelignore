@@ -1,0 +1,22 @@
+# Vercel only needs to serve the static frontend (index.html + generated
+# env.js). Everything below is the Python backend (deployed separately on
+# Render) — without this file, Vercel's zero-config detection sees the
+# top-level `api/` folder full of .py files plus requirements.txt at the
+# root and auto-wraps api/main.py as a Python Serverless Function, bundling
+# the *entire* requirements.txt (numpy/pandas/scikit-learn/spaCy/Airflow/
+# Playwright...) into it — that's what blew past the 500MB function limit.
+api/
+models/
+pipeline/
+research/
+docs/
+scripts/
+requirements.txt
+requirements-api.txt
+schema.sql
+schema_migration_002.sql
+schema_migration_003.sql
+seed_demo.sql
+.github/
+.venv/
+README.md
