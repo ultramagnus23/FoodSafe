@@ -17,3 +17,7 @@ python-dotenv>=1.0.0      # loads .env (DATABASE_URL, JWT_SECRET) in prod too
 # api/routes/disease.py's benchmark endpoint opens its own sync connection
 # via models/dietary_exposure.py + pipeline/config.py's pg_connect().
 psycopg2-binary>=2.9.9
+
+# api/routes/risk.py's brand_risk endpoint lazily imports
+# models/supply_chain.py's Bayesian propagation graph.
+networkx>=3.3.0

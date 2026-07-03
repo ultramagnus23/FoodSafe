@@ -352,12 +352,25 @@ async def brand_risk(
     ]
 
     inference_type = agg["inference_type"] if agg else "insufficient_data"
+    supply_chain: list[dict] = []
+
+    # No direct test evidence — try the Bayesian supply-chain propagation
+    # model (models/supply_chain.py) before falling back to "insufficient
+    # data". We never fabricate a brand risk number without either a direct
+    # test or an actual supply-chain graph edge backing it.
+    if not agg or not agg["n_tests"]:
+        propagated = await _try_supply_chain_propagation(brand["name_canonical"], commodity_id)
+        if propagated is not None:
+            supply_chain = propagated["subgraph"]
+            if propagated["estimate"].get("inference_type") not in (None, "insufficient_data"):
+                inference_type = propagated["estimate"]["inference_type"]
+
     inference_label = (
         "Tested: based on direct enforcement records"
         if inference_type == "direct_test"
         else "Inferred from supply chain data — no direct test on this product"
-        if inference_type == "propagated"
-        else "Insufficient data for this brand/commodity combination"
+        if inference_type in ("propagated", "mixed")
+        else "No supply chain mapping available for this brand. Search by commodity and district instead."
     )
 
     return BrandRiskResponse(
@@ -374,10 +387,51 @@ async def brand_risk(
         n_tests           = agg["n_tests"] if agg else 0,
         inference_type    = inference_type,
         inference_label   = inference_label,
-        supply_chain      = [],   # populated by supply_chain.py in production
+        supply_chain      = supply_chain,
         enforcement_events = events,
         disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
     )
+
+
+async def _try_supply_chain_propagation(brand_name: str, commodity_id: int) -> Optional[dict]:
+    """
+    Runs the sync psycopg2-based SupplyChainGraph (models/supply_chain.py) in
+    a worker thread so it doesn't block the event loop. Returns None if there
+    is no supply-chain node for this brand/commodity to propagate from —
+    supply_chain_nodes/edges are frequently unseeded, and that's a legitimate
+    "no data" case, not an error.
+    """
+    import asyncio
+
+    def _run() -> Optional[dict]:
+        from pipeline.config import pg_connect
+        from models.supply_chain import SupplyChainGraph
+
+        conn = pg_connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM supply_chain_nodes WHERE node_type = 'brand' "
+                    "AND commodity_id = %s AND name ILIKE %s LIMIT 1",
+                    (commodity_id, brand_name),
+                )
+                row = cur.fetchone()
+            if not row:
+                return None
+            brand_node_id = row[0]
+
+            graph = SupplyChainGraph()
+            graph.load_from_db(conn, commodity_id=commodity_id)
+            graph.attach_measurements(conn, commodity_id=commodity_id)
+            graph.propagate()
+            return {
+                "estimate": graph.get_brand_estimate(brand_node_id),
+                "subgraph": graph.subgraph_for_display(brand_node_id),
+            }
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(_run)
 
 
 # ============================================================
