@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import type { CurrentUserProfile } from "./types";
 
@@ -20,6 +21,15 @@ export function register(email: string, password: string) {
 
 export function fetchProfile() {
   return apiFetch<CurrentUserProfile>("/v1/user/profile");
+}
+
+export function useProfile(enabled = true) {
+  return useQuery({
+    queryKey: ["profile"],
+    queryFn: fetchProfile,
+    enabled,
+    staleTime: 60 * 1000,
+  });
 }
 
 export function setHomeDistrict(districtId: number) {

@@ -38,6 +38,15 @@ export default function MethodologyPage() {
           <p className="leading-relaxed text-[#44403C]">{s.body}</p>
         </div>
       ))}
+      <div className="mb-8 rounded-lg border border-border bg-forest-pale p-5">
+        <p className="text-sm text-forest">
+          See the full{" "}
+          <a href="/methodology/standards" className="underline">
+            FSSAI vs. Codex Alimentarius benchmark table
+          </a>{" "}
+          for every tracked contaminant.
+        </p>
+      </div>
       <div className="disclaimer">
         <strong>Legal notice. </strong>
         This platform provides statistical risk estimates based on publicly available government enforcement data.

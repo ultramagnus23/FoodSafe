@@ -186,4 +186,5 @@ export interface CurrentUserProfile {
   email: string;
   tier: string;
   user_id: string;
+  is_superuser?: boolean;
 }

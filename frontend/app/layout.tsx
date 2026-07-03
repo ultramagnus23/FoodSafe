@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Nav } from "@/components/Nav";
 import { AuthModal } from "@/components/AuthModal";
+import { MobileTabBar } from "@/components/MobileTabBar";
 
 export const metadata: Metadata = {
   title: "FoodSafe India",
@@ -24,18 +25,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Providers>
           <Nav />
-          {children}
+          <div className="pb-16 sm:pb-0">
+            {children}
+            <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-border px-8 py-10 text-xs text-muted">
+              <div>
+                <strong className="font-serif text-base">FoodSafe India</strong>
+                <br />
+                <span>Statistical estimates · Not a laboratory service</span>
+              </div>
+              <div className="max-w-[320px] text-right leading-relaxed">
+                Data: FSSAI · USFDA · AGMARKNET · NSSO · Census 2021
+              </div>
+            </footer>
+          </div>
           <AuthModal />
-          <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-border px-8 py-10 text-xs text-muted">
-            <div>
-              <strong className="font-serif text-base">FoodSafe India</strong>
-              <br />
-              <span>Statistical estimates · Not a laboratory service</span>
-            </div>
-            <div className="max-w-[320px] text-right leading-relaxed">
-              Data: FSSAI · USFDA · AGMARKNET · NSSO · Census 2021
-            </div>
-          </footer>
+          <MobileTabBar />
         </Providers>
       </body>
     </html>
