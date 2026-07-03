@@ -15,6 +15,7 @@ from api.routes.risk import risk_router
 from api.routes.user import user_router
 from api.routes.disputes import disputes_router, admin_router
 from api.routes.disease import disease_router
+from api.routes.trends import trends_router
 from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -68,6 +69,7 @@ app.include_router(meta_router,      prefix="/v1/meta",      tags=["meta"])
 app.include_router(disputes_router,  prefix="/v1/disputes",  tags=["disputes"])
 app.include_router(admin_router,     prefix="/v1/admin",     tags=["admin"])
 app.include_router(disease_router,   prefix="/v1/disease",   tags=["disease"])
+app.include_router(trends_router,    prefix="/v1/trends",    tags=["trends"])
 
 @app.get("/", include_in_schema=False)
 async def root():

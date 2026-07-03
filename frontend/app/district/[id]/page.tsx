@@ -12,6 +12,7 @@ import { EvidenceGradeBadge } from "@/components/ui/EvidenceGradeBadge";
 import { PAFDisplay } from "@/components/ui/PAFDisplay";
 import { DisclaimerBanner } from "@/components/ui/DisclaimerBanner";
 import { SkeletonDistrictCard } from "@/components/ui/Skeletons";
+import { TrendChart } from "@/components/TrendChart";
 
 type Tab = "tests" | "contaminants" | "disease";
 
@@ -229,6 +230,12 @@ function DistrictInner() {
           )}
         </div>
       )}
+
+      <div className="mt-10">
+        <h2 className="mb-1 font-serif text-2xl font-normal">Contamination Trend</h2>
+        <p className="mb-4 text-sm text-muted">Monthly mean PPB over time, with Mann-Kendall trend detection.</p>
+        <TrendChart districtId={districtId} commodityId={commodityId} />
+      </div>
 
       <div className="mt-8">
         <DisclaimerBanner text={r.disclaimer} />
