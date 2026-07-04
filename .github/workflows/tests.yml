@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install test dependencies
-        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy Pillow pdf2image
+        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image
 
       - name: Run tests
         run: python -m pytest tests/ -v
