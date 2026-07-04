@@ -1,0 +1,41 @@
+name: FoSCoS accessibility probe
+
+# Part of the India data-accessibility audit (docs/PAPER_SCOPING.md). A
+# read-only, evidence-gathering check of whether foscos.fssai.gov.in's
+# recall API is reachable, in maintenance, or behind an auth/captcha gate —
+# run weekly so the paper has a real time series instead of two anecdotal
+# checks. Never attempts to bypass anything; see scripts/probe_foscos.py.
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"   # weekly, Monday 12:00 UTC
+  workflow_dispatch:         # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          pip install --quiet playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run probe
+        run: python scripts/probe_foscos.py
+
+      - name: Commit updated log
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/foscos_access_log.jsonl
+          git diff --cached --quiet || git commit -m "Weekly FoSCoS accessibility probe"
+          git push
