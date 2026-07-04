@@ -18,6 +18,34 @@ attempt to work around the 401 (would mean reverse-engineering an auth flow
 for a government portal, out of scope). This source is effectively blocked
 until FSSAI opens it back up or publishes recall data another way.
 
+**Update (2026-07-04, follow-up diagnostic):** captured full request/response
+headers for every call under `webgateway/commonauth_readonly/commonapi/*`
+(Playwright network interception, read-only — no attempt to bypass anything).
+Findings:
+- The 401 is not specific to the recall endpoint. `getfinancialyeardropdown`
+  — an unrelated, purely cosmetic dropdown endpoint under the same
+  "`commonauth_readonly`" path — also returns 401 on first call, before any
+  user interaction. FSSAI locked down the **entire** `commonapi` surface, not
+  just recalls.
+- The 401 response carries `access-control-expose-headers: captcha` and
+  `access-control-allow-headers: ... Authorization, x-auth-user-id,
+  x-ip-address, timeOutSpan`, and returns an empty body (no error JSON). This
+  is consistent with a captcha-gated anonymous-auth handshake that the public
+  Angular app performs client-side (getting a token before calling
+  `commonapi`) that our headless session doesn't complete — not a missing
+  static header we can just add.
+- **Conclusion: this is a deliberate access-control tightening, not a fixable
+  scraper bug.** Working around it would mean defeating a captcha/bot-check
+  on a government auth endpoint, which is out of scope (both on legal/ethical
+  grounds and per this project's own stated boundaries above). FoSCoS recall
+  ingestion is not a viable real-data source until FSSAI issues credentials
+  or reopens the endpoint. Real Indian district-level or recall-level
+  enforcement data does not currently exist anywhere in this pipeline —
+  `enforcement_records` rows with `source_type IN ('fssai','apeda',
+  'state_health')` are 100% synthetic (`pipeline/seed_enforcement.py`,
+  `source_url` pattern `fssai.gov.in/demo/...`). The only real rows in the
+  table are `source_type='usfda'` (openFDA, real `accessdata.fda.gov` URLs).
+
 ## What the pipeline expects
 
 `pipeline/sources/fssai.py` → `pipeline/stage1_extract.py` was designed to:
