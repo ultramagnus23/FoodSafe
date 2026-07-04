@@ -25,9 +25,18 @@ audit of what is programmatically extractable from India's food-safety
 government infrastructure (FSSAI + FoSCoS), with a working, generalizable
 OCR+NER extraction pipeline as proof the bottleneck is the data regime, not
 the tooling. openFDA appears only as a comparative reference table (a
-mature-regime baseline), not a modeling target. Searched independently for
-prior work auditing FSSAI/FoSCoS accessibility specifically — found none;
-this gap claim currently stands.
+mature-regime baseline), not a modeling target.
+
+**⚠ OPEN TODO — novelty claim NOT settled, do not lock into any paper
+draft.** Two independent sweeps (general web search, then targeted
+queries + direct abstract verification of the closest hits) found no
+competing audit of FSSAI/FoSCoS accessibility. But the Semantic Scholar
+API portion of the check is rate-limited (429s, no key) and was never
+completed — see `PAPER_A_VS_B_MEMO.md` for the sweep history. **User is
+running a manual Google Scholar / Semantic Scholar search themselves
+before this claim is treated as settled.** This TODO stays open until
+they confirm that's done; replace this note with the actual result at
+that point, not before.
 
 ---
 

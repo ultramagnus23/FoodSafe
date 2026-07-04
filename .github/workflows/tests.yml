@@ -1,0 +1,27 @@
+name: Tests
+
+# Runs the pipeline unit tests (stage2 standardisation, stage3 dedup/scoring)
+# on every push and PR. These tests don't need a database — they exercise
+# the pure-function fallback paths (db_conn=None) in pipeline/stage2_standardise.py
+# and pipeline/stage3_and_4.py.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx
+
+      - name: Run tests
+        run: python -m pytest tests/ -v

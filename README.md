@@ -1,261 +1,288 @@
 # FoodSafe India — Data Pipeline + Risk API + Web App
 
-Three layers: an ingestion **pipeline** (FSSAI/USFDA/AGMARKNET → PostgreSQL), a
-risk-scoring **API** (FastAPI, 8 routers), and a single-file React **web app**
-(`index.html`, served from any static host — CDN React, no build step).
+Four layers: an ingestion **pipeline** (real openFDA/AGMARKNET feeds + an
+FSSAI OCR path, PostgreSQL/Supabase), a risk-scoring **API** (FastAPI, 12+
+routers), a **Next.js** web app (`frontend/`), and a legacy single-file React
+app (`index.html`) kept as a CDN-only fallback.
 
 ## Project Structure
 
 ```
 foodsafe/
-├── schema.sql                   ← Run first. Full PostgreSQL schema + core seed.
-├── schema_migration_002.sql     ← Run second. Lab reliability, fraud flags, disputes, ICMR.
-├── seed_demo.sql                ← Optional. Demo districts/brands/labs + aggregation rows.
-├── requirements.txt             ← API + pipeline dependencies.
-├── index.html                   ← React SPA (CDN React 18, no bundler). Calls the API.
-├── api/                         ← FastAPI backend (run: uvicorn api.main:app)
-│   ├── main.py                  ← App + 8 routers (auth, risk, user, search, fmcg,
-│   │                              insurance, disputes, admin)
-│   ├── db.py                    ← asyncpg connection pool
-│   ├── auth.py                  ← register / login / refresh / logout (bcrypt + JWT)
-│   ├── auth_utils.py            ← JWT create/verify, tier enforcement, API-key auth
-│   ├── other_routes.py          ← search_router, fmcg_router, insurance_router
+├── schema.sql                    ← Run first. Full PostgreSQL schema + core seed.
+├── schema_migration_002.sql      ← Lab reliability, fraud flags, disputes, ICMR.
+├── schema_migration_003.sql      ← Dietary exposure / disease burden / Codex benchmark tables.
+├── schema_migration_004.sql      ← Trend analysis, alert subscriptions, API keys, admin.
+├── seed_demo.sql                 ← Reference data only (districts/brands/labs) — no fake risk scores.
+├── requirements.txt              ← Full pipeline stack (OCR, Airflow, boto3) — optional for v1.
+├── requirements-api.txt          ← Minimal deps for running just the API + live ingesters.
+├── index.html                    ← Legacy single-file React SPA (CDN React, no build step).
+├── tests/                        ← pytest — stage2 standardisation + stage3 dedup/scoring.
+├── render.yaml                   ← Render.com deploy config for the API (Supabase via DATABASE_URL).
+├── vercel.json                   ← Vercel deploy config for frontend/.
+│
+├── api/                          ← FastAPI backend (run: uvicorn api.main:app)
+│   ├── main.py                   ← App, CORS, tiered rate limiting, router wiring.
+│   ├── db.py                     ← asyncpg connection pool.
+│   ├── auth.py                   ← register / login / refresh / logout (bcrypt + JWT).
+│   ├── auth_utils.py             ← JWT create/verify, tier enforcement, API-key auth.
+│   ├── other_routes.py           ← search, autocomplete, fmcg market-gaps, insurance, /v1/meta/*.
 │   └── routes/
-│       ├── risk.py              ← district / brand / map (heatmap) / alerts
-│       ├── user.py              ← location, profile
-│       └── disputes.py          ← brand disputes + admin fraud (labs, records)
-├── models/                      ← Analytics (standalone CLIs / Airflow-invoked)
-│   ├── district_risk.py         ← Random Forest risk model, geographic-holdout CV
-│   ├── supply_chain.py          ← Bayesian contaminant-propagation graph
-│   └── fraud_detection.py       ← Benford's Law + lab reliability scoring
-└── pipeline/
-    ├── config.py                ← All constants, env vars, alias maps
-    ├── ingest.py                ← Main entry point (CLI + Airflow callable)
-    ├── stage1_extract.py        ← PDF OCR + NER → RawRecord
-    ├── stage2_standardise.py    ← Canonicalise → StandardisedRecord
-    ├── stage3_and_4.py          ← Dedup + confidence score → ScoredRecord
-    ├── airflow_dags.py          ← 3 DAGs (FSSAI weekly, USFDA daily, AGMARKNET daily)
-    └── sources/
-        └── fssai.py             ← FSSAI scraper (link discovery + download)
+│       ├── risk.py               ← district / brand / map (heatmap) / alerts.
+│       ├── user.py               ← location, profile.
+│       ├── disputes.py           ← public dispute submission + admin fraud review.
+│       ├── disease.py            ← disease-burden (PAF) estimates, exposure alerts.
+│       ├── trends.py             ← Mann-Kendall trend + Sen's slope, per district/national.
+│       ├── compare.py            ← district-vs-district and FSSAI-vs-Codex/EU comparisons.
+│       ├── admin_panel.py        ← platform stats, record review, manual aggregate/burden recompute.
+│       ├── api_keys.py           ← B2B API key issuance/revocation/usage (fmcg/insurance tiers).
+│       └── subscriptions.py      ← per-user alert subscriptions (email via models/notifications.py).
+│
+├── models/                       ← Analytics (standalone CLIs, also invoked by API routes/cron)
+│   ├── aggregate.py              ← Computes agg_district_commodity_risk / agg_brand_safety_profile.
+│   ├── district_risk.py          ← Random Forest risk model, geographic-holdout CV.
+│   ├── supply_chain.py           ← Bayesian contaminant-propagation graph.
+│   ├── fraud_detection.py        ← Benford's Law + lab reliability scoring.
+│   ├── dietary_exposure.py       ← PPB → daily intake (EFSA methodology).
+│   ├── disease_burden.py         ← Intake → Population Attributable Fraction / hazard quotient.
+│   ├── codex_benchmark.py        ← FSSAI limit vs Codex/EU/WHO-JECFA comparison.
+│   ├── trend_analysis.py         ← Mann-Kendall + Sen's slope trend detection.
+│   └── notifications.py          ← Email alerts for active subscriptions (Resend).
+│
+├── pipeline/
+│   ├── config.py                 ← All constants, env vars, alias maps (contaminants/units/states).
+│   ├── ingest.py                 ← FSSAI OCR batch entry point (CLI + Airflow callable).
+│   ├── seed_enforcement.py       ← Generates demo enforcement_records for the India heatmap.
+│   ├── stage1_extract.py         ← PDF OCR + NER → RawRecord.
+│   ├── stage2_standardise.py     ← Canonicalise → StandardisedRecord.
+│   ├── stage3_and_4.py           ← Dedup + confidence score → ScoredRecord.
+│   ├── airflow_dags.py           ← Optional — only needed if running the full Airflow stack.
+│   └── sources/
+│       ├── openfda.py            ← Real US FDA food-recall API (no key, no OCR). Live in prod.
+│       ├── agmarknet.py          ← Real Indian district/commodity data from data.gov.in. Live in prod.
+│       ├── fssai_recall.py       ← FoSCoS food-recall scraper (headless browser, Playwright).
+│       └── fssai.py              ← FSSAI enforcement-report scraper (link discovery + download).
+│
+└── frontend/                     ← Next.js 14 app (App Router, TypeScript, Tailwind)
+    ├── app/                      ← Pages: home, /search, /map, /district/[id], /compare,
+    │                                /alerts, /account, /admin, /methodology.
+    ├── components/                 UI (RiskBadge, EvidenceGradeBadge, PAFDisplay, LeafletMap, ...).
+    └── lib/api/                    Typed fetch clients, one per router (search, risk, trends, ...).
 ```
 
 ## Setup
 
-### 1. OS dependencies
+### 1. Python (API + live ingesters — no OCR tooling needed)
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-api.txt
+```
+
+### 2. OS + Python deps for the full OCR pipeline (optional, v1 doesn't need this)
 ```bash
 # Ubuntu/Debian
 sudo apt-get install tesseract-ocr tesseract-ocr-hin poppler-utils
-```
-
-### 2. Python
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # adds boto3, apache-airflow, playwright, spaCy, etc.
 python -m spacy download en_core_web_sm
 ```
+S3 and Airflow are **not required** — `pipeline.ingest` runs locally without
+`--use-s3`, and the live ingesters (`openfda`, `agmarknet`) need neither.
 
 ### 3. Database
 ```bash
 createdb foodsafe
 psql foodsafe < schema.sql
 psql foodsafe < schema_migration_002.sql
-psql foodsafe < seed_demo.sql          # districts, brands, labs, reference data
+psql foodsafe < schema_migration_003.sql
+psql foodsafe < schema_migration_004.sql
+psql foodsafe < seed_demo.sql            # districts, brands, labs — reference data only
 
-# Demo data + computed risk scores (set DATABASE_URL first, see step 4):
-python -m pipeline.seed_enforcement    # realistic raw enforcement records
-python -m pipeline.sources.openfda     # real US FDA recalls (optional)
-python -m pipeline.sources.agmarknet   # real Indian districts/commodities (optional)
-python -m models.aggregate             # COMPUTE district + brand risk scores
+# Populate enforcement_records + computed risk scores (set DATABASE_URL first, see step 4):
+python -m pipeline.seed_enforcement      # one-shot demo dataset (~1900 realistic records)
+python -m pipeline.sources.openfda       # real US FDA recalls (optional)
+python -m pipeline.sources.agmarknet     # real Indian districts/commodities (optional)
+python -m models.aggregate               # compute district + brand risk scores
 ```
 
 > Note: `schema.sql` creates a restricted `foodsafe_app` role and enables
 > row-level security on `users`. The API does not yet set the `app.user_id`
 > RLS context, so for local development run the API as the database owner
-> (e.g. `postgres`). See "What's Next" for the production hardening item.
+> (e.g. `postgres`). See "Honest limitations" below.
 
 #### Hosted database (Supabase)
 
-The same `schema.sql` → `schema_migration_002.sql` → `seed_demo.sql` sequence
-runs unchanged against a Supabase project. Two things to know:
+The same migration sequence runs unchanged against a Supabase project:
 
 - **Use the Session pooler connection string**, not the direct
-  `db.<ref>.supabase.co` host. On IPv4-only networks the direct host is
-  unreachable (it is IPv6-only); the pooler
+  `db.<ref>.supabase.co` host — the direct host is IPv6-only and unreachable
+  on IPv4-only networks. The pooler
   (`aws-1-<region>.pooler.supabase.com:5432`, user `postgres.<project-ref>`)
-  is IPv4. `?sslmode=require` is mandatory — `asyncpg` honours it from the URL.
-- Load it via `.env` (see below); the API picks it up automatically.
+  is IPv4. `?sslmode=require` is mandatory.
+- Load it via `.env` (see below); the API and pipeline both pick it up
+  automatically via `DATABASE_URL`.
 
 ```bash
 PGURL="postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
-psql "$PGURL" -f schema.sql
-psql "$PGURL" -f schema_migration_002.sql
-psql "$PGURL" -f seed_demo.sql
+for f in schema.sql schema_migration_002.sql schema_migration_003.sql schema_migration_004.sql seed_demo.sql; do
+  psql "$PGURL" -f "$f"
+done
 ```
 
 ### 4. Environment variables
 
-Copy `.env.example` to `.env` (gitignored) and fill it in — the API loads it
-automatically via `python-dotenv`:
-
+Copy `.env.example` to `.env` (gitignored):
 ```bash
 cp .env.example .env
-# .env:
-#   DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require
-#   JWT_SECRET=change-me
+# DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+# JWT_SECRET=change-me
 ```
 
-For the pipeline, also export:
+### 5. One-shot demo ingest
+
+To go from an empty Supabase DB to a searchable API without touching OCR or
+Airflow:
 ```bash
-export AWS_REGION="ap-south-1"
-export S3_BUCKET="foodsafe-raw"
+psql "$DATABASE_URL" -f schema.sql -f schema_migration_002.sql \
+  -f schema_migration_003.sql -f schema_migration_004.sql -f seed_demo.sql
+python -m pipeline.seed_enforcement
+python -m models.aggregate
 ```
 
-### 5. Run pipeline (dev/test)
+### 6. API + web app
 ```bash
-# Single run — FSSAI enforcement reports, 2 pages, no S3
-python -m pipeline.ingest --source fssai --page-types enforcement_reports --max-pages 2
-
-# Full run with S3
-python -m pipeline.ingest --source fssai --use-s3 --max-pages 50
-```
-
-### 6. Airflow
-```bash
-export AIRFLOW_HOME=~/airflow
-airflow db migrate
-cp pipeline/airflow_dags.py $AIRFLOW_HOME/dags/
-airflow standalone
-```
-
-### 7. API + Web app
-```bash
-# Backend reads DATABASE_URL + JWT_SECRET from .env (see step 4).
-# Works the same whether DATABASE_URL points at local Postgres or Supabase.
 uvicorn api.main:app --reload --port 8000
 
-# Frontend — index.html is a static file; serve it from any static host:
-python -m http.server 3000        # then open http://localhost:3000/index.html
+# Next.js frontend
+cd frontend && npm install && npm run dev     # http://localhost:3000
+
+# or the legacy static app:
+python -m http.server 3000 --directory .      # then open http://localhost:3000/index.html
 ```
-The web app calls the API at `http://localhost:8000` (configurable via the
-`API_BASE` constant at the top of `index.html`). All read endpoints require a
-JWT, so the app has a built-in register/login flow.
+Search, `/v1/meta/*`, district risk, and disputes are **public read-only
+endpoints** — no login required. JWT auth is only needed for
+account-specific features (subscriptions, API keys, admin).
 
-### 8. Automated data ingestion (real data)
+### 7. Automated data ingestion (real data, runs in the cloud)
 
-Most tables are demo-seeded (`seed_demo.sql`). For **real** records there is a
-working ingester for the openFDA food-enforcement API (public, no key, no OCR):
-
+`.github/workflows/ingest.yml` runs daily (+ manual trigger) against a
+`DATABASE_URL` repo secret — no laptop required:
 ```bash
-python -m pipeline.sources.openfda --limit 50   # pulls real food-recall records
+gh secret set DATABASE_URL --body "postgresql://postgres.<ref>:<pwd>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
 ```
+It chains: openFDA (real US recalls) → AGMARKNET (real Indian
+districts/commodities) → FoSCoS scrape (real Indian recalls, best-effort) →
+`models.aggregate` → `models.disease_burden` → `models.notifications`.
 
-It maps US FDA food recalls (lead/aflatoxin/melamine/… recalls) into
-`enforcement_records` as `source_type='usfda'`, idempotently (dedup on the FDA
-recall number). These surface in the national `/risk/alerts` feed. Note: they
-are US-geographic, so they do **not** populate the India district heatmap — that
-still needs the FSSAI pipeline (PDF OCR, currently blocked on tooling + changed
-gov URLs).
+### 8. Tests
+```bash
+pip install pytest rapidfuzz
+python -m pytest tests/ -v
+```
+`.github/workflows/tests.yml` runs the same suite on every push/PR. Coverage
+is `pipeline/stage2_standardise.py` (contaminant/unit/date/geo
+standardisation) and `pipeline/stage3_and_4.py` (dedup hashing + confidence
+scoring) — both testable without a live database.
 
-This runs automatically in the cloud via
-[`.github/workflows/ingest.yml`](.github/workflows/ingest.yml) (daily cron +
-manual trigger), using a `DATABASE_URL` repo secret — no laptop required.
+### 9. Deploying
+- **API** → Render, via [`render.yaml`](render.yaml) (`requirements-api.txt`
+  only, `DATABASE_URL`/`JWT_SECRET`/`FRONTEND_URL` as env vars).
+- **Frontend** → Vercel, via [`vercel.json`](vercel.json).
+- Optional heavier pipeline components (Airflow, S3, Tesseract) are **not**
+  part of the deploy path — they only matter if you're running the FSSAI OCR
+  batch pipeline yourself.
 
 ## Data Flow
 
 ```
-FSSAI PDFs            USFDA RSS           AGMARKNET JSON
-     │                    │                     │
-     ▼                    ▼                     ▼
-Stage 1: Extract     (RawRecord)
+FSSAI PDFs (OCR)      openFDA RSS          AGMARKNET JSON       FoSCoS (headless browser)
+     │                    │                     │                     │
+     ▼                    ▼                     ▼                     ▼
+Stage 1: Extract → RawRecord         (openFDA/AGMARKNET/FoSCoS write enforcement_records directly)
      │
      ▼
-Stage 2: Standardise (StandardisedRecord)
+Stage 2: Standardise → StandardisedRecord
   - Contaminant → canonical name (fuzzy match)
   - Value → PPB
   - State/District → Census 2021 canonical
-  - Date → ISO 8601
+  - Date → ISO 8601 (ambiguous MM/DD vs DD/MM flagged)
      │
      ▼
-Stage 3: Deduplicate (DeduplicatedRecord)
+Stage 3: Deduplicate → DeduplicatedRecord
   - Hash: date + lab + commodity + contaminant + value + district
   - Cross-source duplicates flagged, not deleted
      │
      ▼
-Stage 4: Confidence Score (ScoredRecord)
-  - Base: 0.70
-  - +0.15 manually verified
-  - +0.10 tier-1 lab (ICAR/NABL)
-  - +0.05 value in typical range
-  - -0.10 OCR confidence < 0.80
+Stage 4: Confidence Score → ScoredRecord
+  - Base 0.70, +0.15 manually verified, +0.10 tier-1 lab, +0.05 typical range, -0.10 low OCR
   - Only ≥ 0.75 used in downstream models
      │
      ▼
 PostgreSQL enforcement_records
      │
-     ▼  python -m models.aggregate   (nightly via GitHub Actions)
-agg_district_commodity_risk   ← computed: fail rate, risk score, Wilson CI,
-agg_brand_safety_profile         top contaminants — from the records above
-```
-
-### Live ingestion (in addition to the FSSAI batch pipeline above)
-
-```
-openFDA food enforcement API ──┐
-   (real US FDA recalls)        │  python -m pipeline.sources.openfda
-                                ▼
-data.gov.in / AGMARKNET ──────► enforcement_records / districts / commodities
-   (real Indian mandi data)     python -m pipeline.sources.agmarknet
-                                ▼
-                         python -m models.aggregate  → risk scores
+     ▼  (nightly via GitHub Actions, or run manually)
+models.aggregate        → agg_district_commodity_risk, agg_brand_safety_profile
+models.dietary_exposure → daily intake estimates
+models.disease_burden   → Population Attributable Fraction, exposure_alerts
+models.trend_analysis   → Mann-Kendall trend + Sen's slope
+models.codex_benchmark  → FSSAI vs Codex/EU/WHO-JECFA comparison
+models.notifications    → email alerts for matching subscriptions
 ```
 
 ## Status
 
 **Built and working:**
-- **Pipeline** — Stages 1–4 (extract → standardise → dedup → confidence score),
-  FSSAI scraper, 3 Airflow DAGs.
-- **Live ingesters** — `pipeline/sources/openfda.py` pulls **real** US FDA food
-  recalls (no key, no OCR); `pipeline/sources/agmarknet.py` pulls **real** Indian
-  district/commodity coverage from data.gov.in. Both idempotent.
-- **Aggregation** — `models/aggregate.py` computes `agg_district_commodity_risk`
-  and `agg_brand_safety_profile` **from `enforcement_records`** (fail rate, risk
-  score via a documented saturating curve, Wilson-score 95% CI, top
-  contaminants). Risk scores are computed, not hand-seeded.
-- **API** — FastAPI with 9 routers (auth, risk, user, search, fmcg, insurance,
-  **meta**, disputes, admin). JWT + API-key auth, tier enforcement, legal
-  disclaimer in risk responses. `risk.py` now returns computed `top_factors`.
-  `/v1/meta/{districts,commodities,brands}` provide reference lists.
-- **Models** — Bayesian supply-chain propagation graph (`models/supply_chain.py`),
-  fraud detection via Benford's Law + lab reliability (`models/fraud_detection.py`),
-  Random Forest district-risk model (`models/district_risk.py`, trains on the
-  aggregation table).
-- **Automated workflow** — `.github/workflows/ingest.yml` runs ingest → aggregate
-  daily in the cloud (Supabase via repo secret), no laptop required.
-- **Web app** — `index.html`, single-file React SPA wired to the live API
-  (home/map, risk report, brands, FMCG market gaps, alerts ticker), real
-  register/login, Leaflet map fed by computed scores.
+- **Pipeline** — Stages 1–4 (extract → standardise → dedup → confidence
+  score), unit-tested (`tests/`). Real live ingesters:
+  `pipeline/sources/openfda.py` (US FDA recalls, no key/OCR) and
+  `pipeline/sources/agmarknet.py` (Indian district/commodity data from
+  data.gov.in), both idempotent. `pipeline/sources/fssai_recall.py` scrapes
+  real FoSCoS recalls via headless Chromium. `pipeline/seed_enforcement.py`
+  provides a one-shot demo dataset for the India district heatmap.
+- **API** — FastAPI with 12+ routers: auth, risk, user, search (+
+  autocomplete), fmcg, insurance, meta, disputes, disease, trends, compare,
+  admin panel, API keys, subscriptions. Search/risk/meta/disputes are public
+  read-only; JWT + API-key auth with tier-based rate limiting gate
+  account-specific features. Every record response includes a `source_url`
+  and `confidence_score`.
+- **Analytics** — computed district/brand risk (Wilson 95% CI), dietary
+  exposure → disease burden (PAF), Codex/EU/WHO benchmark gaps, Mann-Kendall
+  contamination trends, Bayesian supply-chain propagation, Benford's-Law
+  fraud detection, Random Forest district risk (geographic holdout CV).
+- **Frontend** — Next.js app (`frontend/`) with search, map, district
+  detail, compare, alerts, account, admin, methodology pages, plus a legacy
+  single-file `index.html` fallback.
+- **Automation** — `.github/workflows/ingest.yml` (daily ingest → aggregate
+  → notify) and `.github/workflows/tests.yml` (pytest on every push/PR), both
+  against a Supabase Postgres via `DATABASE_URL`.
+- **Trust & safety** — disclaimer banners on every risk/record response,
+  public dispute submission (`POST /v1/disputes/submit`) with admin review
+  queue for fraud/correction flags.
 
 **Honest limitations:**
-- **No open API for Indian district-level contamination data** — it exists only
-  in FSSAI PDFs, so the India heatmap is populated by demo records
-  (`pipeline/seed_enforcement.py`) that the aggregation computes over exactly as
-  it would real data. openFDA gives real *US* recalls (national alerts feed, not
-  the India district map). The OCR path (Tesseract + Poppler + spaCy NER) is now
-  installed and `extract_pdf` runs end-to-end on real FSSAI PDFs, but FSSAI no
-  longer publishes structured enforcement data (recalls are JS-rendered and
-  qualitative; "reports" are news clippings). Full investigation + roadmap:
-  [`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md).
-- **Random Forest** trains on the aggregation table but needs more data than the
-  demo set to be meaningful; the served scores come from the statistical
+- **No open API for Indian district-level contamination data** — it exists
+  only in FSSAI PDFs, so the India heatmap runs on demo records
+  (`pipeline/seed_enforcement.py`) that the aggregation computes over exactly
+  as it would real data. FSSAI no longer publishes structured enforcement
+  data (recalls are JS-rendered/qualitative; "reports" are news clippings).
+  Full investigation + roadmap: [`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md).
+- **Random Forest** trains on the aggregation table but needs more data than
+  the demo set to be meaningful; served scores come from the statistical
   aggregation, not the RF, until enough records accumulate.
 - **Supply-chain graph** — `supply_chain: []` until `supply_chain_nodes/edges`
   are populated (no seed graph yet).
-- **Production DB role** — API connects as the DB owner; it does not yet set the
-  `app.user_id` RLS context the restricted `foodsafe_app` role needs.
-- **Disputes → risk feedback loop** — review flags records but does not recompute
-  scores.
+- **Production DB role** — API connects as the DB owner; it does not yet set
+  the `app.user_id` RLS context the restricted `foodsafe_app` role needs.
+- **Disputes → risk feedback loop** — admin review flags/corrects records but
+  does not automatically recompute aggregate scores.
+- **In-memory rate limiting** resets on deploy and doesn't share state across
+  multiple Render instances (API-key usage is persisted; JWT/anonymous is
+  not) — accepted tradeoff pending Redis.
 
 **Not started:**
-- NER fine-tuning; APEDA / state-health scrapers; age-gating / DOB collection.
+- NER fine-tuning; APEDA / state-health scrapers; age-gating / DOB
+  collection.
 - Census-2021 district **polygon** choropleth (the map uses risk-coloured
-  markers, not GeoJSON polygons — needs the boundary file + real census codes).
+  markers, not GeoJSON polygons).
+
+See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for what's left before this is
+production-ready for real users.
