@@ -1,6 +1,13 @@
 // Mirrors the Pydantic response models in api/routes/risk.py, disease.py,
 // other_routes.py. Keep field names identical to the API — no remapping.
 
+export interface ProvenanceSummary {
+  real_count: number;
+  synthetic_count: number;
+  synthetic_fraction: number | null;
+  is_synthetic: boolean;
+}
+
 export interface EnforcementEvent {
   test_date: string;
   contaminant: string;
@@ -31,6 +38,7 @@ export interface DistrictRiskResponse {
   eu_compliant_fraction: number | null;
   twi_exceedance_fraction: number | null;
   fssai_vs_codex_flag: boolean | null;
+  provenance: ProvenanceSummary;
   disclaimer: string;
   last_updated: string | null;
 }
@@ -51,6 +59,7 @@ export interface BrandRiskResponse {
   inference_label: string;
   supply_chain: Record<string, unknown>[];
   enforcement_events: EnforcementEvent[];
+  provenance: ProvenanceSummary;
   disclaimer: string;
 }
 
@@ -62,6 +71,10 @@ export interface MapDataPoint {
   longitude: number | null;
   risk_score: number | null;
   n_tests: number;
+  // Optional because the disease-burden map mode (app/map/page.tsx) builds
+  // MapDataPoint client-side from a different response shape that has no
+  // per-record provenance breakdown yet.
+  provenance?: ProvenanceSummary;
 }
 
 export interface AlertEvent {
@@ -162,6 +175,7 @@ export interface SearchResult {
   name: string;
   risk_score: number | null;
   n_tests: number | null;
+  provenance: ProvenanceSummary;
 }
 
 export interface AutocompleteResult {

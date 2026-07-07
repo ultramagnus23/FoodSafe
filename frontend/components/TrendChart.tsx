@@ -45,10 +45,10 @@ export function TrendChart({ districtId, commodityId, fssaiLimitPpb, codexLimitP
     }));
   }, [trend.data, range]);
 
-  if (trend.isLoading) return <p className="text-sm text-muted">Loading trend…</p>;
+  if (trend.isLoading) return <p className="text-sm text-provenance">Loading trend…</p>;
   if (!trend.data || trend.data.trend === "insufficient_data") {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-sm text-provenance">
         Not enough monthly data yet to detect a trend (needs 6+ months with a statistically significant
         Mann-Kendall result).
       </p>
@@ -57,7 +57,7 @@ export function TrendChart({ districtId, commodityId, fssaiLimitPpb, codexLimitP
 
   const { trend: direction, trend_pvalue, trend_magnitude } = trend.data;
   const arrow = direction === "worsening" ? "▲" : direction === "improving" ? "▼" : "→";
-  const color = direction === "worsening" ? "var(--red)" : direction === "improving" ? "var(--sage)" : "var(--muted)";
+  const color = direction === "worsening" ? "var(--risk)" : direction === "improving" ? "var(--clear)" : "var(--provenance)";
 
   return (
     <div>
@@ -66,20 +66,20 @@ export function TrendChart({ districtId, commodityId, fssaiLimitPpb, codexLimitP
           <span className="text-lg">{arrow}</span>
           <span className="font-medium capitalize">{direction}</span>
           {trend_magnitude != null && (
-            <span className="font-mono text-xs text-muted">
+            <span className="font-mono text-xs text-provenance">
               ({trend_magnitude > 0 ? "+" : ""}
               {trend_magnitude.toFixed(2)} PPB/month, p={trend_pvalue?.toFixed(3)})
             </span>
           )}
         </div>
-        <div className="flex rounded-lg border border-border p-0.5">
+        <div className="flex rounded-lg border border-line p-0.5">
           {(Object.keys(RANGE_MONTHS) as Range[]).map((r) => (
             <button
               key={r}
               type="button"
               onClick={() => setRange(r)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                range === r ? "bg-forest text-white" : "text-muted"
+                range === r ? "bg-ink text-on-ink" : "text-provenance"
               }`}
             >
               {r}
@@ -90,43 +90,43 @@ export function TrendChart({ districtId, commodityId, fssaiLimitPpb, codexLimitP
 
       <ResponsiveContainer width="100%" height={260}>
         <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="month" fontSize={11} stroke="var(--muted)" />
-          <YAxis yAxisId="ppb" fontSize={11} stroke="var(--muted)" />
-          <YAxis yAxisId="n" orientation="right" fontSize={11} stroke="var(--muted)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
+          <XAxis dataKey="month" fontSize={11} stroke="var(--provenance)" />
+          <YAxis yAxisId="ppb" fontSize={11} stroke="var(--provenance)" />
+          <YAxis yAxisId="n" orientation="right" fontSize={11} stroke="var(--provenance)" />
           <Tooltip
-            contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", fontSize: 12 }}
+            contentStyle={{ background: "var(--slab)", border: "1px solid var(--line)", fontSize: 12 }}
           />
           <Area
             yAxisId="ppb"
             dataKey="band_high"
             stroke="none"
-            fill="var(--forest-pale)"
+            fill="var(--provenance-pale)"
             fillOpacity={0.6}
             isAnimationActive={false}
           />
-          <Bar yAxisId="n" dataKey="n_records" fill="var(--border)" barSize={10} />
-          <Line yAxisId="ppb" type="monotone" dataKey="mean_ppb" stroke="var(--forest)" strokeWidth={2} dot={false} />
+          <Bar yAxisId="n" dataKey="n_records" fill="var(--line)" barSize={10} />
+          <Line yAxisId="ppb" type="monotone" dataKey="mean_ppb" stroke="var(--ink)" strokeWidth={2} dot={false} />
           {fssaiLimitPpb != null && (
-            <ReferenceLine yAxisId="ppb" y={fssaiLimitPpb} stroke="var(--red)" strokeDasharray="4 4" />
+            <ReferenceLine yAxisId="ppb" y={fssaiLimitPpb} stroke="var(--risk)" strokeDasharray="4 4" />
           )}
           {codexLimitPpb != null && (
-            <ReferenceLine yAxisId="ppb" y={codexLimitPpb} stroke="var(--amber)" strokeDasharray="4 4" />
+            <ReferenceLine yAxisId="ppb" y={codexLimitPpb} stroke="var(--caution)" strokeDasharray="4 4" />
           )}
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="mt-2 flex gap-4 text-xs text-muted">
+      <div className="mt-2 flex gap-4 text-xs text-provenance">
         <span>
-          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-forest" /> Mean PPB
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-ink" /> Mean PPB
         </span>
         {fssaiLimitPpb != null && (
           <span>
-            <span className="mr-1 inline-block h-0.5 w-3 bg-red align-middle" /> FSSAI limit
+            <span className="mr-1 inline-block h-0.5 w-3 bg-risk align-middle" /> FSSAI limit
           </span>
         )}
         {codexLimitPpb != null && (
           <span>
-            <span className="mr-1 inline-block h-0.5 w-3 bg-amber align-middle" /> Codex limit
+            <span className="mr-1 inline-block h-0.5 w-3 bg-caution align-middle" /> Codex limit
           </span>
         )}
       </div>

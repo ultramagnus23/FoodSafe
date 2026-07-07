@@ -7,7 +7,7 @@ const REAPPEAR_MS = 24 * 60 * 60 * 1000;
 
 const DEFAULT_TEXT =
   "Statistical estimates based on public enforcement records. Not a product test. " +
-  "Not medical advice. Geographic framing — does not name or evaluate specific brands.";
+  "Not medical advice. Geographic framing: does not name or evaluate specific brands.";
 
 // Sticky banner, appears on every risk-displaying page. Dismissable per
 // session but re-appears after 24 hours — never permanently hideable.
@@ -29,7 +29,7 @@ export function DisclaimerBanner({ text }: { text?: string }) {
   return (
     <div className="disclaimer sticky top-0 z-40 flex items-start justify-between gap-3">
       <span>
-        <strong>⚠ Disclaimer. </strong>
+        <strong>Disclaimer. </strong>
         {text || DEFAULT_TEXT}
       </span>
       <button

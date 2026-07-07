@@ -8,12 +8,12 @@ interface CodexComplianceBadgeProps {
 function Chip({ label, ok }: { label: string; ok: boolean | null }) {
   const style =
     ok === true
-      ? { background: "var(--sage-lt)", color: "var(--forest)" }
+      ? { background: "var(--clear-pale)", color: "var(--clear)" }
       : ok === false
-      ? { background: "var(--red-lt)", color: "var(--red)" }
-      : { background: "var(--border)", color: "var(--muted)" };
+      ? { background: "var(--risk-pale)", color: "var(--risk)" }
+      : { background: "var(--provenance-pale)", color: "var(--provenance)" };
   return (
-    <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium" style={style}>
+    <span className="inline-flex rounded px-2.5 py-1 text-xs font-medium" style={style}>
       {label}: {ok === true ? "Pass" : ok === false ? "Fail" : "—"}
     </span>
   );
@@ -40,7 +40,7 @@ export function CodexComplianceBadge({
     >
       <Chip label="FSSAI" ok={fssaiCompliant} />
       <Chip label="Codex" ok={codexCompliant} />
-      {isGap && <span className="text-[11px] text-[#92400E]">⚠ Passed FSSAI, fails Codex</span>}
+      {isGap && <span className="text-[11px] text-caution">Passed FSSAI, fails Codex</span>}
     </span>
   );
 }

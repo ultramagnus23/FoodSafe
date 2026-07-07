@@ -13,11 +13,13 @@ export function riskLabel(score: number | null): string {
   return "Low Risk";
 }
 
+// The 3-step risk scale: clear / caution / risk. `risk` (vermilion) is
+// reserved for genuine risk states only — never used decoratively.
 const COLOR_STYLES: Record<string, { bg: string; fg: string }> = {
-  low: { bg: "var(--sage-lt)", fg: "var(--forest)" },
-  mid: { bg: "var(--amber-lt)", fg: "#92400E" },
-  high: { bg: "var(--red-lt)", fg: "var(--red)" },
-  "": { bg: "var(--border)", fg: "var(--muted)" },
+  low: { bg: "var(--clear-pale)", fg: "var(--clear)" },
+  mid: { bg: "var(--caution-pale)", fg: "var(--caution)" },
+  high: { bg: "var(--risk-pale)", fg: "var(--risk)" },
+  "": { bg: "var(--provenance-pale)", fg: "var(--provenance)" },
 };
 
 interface RiskBadgeProps {
@@ -35,15 +37,15 @@ export function RiskBadge({ riskScore, nRecords, inferenceType }: RiskBadgeProps
   return (
     <span className="inline-flex items-center gap-1.5" title={`n=${nRecords}, inference: ${inferenceType}`}>
       <span
-        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+        className="inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium"
         style={{ background: color.bg, color: color.fg }}
       >
         {label}
-        {showScore && <span className="font-mono">{riskScore!.toFixed(0)}</span>}
+        {showScore && <span className="register">{riskScore!.toFixed(0)}</span>}
       </span>
       {nRecords < 10 && (
-        <span className="text-[11px] text-amber" title="Fewer than 10 samples backing this score">
-          ⚠ Low confidence
+        <span className="text-[11px] text-caution" title="Fewer than 10 samples backing this score">
+          Low confidence
         </span>
       )}
     </span>
