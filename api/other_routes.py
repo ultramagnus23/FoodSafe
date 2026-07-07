@@ -8,6 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from api.auth_utils import get_current_user, require_tier, CurrentUser
 from api.db import get_pool
+from api.provenance import (
+    ProvenanceSummary,
+    EMPTY_PROVENANCE,
+    fetch_provenance_by_commodity,
+    fetch_provenance_by_brand,
+)
 
 search_router = APIRouter()
 fmcg_router = APIRouter()
@@ -64,6 +70,7 @@ class SearchResult(BaseModel):
     name: str
     risk_score: Optional[float]
     n_tests: Optional[int]
+    provenance: ProvenanceSummary
 
 @search_router.get("", response_model=list[SearchResult])
 async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = Depends(get_current_user)):
@@ -78,9 +85,11 @@ async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = 
             WHERE c.name_canonical ILIKE $1 OR $1 ILIKE ANY(c.aliases::text[])
             LIMIT 10
         """, f"%{q}%", district_id)
+        commodity_provenance = await fetch_provenance_by_commodity(conn, [r["id"] for r in comm_rows])
         for r in comm_rows:
             results.append(SearchResult(type="commodity", id=r["id"], name=r["name_canonical"],
-                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"]))
+                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"],
+                provenance=commodity_provenance.get(r["id"], EMPTY_PROVENANCE)))
 
         brand_rows = await conn.fetch("""
             SELECT b.id, b.name_canonical, agg.risk_score, agg.n_tests
@@ -89,9 +98,11 @@ async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = 
             WHERE b.name_canonical ILIKE $1
             LIMIT 10
         """, f"%{q}%")
+        brand_provenance = await fetch_provenance_by_brand(conn, [r["id"] for r in brand_rows])
         for r in brand_rows:
             results.append(SearchResult(type="brand", id=r["id"], name=r["name_canonical"],
-                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"]))
+                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"],
+                provenance=brand_provenance.get(r["id"], EMPTY_PROVENANCE)))
     return results
 
 class AutocompleteResult(BaseModel):

@@ -90,7 +90,7 @@ def _load_records(conn):
                    cnt.name_canonical AS contaminant
             FROM enforcement_records er
             JOIN contaminants cnt ON cnt.id = er.contaminant_id
-            WHERE er.confidence_score >= %s AND er.is_duplicate = FALSE
+            WHERE er.confidence_score >= %s AND er.is_duplicate = FALSE AND er.is_retracted = FALSE
             """,
             (CONF_MIN,),
         )

@@ -29,19 +29,28 @@ jobs:
       - name: Install dependencies
         run: pip install --quiet psycopg2-binary numpy scipy networkx
 
+      # Each step below runs through pipeline.run_and_log instead of the
+      # module directly — it writes a pipeline_runs row so /admin can show
+      # per-source ingest health, and distinguishes an *expected* empty
+      # result (FoSCoS's documented auth gate, AGMARKNET's flaky public rate
+      # limit) from a *real* regression. Only a real regression exits 1.
+
       - name: Ingest openFDA food enforcement (real US FDA recalls)
+        id: openfda
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m pipeline.sources.openfda --limit "${{ github.event.inputs.limit || '50' }}"
+        run: python -m pipeline.run_and_log openfda --limit "${{ github.event.inputs.limit || '50' }}"
 
       - name: Ingest AGMARKNET districts/commodities (data.gov.in)
+        id: agmarknet
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATA_GOV_IN_KEY: ${{ secrets.DATA_GOV_IN_KEY }}
         continue-on-error: true   # tangential reference data; don't fail the run
-        run: python -m pipeline.sources.agmarknet --limit 1000
+        run: python -m pipeline.run_and_log agmarknet --limit 1000
 
       - name: Scrape FoSCoS food recalls (headless browser)
+        id: fssai_recall
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         continue-on-error: true   # gov portal can be in its maintenance window
@@ -49,7 +58,27 @@ jobs:
         run: |
           pip install --quiet playwright
           python -m playwright install --with-deps chromium
-          python -m pipeline.sources.fssai_recall --limit 100
+          python -m pipeline.run_and_log fssai_recall --limit 100
+
+      - name: Alert on unexpected AGMARKNET failure
+        if: steps.agmarknet.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "${{ github.repository }}" \
+            --title "Ingest regression: AGMARKNET failed ($(date -u +%F))" \
+            --body "AGMARKNET raised an exception (not just an empty/rate-limited result) in the scheduled ingest run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --label "ingest-failure" || true
+
+      - name: Alert on unexpected FoSCoS scrape failure
+        if: steps.fssai_recall.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "${{ github.repository }}" \
+            --title "Ingest regression: FoSCoS scraper failed ($(date -u +%F))" \
+            --body "The FoSCoS scraper raised an exception (not the documented 401/maintenance gate) in the scheduled ingest run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. This may mean FoSCoS access changed — see docs/FSSAI_INGESTION.md." \
+            --label "ingest-failure" || true
 
       - name: Recompute aggregation (district + brand risk scores)
         env:

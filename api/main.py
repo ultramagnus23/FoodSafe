@@ -22,6 +22,8 @@ from api.routes.compare import compare_router
 from api.routes.admin_panel import admin_panel_router
 from api.routes.api_keys import api_keys_router
 from api.routes.subscriptions import subscriptions_router
+from api.routes.reports import reports_router, admin_reports_router
+from api.routes.widget import widget_router
 from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -139,6 +141,9 @@ app.include_router(subscriptions_router, prefix="/v1/subscriptions", tags=["subs
 app.include_router(disease_router,   prefix="/v1/disease",   tags=["disease"])
 app.include_router(trends_router,    prefix="/v1/trends",    tags=["trends"])
 app.include_router(compare_router,   prefix="/v1/compare",   tags=["compare"])
+app.include_router(reports_router,   prefix="/v1/reports",   tags=["reports"])
+app.include_router(admin_reports_router, prefix="/v1/admin", tags=["admin"])
+app.include_router(widget_router,    prefix="/v1/widget",    tags=["widget"])
 
 @app.get("/", include_in_schema=False)
 async def root():

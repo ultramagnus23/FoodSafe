@@ -16,6 +16,12 @@ from pydantic import BaseModel
 
 from api.auth_utils import get_current_user, CurrentUser
 from api.db import get_pool
+from api.provenance import (
+    ProvenanceSummary,
+    EMPTY_PROVENANCE,
+    fetch_provenance,
+    fetch_provenance_by_district,
+)
 
 logger = logging.getLogger("foodsafe.routes.risk")
 
@@ -76,6 +82,7 @@ class DistrictRiskResponse(BaseModel):
     eu_compliant_fraction:    Optional[float]
     twi_exceedance_fraction:  Optional[float]
     fssai_vs_codex_flag:      Optional[bool]
+    provenance:        ProvenanceSummary
     disclaimer:        str
     last_updated:      Optional[str]
 
@@ -96,6 +103,7 @@ class BrandRiskResponse(BaseModel):
     inference_label:   str
     supply_chain:      list[dict]
     enforcement_events: list[EnforcementEvent]
+    provenance:        ProvenanceSummary
     disclaimer:        str
 
 
@@ -107,6 +115,7 @@ class MapDataPoint(BaseModel):
     longitude:      Optional[float]
     risk_score:     Optional[float]
     n_tests:        int
+    provenance:     ProvenanceSummary
 
 
 class AlertEvent(BaseModel):
@@ -193,6 +202,10 @@ async def district_risk(
             district_id, commodity_id,
         )
 
+        provenance = await fetch_provenance(
+            conn, "district_id = $1 AND commodity_id = $2", district_id, commodity_id,
+        )
+
     events = [
         EnforcementEvent(
             test_date       = r["test_date"],
@@ -271,6 +284,7 @@ async def district_risk(
         eu_compliant_fraction    = float(agg["eu_compliant_fraction"]) if agg and agg["eu_compliant_fraction"] is not None else None,
         twi_exceedance_fraction  = float(agg["twi_exceedance_fraction"]) if agg and agg["twi_exceedance_fraction"] is not None else None,
         fssai_vs_codex_flag      = agg["fssai_vs_codex_flag"] if agg else None,
+        provenance        = provenance,
         disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
         last_updated      = str(agg["last_updated"]) if agg else None,
     )
@@ -337,6 +351,10 @@ async def brand_risk(
             brand_id, commodity_id,
         )
 
+        provenance = await fetch_provenance(
+            conn, "brand_id = $1 AND commodity_id = $2", brand_id, commodity_id,
+        )
+
     events = [
         EnforcementEvent(
             test_date       = r["test_date"],
@@ -389,6 +407,7 @@ async def brand_risk(
         inference_label   = inference_label,
         supply_chain      = supply_chain,
         enforcement_events = events,
+        provenance        = provenance,
         disclaimer        = build_disclaimer(commodity["name_canonical"], district["name_canonical"]),
     )
 
@@ -438,32 +457,57 @@ async def _try_supply_chain_propagation(brand_name: str, commodity_id: int) -> O
 # MAP DATA (heatmap for frontend)
 # ============================================================
 
-@risk_router.get("/map", response_model=list[MapDataPoint])
-async def map_data(
-    commodity_id: int = 1,
-    user: CurrentUser = Depends(get_current_user),
-):
-    """Return latest risk scores for all districts for a given commodity."""
+@risk_router.get("/map/quarters", response_model=list[str])
+async def map_quarters(commodity_id: int = 1, user: CurrentUser = Depends(get_current_user)):
+    """Quarters with at least one real aggregation row for this commodity,
+    oldest first — the range a time scrubber can honestly step through.
+    Never fabricated: this is exactly what agg_district_commodity_risk has."""
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
+            "SELECT DISTINCT quarter FROM agg_district_commodity_risk WHERE commodity_id = $1 ORDER BY quarter",
+            commodity_id,
+        )
+    return [r["quarter"] for r in rows]
+
+
+@risk_router.get("/map", response_model=list[MapDataPoint])
+async def map_data(
+    commodity_id: int = 1,
+    quarter: Optional[str] = None,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Return risk scores for all districts for a given commodity, at the
+    given quarter (e.g. '2025-Q3') or the latest available if omitted."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        # LEFT JOIN so districts with no aggregation row for this commodity
+        # still appear (risk_score/n_tests null) — the frontend renders
+        # those as a distinct "no data" marker instead of silently omitting
+        # them, which would otherwise look identical to "we checked and it's
+        # fine" rather than "we have never tested this".
+        rows = await conn.fetch(
             """
-            SELECT DISTINCT ON (agg.district_id)
+            SELECT
                 d.id AS district_id,
                 d.name_canonical AS district_name,
                 d.state,
                 d.latitude,
                 d.longitude,
-                agg.risk_score,
-                agg.n_tests
-            FROM agg_district_commodity_risk agg
-            JOIN districts d ON d.id = agg.district_id
-            WHERE agg.commodity_id = $1
-              AND agg.risk_score IS NOT NULL
-            ORDER BY agg.district_id, agg.quarter DESC
+                latest.risk_score,
+                latest.n_tests
+            FROM districts d
+            LEFT JOIN LATERAL (
+                SELECT risk_score, n_tests
+                FROM agg_district_commodity_risk agg
+                WHERE agg.district_id = d.id AND agg.commodity_id = $1
+                  AND ($2::text IS NULL OR agg.quarter = $2)
+                ORDER BY agg.quarter DESC LIMIT 1
+            ) latest ON TRUE
             """,
-            commodity_id,
+            commodity_id, quarter,
         )
+        provenance_by_district = await fetch_provenance_by_district(conn, commodity_id)
 
     return [
         MapDataPoint(
@@ -474,6 +518,7 @@ async def map_data(
             longitude     = float(r["longitude"]) if r["longitude"] else None,
             risk_score    = float(r["risk_score"]) if r["risk_score"] else None,
             n_tests       = r["n_tests"] or 0,
+            provenance    = provenance_by_district.get(r["district_id"], EMPTY_PROVENANCE),
         )
         for r in rows
     ]

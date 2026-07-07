@@ -5,6 +5,7 @@ GET   /v1/admin/records             filtered enforcement record list
 PATCH /v1/admin/records/{id}        manual confidence override (verify/flag)
 POST  /v1/admin/aggregate           recompute agg_district_commodity_risk/agg_brand_safety_profile
 POST  /v1/admin/disease-burden      recompute disease_burden_estimates/exposure_alerts
+GET   /v1/admin/pipeline-runs       last run per ingest source (H1.3 scraper health)
 
 Gated behind users.is_superuser (see _require_admin in api/routes/disputes.py).
 
@@ -52,11 +53,11 @@ async def platform_stats(admin: CurrentUser = Depends(_require_admin)):
         row = await conn.fetchrow(
             """
             SELECT
-                (SELECT COUNT(*) FROM enforcement_records WHERE is_duplicate = FALSE) AS total_records,
+                (SELECT COUNT(*) FROM enforcement_records WHERE is_duplicate = FALSE AND is_retracted = FALSE) AS total_records,
                 (SELECT COUNT(DISTINCT district_id) FROM enforcement_records WHERE district_id IS NOT NULL) AS districts_covered,
                 (SELECT COUNT(*) FROM commodities) AS commodities_tracked,
                 (SELECT COUNT(*) FROM contaminants) AS contaminants_tracked,
-                (SELECT AVG(confidence_score) FROM enforcement_records WHERE is_duplicate = FALSE) AS avg_confidence_score,
+                (SELECT AVG(confidence_score) FROM enforcement_records WHERE is_duplicate = FALSE AND is_retracted = FALSE) AS avg_confidence_score,
                 (SELECT COUNT(*) FROM enforcement_records WHERE parsed_at >= NOW() - INTERVAL '30 days') AS records_last_30d,
                 (SELECT COUNT(*) FROM brand_disputes WHERE status = 'pending') AS pending_disputes,
                 (SELECT COUNT(*) FROM labs WHERE flagged_suspicious = TRUE) AS flagged_labs,
@@ -196,3 +197,48 @@ async def trigger_disease_burden(admin: CurrentUser = Depends(_require_admin)):
 
     summary = await asyncio.to_thread(_run)
     return TriggerResult(summary=summary, message="Disease burden estimates recomputed")
+
+
+class PipelineRunStatus(BaseModel):
+    source: str
+    status: str  # 'running' | 'success' | 'expected_failure' | 'failed' | 'never_run'
+    rows_ingested: Optional[int]
+    error_detail: Optional[str]
+    started_at: Optional[str]
+    finished_at: Optional[str]
+
+
+# Kept in sync with pipeline/run_and_log.py's SOURCES — the sources the
+# scheduled ingest.yml actually runs.
+_KNOWN_SOURCES = ["openfda", "agmarknet", "fssai_recall"]
+
+
+@admin_panel_router.get("/pipeline-runs", response_model=list[PipelineRunStatus])
+async def pipeline_run_status(admin: CurrentUser = Depends(_require_admin)):
+    """Last run per ingest source, so the operator can tell 'FoSCoS blocked
+    as expected' apart from 'openFDA broke' without reading workflow logs."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT ON (source)
+                source, status, rows_ingested, error_detail,
+                started_at::text, finished_at::text
+            FROM pipeline_runs
+            WHERE source = ANY($1::text[])
+            ORDER BY source, started_at DESC
+            """,
+            _KNOWN_SOURCES,
+        )
+    by_source = {r["source"]: r for r in rows}
+    return [
+        PipelineRunStatus(
+            source=source,
+            status=(by_source[source]["status"] if source in by_source else "never_run"),
+            rows_ingested=by_source[source]["rows_ingested"] if source in by_source else None,
+            error_detail=by_source[source]["error_detail"] if source in by_source else None,
+            started_at=by_source[source]["started_at"] if source in by_source else None,
+            finished_at=by_source[source]["finished_at"] if source in by_source else None,
+        )
+        for source in _KNOWN_SOURCES
+    ]
