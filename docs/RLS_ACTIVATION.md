@@ -52,6 +52,11 @@ profile, API keys — has a verified `user_id` and is scoped.
    update location → create/list/revoke an API key → refresh → logout.
    Watch specifically for silent empty results (RLS denial looks like
    "no rows found", not an error) rather than just checking for 5xxs.
+   `python -m scripts.verify_rls_activation` automates the register /
+   profile / location / refresh / logout path above and checks response
+   *content*, not just status codes, against exactly this failure mode.
+   It doesn't cover API-key create/list/revoke yet — add those checks the
+   same way if you extend it.
 3. Audit every other route file for a bare `pool.acquire()` that touches
    `users`, `api_keys`, or `refresh_tokens` outside the four call sites
    above — any such route will need `user_scoped()` too, or it will

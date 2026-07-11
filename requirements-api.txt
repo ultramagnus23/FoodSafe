@@ -26,3 +26,6 @@ networkx>=3.3.0
 # (Mann-Kendall via scipy.stats.kendalltau + Sen's slope via numpy).
 numpy>=1.26.0
 scipy>=1.11.0
+
+# Error tracking — no-op unless SENTRY_DSN is set (see api/main.py).
+sentry-sdk[fastapi]>=2.0.0

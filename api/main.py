@@ -29,6 +29,26 @@ from api.other_routes import search_router, fmcg_router, insurance_router, meta_
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("foodsafe.api")
 
+# ------------------------------------------------------------
+# Error tracking — opt-in via SENTRY_DSN. A no-op if unset (local dev,
+# CI), so this never becomes a hard dependency. sentry-sdk is already in
+# requirements.txt/requirements-api.txt; import is deferred into the `if`
+# so a missing package in some other environment can't break startup.
+# ------------------------------------------------------------
+_SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if _SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=os.environ.get("ENVIRONMENT", "development"),
+        release=os.environ.get("RENDER_GIT_COMMIT"),
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+    logger.info("Sentry error tracking initialised")
+else:
+    logger.info("SENTRY_DSN not set — error tracking disabled")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_pool()
@@ -123,6 +143,10 @@ async def log_requests(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_handler(request: Request, exc: Exception):
+    # No separate sentry_sdk.capture_exception() call needed: Sentry's
+    # LoggingIntegration is on by default once sentry_sdk.init() has run
+    # (see SENTRY_DSN block above) and auto-captures ERROR-level log calls
+    # made with exc_info=True, exactly what this already does.
     logger.error("Unhandled: %s", exc, exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
