@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from api.auth_utils import get_current_user, CurrentUser
-from api.db import get_pool
+from api.db import user_scoped
 
 user_router = APIRouter()
 
@@ -16,8 +16,7 @@ class LocationUpdate(BaseModel):
 
 @user_router.post("/location")
 async def update_location(body: LocationUpdate, user: CurrentUser = Depends(get_current_user)):
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    async with user_scoped(user.user_id) as conn:
         await conn.execute(
             "UPDATE users SET home_district_id = $1 WHERE id = $2",
             body.district_id, user.user_id
@@ -29,8 +28,7 @@ async def update_location(body: LocationUpdate, user: CurrentUser = Depends(get_
 
 @user_router.get("/profile")
 async def get_profile(user: CurrentUser = Depends(get_current_user)):
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    async with user_scoped(user.user_id) as conn:
         row = await conn.fetchrow(
             "SELECT email, tier, home_district_id, created_at, is_superuser FROM users WHERE id = $1", user.user_id
         )

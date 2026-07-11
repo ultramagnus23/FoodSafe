@@ -23,6 +23,15 @@ from api.db import get_pool
 logger = logging.getLogger("foodsafe.auth_utils")
 
 SECRET_KEY  = os.environ.get("JWT_SECRET", "change-me-in-production-use-env")
+if SECRET_KEY == "change-me-in-production-use-env" and os.environ.get("ENVIRONMENT") == "production":
+    # Never let the fallback dev secret sign tokens in production — anyone
+    # who reads this source can then forge admin JWTs. render.yaml sets
+    # ENVIRONMENT=production and requires JWT_SECRET as a real (sync: false)
+    # secret, so this should only trip on a genuine misconfiguration.
+    raise RuntimeError(
+        "JWT_SECRET is not set. Refusing to start in production with the "
+        "default signing key — set JWT_SECRET in the environment."
+    )
 ALGORITHM   = "HS256"
 ACCESS_TTL  = 15 * 60        # 15 minutes
 REFRESH_TTL = 30 * 24 * 3600 # 30 days

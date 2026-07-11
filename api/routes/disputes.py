@@ -15,11 +15,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
 from api.auth_utils import get_current_user, CurrentUser
 from api.db import get_pool
+from api.public_rate_limit import enforce_public_rate_limit
 
 logger = logging.getLogger("foodsafe.routes.disputes")
 
@@ -101,12 +102,13 @@ class FraudRecordSummary(BaseModel):
 # ============================================================
 
 @disputes_router.post("/submit", status_code=201)
-async def submit_dispute(body: DisputeSubmit):
+async def submit_dispute(body: DisputeSubmit, request: Request):
     """
     Any brand or member of the public can submit a dispute.
     No auth required — we want to make this easy.
     Dispute is flagged on platform within 48 hours per spec.
     """
+    await enforce_public_rate_limit(request, "disputes")
     pool = get_pool()
     async with pool.acquire() as conn:
         brand = await conn.fetchrow(
