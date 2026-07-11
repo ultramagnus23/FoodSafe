@@ -36,6 +36,16 @@ class BrandOut(BaseModel):
     id: int
     name: str
 
+class LocalityOut(BaseModel):
+    id: int
+    name: str
+    district_id: int
+    district_name: str
+    state: str
+    pincodes: list[str]
+    latitude: Optional[float]
+    longitude: Optional[float]
+
 @meta_router.get("/districts", response_model=list[DistrictOut])
 async def list_districts():
     pool = get_pool()
@@ -44,6 +54,36 @@ async def list_districts():
             "SELECT id, name_canonical, state FROM districts ORDER BY state, name_canonical"
         )
     return [DistrictOut(id=r["id"], name=r["name_canonical"], state=r["state"]) for r in rows]
+
+@meta_router.get("/localities", response_model=list[LocalityOut])
+async def list_localities(district_id: Optional[int] = None, pincode: Optional[str] = None):
+    """Sub-district localities (e.g. Juhu, Vile Parle, Churchgate within
+    Mumbai) — see schema_migration_009.sql. Optionally filter by parent
+    district or resolve a single pincode to its locality (used by the
+    report form to turn a pincode into a locality_id client-side)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT l.id, l.name_canonical, l.parent_district_id, d.name_canonical AS district_name,
+                   d.state, l.pincodes, l.latitude, l.longitude
+            FROM localities l
+            JOIN districts d ON d.id = l.parent_district_id
+            WHERE ($1::int IS NULL OR l.parent_district_id = $1)
+              AND ($2::text IS NULL OR $2 = ANY(l.pincodes))
+            ORDER BY d.state, d.name_canonical, l.name_canonical
+            """,
+            district_id, pincode,
+        )
+    return [
+        LocalityOut(
+            id=r["id"], name=r["name_canonical"], district_id=r["parent_district_id"],
+            district_name=r["district_name"], state=r["state"], pincodes=list(r["pincodes"]),
+            latitude=float(r["latitude"]) if r["latitude"] is not None else None,
+            longitude=float(r["longitude"]) if r["longitude"] is not None else None,
+        )
+        for r in rows
+    ]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():

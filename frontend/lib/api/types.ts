@@ -190,6 +190,17 @@ export interface DistrictOut {
   state: string;
 }
 
+export interface LocalityOut {
+  id: number;
+  name: string;
+  district_id: number;
+  district_name: string;
+  state: string;
+  pincodes: string[];
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export interface CommodityOut {
   id: number;
   name: string;

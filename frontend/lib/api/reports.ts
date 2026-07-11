@@ -7,11 +7,13 @@ export interface ReportSubmit {
   commodity_id?: number;
   district_id?: number;
   contaminant_suspected?: string;
+  pincode?: string;
 }
 
 export interface ReportSubmitResponse {
   report_id: number;
   submitted_at: string;
+  locality_resolved: boolean;
   status: string;
   message: string;
 }

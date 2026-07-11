@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useDistricts, useCommodities } from "@/lib/api/search";
+import { useDistricts, useCommodities, useLocalityByPincode } from "@/lib/api/search";
 import { useSubmitReport } from "@/lib/api/reports";
 
 export default function ReportPage() {
@@ -14,8 +14,11 @@ export default function ReportPage() {
   const [districtId, setDistrictId] = useState<number | "">("");
   const [commodityId, setCommodityId] = useState<number | "">("");
   const [contaminant, setContaminant] = useState("");
+  const [pincode, setPincode] = useState("");
 
   const tooShort = description.trim().length > 0 && description.trim().length < 10;
+  const locality = useLocalityByPincode(pincode);
+  const resolvedLocality = locality.data && locality.data.length > 0 ? locality.data[0] : null;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,6 +29,7 @@ export default function ReportPage() {
       district_id: districtId === "" ? undefined : districtId,
       commodity_id: commodityId === "" ? undefined : commodityId,
       contaminant_suspected: contaminant.trim() || undefined,
+      pincode: /^\d{6}$/.test(pincode) ? pincode : undefined,
     });
   }
 
@@ -59,6 +63,30 @@ export default function ReportPage() {
             required
           />
           {tooShort && <span className="text-xs text-risk">Please add a bit more detail (at least 10 characters).</span>}
+        </label>
+
+        <label className="grid gap-1.5 text-sm">
+          <span className="font-medium">Pincode (optional, most precise)</span>
+          <input
+            className="rounded-lg border border-line bg-slab px-4 py-2 outline-none focus:border-ink"
+            placeholder="e.g. 400049"
+            inputMode="numeric"
+            maxLength={6}
+            value={pincode}
+            onChange={(e) => setPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          />
+          {resolvedLocality && (
+            <span className="text-xs text-provenance">
+              Matched to {resolvedLocality.name}, {resolvedLocality.district_name} — this report will be tagged at
+              the locality level, not just the district.
+            </span>
+          )}
+          {!resolvedLocality && /^\d{6}$/.test(pincode) && !locality.isLoading && (
+            <span className="text-xs text-provenance">
+              We don&apos;t have this pincode mapped to a locality yet — the report will still be tagged to the
+              district you pick below.
+            </span>
+          )}
         </label>
 
         <label className="grid gap-1.5 text-sm">
