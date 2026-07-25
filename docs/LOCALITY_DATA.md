@@ -9,6 +9,18 @@ Churchgate, Bandra, Andheri, Colaba, Dadar, Powai, Worli, Malad, Borivali,
 Santacruz, Kurla, Ghatkopar, Chembur, Mulund), each linked to its real
 India Post PIN code(s) and an approximate centroid lat/long.
 
+`schema_migration_010.sql` extends the same seed to four more metros
+already present as `districts` rows in `seed_demo.sql` — Delhi,
+Bengaluru, Chennai, and Pune — each with ~13 real, well-known
+neighborhoods (Connaught Place, Koramangala, T Nagar, Koregaon Park,
+etc.), same sourcing discipline: real India Post PIN codes, real
+approximate centroids, no schema changes (the table/indexes/grants from
+migration_009 already cover it). As of migration_010, `localities` has
+real coverage for five cities: Mumbai, Delhi, Bengaluru, Chennai, Pune.
+Every other city with a `districts` row still has zero localities —
+querying `GET /v1/meta/localities` for those returns an empty list, not
+an error, which is the correct honest answer until they're seeded too.
+
 `consumer_reports` and `enforcement_records` both got a nullable
 `locality_id` FK. Nullable and additive on purpose — every row and query
 that only ever knew a district keeps working unchanged; a `NULL
@@ -52,10 +64,13 @@ strategy (FBO license search reachability, local-news NER, BMC RTI).
    one row per post office, which is finer than most people mean by
    "locality" — e.g. Juhu is one office, one locality; some larger areas
    have multiple offices worth merging).
-2. **Manual path (what this migration did for Mumbai):** for a specific
-   city, hand-pick the well-known neighborhood names, look up their real
-   PIN code(s) and centroid, and add a `VALUES (...)` block following the
-   exact pattern at the bottom of `schema_migration_009.sql`. Fine for a
+2. **Manual path (what migration_009 did for Mumbai and migration_010 did
+   for Delhi/Bengaluru/Chennai/Pune):** for a specific city, hand-pick the
+   well-known neighborhood names, look up their real PIN code(s) and
+   centroid, and add a `VALUES (...)` block following the exact pattern
+   used in those migrations — joined against the city's existing
+   `districts` row by exact `name_canonical`/`state` (check
+   `seed_demo.sql` for the spelling before writing the JOIN). Fine for a
    handful of cities; doesn't scale to all of India.
 3. Either way, **do not synthesize coordinates or pincodes** — every row
    in `localities` should trace to a real, checkable source, the same
