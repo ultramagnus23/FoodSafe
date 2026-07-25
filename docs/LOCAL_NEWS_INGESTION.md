@@ -1,7 +1,8 @@
 # Local Mumbai news ingestion — investigation & status
 
 **Module:** `pipeline/sources/local_news.py`
-**Run:** `python -m pipeline.sources.local_news --limit 20`
+**Run (standalone):** `python -m pipeline.sources.local_news --limit 20`
+**Run (logged, matches other sources):** `python -m pipeline.run_and_log local_news --limit 20`
 
 ## Why this source
 
@@ -63,11 +64,96 @@ future sources report spurious "blocked by robots.txt" results.
 6. Wrap each accepted article as a `LocalNewsRecord` (a `stage1_extract.RawRecord`
    — same shape a PDF page produces, so it's structurally ready for
    `stage2_standardise`/`stage3_and_4` unchanged — plus the locality-name
-   list as forward-looking metadata).
+   list as extra metadata `ingest()` uses for `locality_id` resolution).
+7. `ingest()` resolves each `LocalNewsRecord` and writes it to
+   `enforcement_records` (see "Database write path" below).
 
 Because this is qualitative event text (like FoSCoS recalls or openFDA
-advisories), an article is accepted once it passes the keyword filter —
-NER is not required to find a contaminant/value to keep the record.
+advisories), `fetch_records()` accepts a *candidate* article once it passes
+the keyword filter — NER is not required to find a contaminant/value to
+keep the record. The database write in `ingest()` is stricter: a
+contaminant match is required before a row is inserted, because
+`enforcement_records.contaminant_id` is `NOT NULL` — there's no schema-legal
+way to write a row without one. This mirrors fssai_recall.py's
+`skipped_nomap` behaviour exactly.
+
+## Locality-name resolution
+
+`schema_migration_009.sql` added the `localities` table (real, geocoded
+neighbourhoods, e.g. "Andheri West", "Andheri East", "Juhu") and a nullable
+`locality_id` FK on `enforcement_records`. The plain-text neighbourhood
+keywords `_find_localities()` extracts from article text (e.g. "Andheri")
+don't match `localities.name_canonical` values exactly, because the seed
+data includes directional suffixes the keyword list doesn't. Resolution
+works like this (`pipeline/sources/local_news.py`):
+
+- `_normalise_locality_key(name)` strips a trailing " West"/"East"/"North"/
+  "South" and lowercases — `"Vile Parle West"` and `"Vile Parle East"` both
+  normalise to `"vile parle"`.
+- `build_locality_lookup(localities_rows)` builds a normalised-key ->
+  `[(locality_id, parent_district_id), ...]` dict from whatever rows
+  `SELECT id, name_canonical, parent_district_id FROM localities` returns.
+  Nothing here is Mumbai-specific — it works unchanged as `localities`
+  gains more cities (Delhi/Bengaluru/Chennai/Pune, seeded separately in
+  `schema_migration_010.sql`).
+- `resolve_locality_id(locality_names, lookup)` tries each of an article's
+  matched keywords in turn and returns the first match's
+  `(locality_id, parent_district_id)`. If a normalised key maps to more
+  than one row (e.g. "andheri" -> both Andheri West and Andheri East), the
+  lowest-id row is picked deterministically — a genuine ambiguity this
+  keyword-based matcher can't resolve any further (the article text itself
+  doesn't say which one).
+- All three functions are pure (no DB connection) — `ingest()` fetches the
+  `localities` rows once per run and passes the resulting lookup in. This
+  is what `tests/test_local_news.py` exercises without a live database.
+
+## Database write path
+
+`ingest(conn, records)` (called by `run()`, which owns its own connection —
+same pattern as `fssai_recall.py`) does, per `LocalNewsRecord`:
+
+1. Match a contaminant against `contaminants.name_canonical`/`aliases` in
+   the extracted `contaminant` field + article title. No match ->
+   `skipped_no_contaminant`, nothing is written.
+2. Build a dedup hash — `sha256(source_url + "|" + contaminant_id)` — and
+   skip if it already exists in `enforcement_records.dedup_hash` (idempotent
+   re-runs). This is a natural key deliberately narrower than
+   `stage3_and_4.py`'s general cross-source hash: one article can only ever
+   produce one `enforcement_records` row per contaminant it names, since
+   there's no per-record lab/value/date precision to also key on.
+3. Upsert a `commodities` row from the extracted product name (falls back
+   to `"packaged food"`), same pattern as `openfda.py`/`fssai_recall.py`.
+4. Resolve `locality_id` via `resolve_locality_id()`; if resolved, its
+   `parent_district_id` is used directly for `district_id` (skipping the
+   fuzzy district-name match, since the locality table's district FK is
+   already authoritative). If no locality resolves, `district_id` falls
+   back to `stage2_standardise.GeoStandardiser.resolve_district()` against
+   the NER-extracted district text.
+5. `test_date` comes from `stage2_standardise.DateStandardiser` parsing the
+   NER-extracted date field, falling back to `date.today()` if unparseable
+   or absent — the article's own publish date isn't currently threaded
+   through to this function, so this is an honest approximation, not a
+   claim of a real test date.
+6. `raw_value_ppb` stays `0.0` (qualitative event, no lab reading) unless
+   NER found both a value and a unit. `pass_fail` uses
+   `stage2_standardise.normalise_pass_fail()` on the extracted pass/fail
+   text, and is `None` (unknown) when nothing was extracted — this module
+   does not force `FALSE` the way `fssai_recall.py` does for recalls, since
+   a news article isn't inherently a "failure" record.
+7. Inserted with `source_type='local_news_mumbai'`, `confidence_score=0.75`
+   (`LOCAL_NEWS_CONFIDENCE` — clears `CONFIDENCE_MIN_USABLE` but set lower
+   than `fssai_recall.py`'s 0.80 since this is our own scrape/keyword/NER
+   chain, not an official government portal listing).
+
+**Naming flag, not a change made here:** `source_type='local_news_mumbai'`
+is what `schema_migration_009.sql` already added to the CHECK constraint,
+so that's what this module writes. If more cities are added as local-news
+sources later, a more generic `source_type='local_news'` (with the city
+recoverable from `locality_id`/`district_id` instead of baked into the
+`source_type` string) would probably be the better long-term shape — but
+that's a schema change, intentionally left to whoever adds the next
+city-specific news source, not done here to avoid colliding with the
+parallel `schema_migration_010.sql` locality-seeding work.
 
 ## Real test run (2026-07-11, `--limit 20`)
 
@@ -109,23 +195,36 @@ Milk Sales; Only Sealed, Labelled Milk Can Be Sold Across State"**
   need to poll on a schedule and accumulate over days/weeks, the same way
   `agmarknet.py` already runs daily via `.github/workflows/ingest.yml`
   rather than expecting one large single pull.
-- **Locality extraction is a hardcoded keyword list**, not a linked table —
-  it does not resolve to a `locality_id` or pincode; that mapping has to
-  happen once the real `localities` table lands.
+- **Locality *extraction* (from article text) is still a hardcoded keyword
+  list** (`MUMBAI_LOCALITIES`) — that part hasn't changed. What's new is
+  that once a keyword is found, `resolve_locality_id()` now maps it to a
+  real `locality_id` against the `localities` table (see "Locality-name
+  resolution" above) instead of just being reported as a yield statistic.
+  A locality-taggable article whose neighbourhood isn't in
+  `MUMBAI_LOCALITIES` — or is in another city not yet in `localities` —
+  still won't get a `locality_id`; it will still get an
+  `enforcement_records` row (with `locality_id = NULL`), same as any other
+  district-only record.
 - **NER on narrative text is still narrative-NER**: it can and did produce a
   false-positive `brand` (the headline itself). This module does not clean
   that up beyond what `FSSAINERExtractor` already does — cleaning up the
   shared rule engine is out of scope here since it's shared with the PDF
   path.
-- **No database write**: `enforcement_records.source_type` CHECK constraint
-  is `('fssai','usfda','efsa','apeda','state_health','agmarknet')` — it does
-  not include a local-news value, and no table has a `locality_id` column
-  yet. Per the task scope, this module does not modify the schema and is
-  not wired into `.github/workflows/ingest.yml`. `run()` fetches, filters,
-  extracts, and reports yield only; `fetch_records()` returns the
-  `LocalNewsRecord` list in-process for whoever wires up the DB write once
-  the locality migration and a `source_type` value for this source both
-  exist.
+- **Database write now exists** (`ingest()`, see above) using
+  `source_type='local_news_mumbai'` (added to the CHECK constraint by
+  `schema_migration_009.sql`) and the new `locality_id` column. It is wired
+  into `pipeline/run_and_log.py` (`python -m pipeline.run_and_log
+  local_news --limit N`) and listed in `EXPECTED_EMPTY_SOURCES` there,
+  since a 0-row run is the documented, expected outcome at this sample
+  size (see the real test run above) — a genuine regression would need to
+  show up as an exception, not just a low row count. **Not yet wired into
+  `.github/workflows/ingest.yml`** — that's a deliberate follow-up
+  decision, not done as part of this change.
+- **`test_date` is an approximation** (parsed NER date field, or
+  `date.today()` if that fails) — the article's actual publish date isn't
+  currently threaded from `Candidate.pub_date` into the record written to
+  the DB. Worth tightening in a follow-up if `test_date` accuracy matters
+  for this source's records specifically.
 - Only two sources were validated end-to-end; other Mumbai-focused outlets
   (Mid-Day, DNA, Loksatta) were not checked and are an open item, not a
   claim of exhaustiveness.

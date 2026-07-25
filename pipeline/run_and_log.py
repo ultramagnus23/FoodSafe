@@ -29,13 +29,17 @@ SOURCES = {
     "openfda":      ("pipeline.sources.openfda",      "run_openfda_ingest",   "limit_per_term", False),
     "agmarknet":    ("pipeline.sources.agmarknet",    "run_agmarknet_ingest", "limit",          False),
     "fssai_recall": ("pipeline.sources.fssai_recall", "run",                  "limit",          True),
+    "local_news":   ("pipeline.sources.local_news",   "run",                  "limit",          True),
 }
 
 # Sources where zero rows ingested is a known, accepted outcome (documented
 # gate or flaky public rate limit), not a regression worth alerting on.
 # openFDA is deliberately excluded — it's the one confirmed-reliable real
-# source, so zero rows there is worth knowing about.
-EXPECTED_EMPTY_SOURCES = {"agmarknet", "fssai_recall"}
+# source, so zero rows there is worth knowing about. local_news is included:
+# docs/LOCAL_NEWS_INGESTION.md's real test run found 1 relevant article out
+# of 28 listing items in a single pull — a 0-row run is expected, not a
+# regression, until this runs on a schedule and accumulates over days.
+EXPECTED_EMPTY_SOURCES = {"agmarknet", "fssai_recall", "local_news"}
 
 
 def _rows_ingested(summary: dict) -> int:

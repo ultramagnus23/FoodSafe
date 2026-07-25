@@ -41,21 +41,33 @@ pipeline.stage1_extract.FSSAINERExtractor — the same class the PDF/OCR path
 uses — pointed at article body text instead of OCR'd PDF text.
 
 Honesty note: this is qualitative, event-level text (like FoSCoS recalls or
-openFDA advisories), not lab ppb data. We do not force a contaminant/value
-match to accept a record — an article that clears the food-safety keyword
-filter is kept even if NER finds nothing further, same as fssai_recall.py's
-"qualitative event" treatment. Because `source_type` CHECK on
-enforcement_records does not yet include a local-news value and
-`locality_id` does not exist on any table, this module intentionally does
-NOT write to the database — see docs/LOCAL_NEWS_INGESTION.md. It fetches,
-filters, extracts and reports yield only, standalone.
+openFDA advisories), not lab ppb data. `fetch_records()` does not force a
+contaminant/value match to accept a *candidate* record — an article that
+clears the food-safety keyword filter is kept even if NER finds nothing
+further. The database write path (`ingest()`), however, DOES require a
+contaminant match before writing, same as fssai_recall.py's and openfda.py's
+"skipped_no_contaminant" behaviour — `enforcement_records.contaminant_id` is
+NOT NULL, so a record with no matchable contaminant genuinely cannot be
+inserted, not just isn't a great candidate.
+
+`schema_migration_009.sql` added `source_type='local_news_mumbai'` to
+`enforcement_records`'s CHECK constraint and a nullable `locality_id` FK to
+the new `localities` table, so this module now writes to the database:
+`fetch_records()` fetches/filters/NER-extracts (unchanged), and `ingest()`
+resolves each article's matched neighbourhood keyword(s) to a real
+`locality_id` (via `resolve_locality_id()`, matched generically against
+whatever `localities.name_canonical` rows exist — not hardcoded to Mumbai)
+and upserts an `enforcement_records` row. See docs/LOCAL_NEWS_INGESTION.md
+for the full write-path description and current limitations.
 
 Run:  python -m pipeline.sources.local_news --limit 20
+      python -m pipeline.run_and_log local_news --limit 20
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import re
 import time
@@ -63,13 +75,17 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
 from urllib import robotparser
 from urllib.parse import urljoin, urlparse
 
+import psycopg2
 from bs4 import BeautifulSoup
 
+from pipeline.config import pg_connect
 from pipeline.stage1_extract import FSSAINERExtractor, RawRecord
+from pipeline.stage2_standardise import DateStandardiser, GeoStandardiser, UnitConverter, normalise_pass_fail
 
 logger = logging.getLogger("foodsafe.local_news")
 
@@ -365,22 +381,229 @@ def fetch_records(limit: int = 20) -> tuple[list[LocalNewsRecord], dict]:
     return records, stats
 
 
+# ------------------------------------------------------------
+# Locality-name resolution
+# ------------------------------------------------------------
+#
+# `MUMBAI_LOCALITIES`/`_find_localities()` above extract plain-text
+# neighbourhood *keywords* from an article ("Andheri", "Vile Parle"). The
+# `localities` table (schema_migration_009.sql) instead stores real,
+# geocoded rows like "Andheri West" / "Andheri East" / "Vile Parle West".
+# The functions below resolve a keyword to a `locality_id` generically —
+# by normalising away directional suffixes and matching whatever rows
+# `localities` actually has — so this keeps working unchanged as the
+# table grows beyond Mumbai (parallel `localities` seed-extension work in
+# this session adds Delhi/Bengaluru/Chennai/Pune). Pure functions: they
+# take an already-fetched `localities` row list / a pre-built lookup dict,
+# so they're testable without a live DB connection.
+
+_DIRECTIONAL_SUFFIX_RE = re.compile(r"\s+(west|east|north|south)$", re.IGNORECASE)
+
+
+def _normalise_locality_key(name: str) -> str:
+    """'Vile Parle West' -> 'vile parle'; 'Juhu' -> 'juhu'."""
+    return _DIRECTIONAL_SUFFIX_RE.sub("", name.strip().lower())
+
+
+def build_locality_lookup(
+    localities: list[tuple[int, str, int]],
+) -> dict[str, list[tuple[int, int]]]:
+    """localities: (id, name_canonical, parent_district_id) rows.
+
+    Returns normalised-name -> [(locality_id, parent_district_id), ...].
+    A normalised key can map to more than one row (e.g. 'andheri' maps to
+    both 'Andheri West' and 'Andheri East') — genuine ambiguity a plain
+    keyword can't resolve further; callers pick deterministically.
+    """
+    lookup: dict[str, list[tuple[int, int]]] = {}
+    for lid, name, district_id in localities:
+        lookup.setdefault(_normalise_locality_key(name), []).append((lid, district_id))
+    return lookup
+
+
+def resolve_locality_id(
+    locality_names: list[str],
+    lookup: dict[str, list[tuple[int, int]]],
+) -> Optional[tuple[int, int]]:
+    """Resolve the first matched article keyword to (locality_id, district_id).
+
+    Returns None if none of `locality_names` matches a row in `lookup`
+    (e.g. the neighbourhood isn't seeded yet, or the article is outside
+    any city `localities` currently covers).
+    """
+    for kw in locality_names:
+        candidates = lookup.get(_normalise_locality_key(kw))
+        if candidates:
+            return sorted(candidates)[0]   # lowest id = deterministic pick
+    return None
+
+
+def _load_localities(conn) -> list[tuple[int, str, int]]:
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name_canonical, parent_district_id FROM localities")
+        return [(r[0], r[1], r[2]) for r in cur.fetchall()]
+
+
+# ------------------------------------------------------------
+# Database write path
+# ------------------------------------------------------------
+#
+# Mirrors fssai_recall.py's precedent for narrative/qualitative event data:
+# contaminant match is required before writing (enforcement_records.
+# contaminant_id is NOT NULL — there's no schema-legal way around this),
+# commodity is upserted from whatever product text NER found, and dedup is
+# a hash over natural keys rather than relying on stage3_and_4's full
+# cross-record hash (article URL + contaminant is a good enough natural
+# key for one article -> at most one enforcement_records row).
+
+def _load_contaminants(conn):
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name_canonical, aliases, legal_limit_ppb_fssai FROM contaminants")
+        return [(r[0], r[1], (r[2] or []), r[3]) for r in cur.fetchall()]
+
+
+def _match_contaminant(text: str, contaminants):
+    low = (text or "").lower()
+    for cid, canonical, aliases, limit in contaminants:
+        needles = [canonical.replace("_", " "), canonical.split("_")[0]] + [a.lower() for a in aliases]
+        if any(n and n in low for n in needles):
+            return cid, (float(limit) if limit is not None else None)
+    return None
+
+
+def _upsert_commodity(conn, product_desc: str) -> Optional[int]:
+    name = re.sub(r"[^a-z0-9 ]", "", (product_desc or "").lower()).strip()[:60] or "packaged food"
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO commodities (name_canonical, category) VALUES (%s, 'packaged') "
+            "ON CONFLICT (name_canonical) DO NOTHING RETURNING id",
+            (name,),
+        )
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        cur.execute("SELECT id FROM commodities WHERE name_canonical = %s", (name,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+# Narrative news is a step further removed than an official FoSCoS recall
+# listing (fssai_recall.py uses 0.80) — our own scrape/keyword-filter/NER
+# chain, not a government portal — so start slightly lower. Still clears
+# CONFIDENCE_MIN_USABLE (0.75).
+LOCAL_NEWS_CONFIDENCE = 0.75
+
+
+def ingest(conn, records: list[LocalNewsRecord]) -> dict:
+    """Resolve locality + contaminant and upsert into enforcement_records.
+
+    Idempotent: dedups on sha256(source_url + '|' + contaminant_id), same
+    style as fssai_recall.py's dedup_hash — a URL can only ever map to one
+    (contaminant, locality) enforcement_records row from this source.
+    """
+    contaminants = _load_contaminants(conn)
+    locality_lookup = build_locality_lookup(_load_localities(conn))
+    date_std = DateStandardiser()
+    unit_conv = UnitConverter()
+    geo = GeoStandardiser(conn)
+
+    summary = {
+        "records_in": len(records),
+        "matched_contaminant": 0,
+        "locality_resolved": 0,
+        "inserted": 0,
+        "skipped_dupe": 0,
+        "skipped_no_contaminant": 0,
+    }
+
+    for rec in records:
+        raw = rec.raw
+        contaminant_text = f"{raw.contaminant.value if raw.contaminant else ''} {rec.title}"
+        match = _match_contaminant(contaminant_text, contaminants)
+        if not match:
+            summary["skipped_no_contaminant"] += 1
+            continue
+        contaminant_id, legal_limit = match
+        summary["matched_contaminant"] += 1
+
+        dedup_hash = "local-news-" + hashlib.sha256(
+            f"{raw.source_url}|{contaminant_id}".encode()
+        ).hexdigest()[:40]
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM enforcement_records WHERE dedup_hash=%s LIMIT 1", (dedup_hash,))
+            if cur.fetchone():
+                summary["skipped_dupe"] += 1
+                continue
+
+        commodity_id = _upsert_commodity(conn, raw.product_name.value if raw.product_name else "")
+        if commodity_id is None:
+            summary["skipped_no_contaminant"] += 1
+            continue
+
+        loc_match = resolve_locality_id(rec.locality_names, locality_lookup)
+        locality_id: Optional[int] = None
+        district_id: Optional[int] = None
+        if loc_match:
+            locality_id, district_id = loc_match
+            summary["locality_resolved"] += 1
+
+        state_canonical = geo.standardise_state(raw.state.value if raw.state else None) or "Maharashtra"
+        if district_id is None:
+            district_id, _ = geo.resolve_district(
+                raw.district.value if raw.district else None, state_canonical
+            )
+
+        test_date, _ = date_std.standardise(raw.date.value if raw.date else "")
+        test_date = test_date or date.today()
+
+        value_ppb = 0.0
+        if raw.value and raw.unit:
+            value_ppb = unit_conv.convert(raw.value.value, raw.unit.value) or 0.0
+
+        pass_fail = normalise_pass_fail(raw.pass_fail.value if raw.pass_fail else None)
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO enforcement_records (
+                            test_date, source_url, source_type, commodity_id, contaminant_id,
+                            raw_value_ppb, legal_limit_ppb, pass_fail, state, district_id,
+                            locality_id, confidence_score, dedup_hash, is_duplicate,
+                            etl_version, parsed_at
+                        ) VALUES (%s,%s,'local_news_mumbai',%s,%s,%s,%s,%s,%s,%s,
+                                  %s,%s,%s,FALSE,'local-news-1.0',NOW())""",
+                    (
+                        test_date, raw.source_url, commodity_id, contaminant_id,
+                        value_ppb, legal_limit, pass_fail, state_canonical, district_id,
+                        locality_id, LOCAL_NEWS_CONFIDENCE, dedup_hash,
+                    ),
+                )
+            summary["inserted"] += 1
+        except psycopg2.Error as e:
+            logger.error("insert failed for %s: %s", raw.source_url, e)
+            conn.rollback()
+
+    conn.commit()
+    return summary
+
+
 def run(limit: int = 20) -> dict:
-    records, stats = fetch_records(limit=limit)
-    stats["note"] = (
-        "no DB write performed — source_type='local_news_mumbai' is not in "
-        "enforcement_records' source_type CHECK constraint and locality_id "
-        "does not exist on any table yet; wire up once the locality "
-        "migration lands (see docs/LOCAL_NEWS_INGESTION.md)"
-    )
+    records, fetch_stats = fetch_records(limit=limit)
     for r in records[:5]:
         logger.info("sample: %-60s localities=%s", r.title[:60], r.locality_names)
-    return stats
+
+    conn = pg_connect()
+    try:
+        ingest_stats = ingest(conn, records)
+    finally:
+        conn.close()
+
+    return {**fetch_stats, **ingest_stats}
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
-    ap = argparse.ArgumentParser(description="Fetch + filter + NER-extract Mumbai local food-safety news")
+    ap = argparse.ArgumentParser(description="Fetch + filter + NER-extract + ingest Mumbai local food-safety news")
     ap.add_argument("--limit", type=int, default=20)
     args = ap.parse_args()
     summary = run(limit=args.limit)
