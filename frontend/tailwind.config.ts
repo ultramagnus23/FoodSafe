@@ -1,34 +1,44 @@
 import type { Config } from "tailwindcss";
 
-// Design tokens ported from the original index.html SPA's <style> block —
-// keep visual continuity instead of inventing a new palette.
+// "The Public Register" design system — every color is an OKLCH custom
+// property with light and dark values (see app/globals.css). Dark mode is
+// class-based (manual toggle), not system-driven: light is the default.
 const config: Config = {
+  darkMode: "class",
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        bg: "var(--bg)",
-        "bg-card": "var(--bg-card)",
-        forest: "var(--forest)",
-        "forest-lt": "var(--forest-lt)",
-        "forest-pale": "var(--forest-pale)",
-        amber: "var(--amber)",
-        "amber-lt": "var(--amber-lt)",
-        red: "var(--red)",
-        "red-lt": "var(--red-lt)",
-        sage: "var(--sage)",
-        "sage-lt": "var(--sage-lt)",
+        porcelain: "var(--porcelain)",
+        slab: "var(--slab)",
         ink: "var(--ink)",
-        muted: "var(--muted)",
-        border: "var(--border)",
+        "on-ink": "var(--on-ink)",
+        provenance: "var(--provenance)",
+        "provenance-pale": "var(--provenance-pale)",
+        line: "var(--line)",
+        "line-strong": "var(--line-strong)",
+        clear: "var(--clear)",
+        "clear-pale": "var(--clear-pale)",
+        caution: "var(--caution)",
+        "caution-pale": "var(--caution-pale)",
+        risk: "var(--risk)",
+        "risk-pale": "var(--risk-pale)",
       },
       fontFamily: {
-        serif: ["var(--font-serif)"],
-        sans: ["var(--font-sans)"],
-        mono: ["var(--font-mono)"],
+        display: ["var(--font-display)"],
+        body: ["var(--font-body)"],
+        register: ["var(--font-register)"],
+        sans: ["var(--font-body)"],
+        mono: ["var(--font-register)"],
       },
       borderRadius: {
-        DEFAULT: "10px",
+        DEFAULT: "6px",
+      },
+      boxShadow: {
+        DEFAULT: "var(--shadow)",
+      },
+      maxWidth: {
+        prose: "70ch",
       },
     },
   },

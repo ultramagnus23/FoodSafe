@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
+import type { ProvenanceSummary } from "./types";
 
 export interface DistrictSummary {
   district_id: number;
@@ -13,6 +14,7 @@ export interface DistrictSummary {
   codex_compliant_fraction: number | null;
   top_contaminants: { name: string; fail_rate: number }[];
   inference_type: string;
+  provenance: ProvenanceSummary;
 }
 
 export interface CompareResponse {
@@ -43,6 +45,7 @@ export interface BestDistrict {
   risk_score: number;
   n_tests: number;
   codex_compliant_fraction: number | null;
+  provenance: ProvenanceSummary;
 }
 
 export function useBestDistricts(commodityId: number, enabled = true) {

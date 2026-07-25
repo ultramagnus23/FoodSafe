@@ -8,6 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from api.auth_utils import get_current_user, require_tier, CurrentUser
 from api.db import get_pool
+from api.provenance import (
+    ProvenanceSummary,
+    EMPTY_PROVENANCE,
+    fetch_provenance_by_commodity,
+    fetch_provenance_by_brand,
+)
 
 search_router = APIRouter()
 fmcg_router = APIRouter()
@@ -30,6 +36,16 @@ class BrandOut(BaseModel):
     id: int
     name: str
 
+class LocalityOut(BaseModel):
+    id: int
+    name: str
+    district_id: int
+    district_name: str
+    state: str
+    pincodes: list[str]
+    latitude: Optional[float]
+    longitude: Optional[float]
+
 @meta_router.get("/districts", response_model=list[DistrictOut])
 async def list_districts():
     pool = get_pool()
@@ -38,6 +54,36 @@ async def list_districts():
             "SELECT id, name_canonical, state FROM districts ORDER BY state, name_canonical"
         )
     return [DistrictOut(id=r["id"], name=r["name_canonical"], state=r["state"]) for r in rows]
+
+@meta_router.get("/localities", response_model=list[LocalityOut])
+async def list_localities(district_id: Optional[int] = None, pincode: Optional[str] = None):
+    """Sub-district localities (e.g. Juhu, Vile Parle, Churchgate within
+    Mumbai) — see schema_migration_009.sql. Optionally filter by parent
+    district or resolve a single pincode to its locality (used by the
+    report form to turn a pincode into a locality_id client-side)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT l.id, l.name_canonical, l.parent_district_id, d.name_canonical AS district_name,
+                   d.state, l.pincodes, l.latitude, l.longitude
+            FROM localities l
+            JOIN districts d ON d.id = l.parent_district_id
+            WHERE ($1::int IS NULL OR l.parent_district_id = $1)
+              AND ($2::text IS NULL OR $2 = ANY(l.pincodes))
+            ORDER BY d.state, d.name_canonical, l.name_canonical
+            """,
+            district_id, pincode,
+        )
+    return [
+        LocalityOut(
+            id=r["id"], name=r["name_canonical"], district_id=r["parent_district_id"],
+            district_name=r["district_name"], state=r["state"], pincodes=list(r["pincodes"]),
+            latitude=float(r["latitude"]) if r["latitude"] is not None else None,
+            longitude=float(r["longitude"]) if r["longitude"] is not None else None,
+        )
+        for r in rows
+    ]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():
@@ -64,6 +110,7 @@ class SearchResult(BaseModel):
     name: str
     risk_score: Optional[float]
     n_tests: Optional[int]
+    provenance: ProvenanceSummary
 
 @search_router.get("", response_model=list[SearchResult])
 async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = Depends(get_current_user)):
@@ -78,9 +125,11 @@ async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = 
             WHERE c.name_canonical ILIKE $1 OR $1 ILIKE ANY(c.aliases::text[])
             LIMIT 10
         """, f"%{q}%", district_id)
+        commodity_provenance = await fetch_provenance_by_commodity(conn, [r["id"] for r in comm_rows])
         for r in comm_rows:
             results.append(SearchResult(type="commodity", id=r["id"], name=r["name_canonical"],
-                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"]))
+                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"],
+                provenance=commodity_provenance.get(r["id"], EMPTY_PROVENANCE)))
 
         brand_rows = await conn.fetch("""
             SELECT b.id, b.name_canonical, agg.risk_score, agg.n_tests
@@ -89,9 +138,11 @@ async def search(q: str, district_id: Optional[int] = None, user: CurrentUser = 
             WHERE b.name_canonical ILIKE $1
             LIMIT 10
         """, f"%{q}%")
+        brand_provenance = await fetch_provenance_by_brand(conn, [r["id"] for r in brand_rows])
         for r in brand_rows:
             results.append(SearchResult(type="brand", id=r["id"], name=r["name_canonical"],
-                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"]))
+                risk_score=float(r["risk_score"]) if r["risk_score"] else None, n_tests=r["n_tests"],
+                provenance=brand_provenance.get(r["id"], EMPTY_PROVENANCE)))
     return results
 
 class AutocompleteResult(BaseModel):

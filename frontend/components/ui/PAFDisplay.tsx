@@ -11,8 +11,8 @@ interface PAFDisplayProps {
 export function PAFDisplay({ paf, ci, disease, attributableCasesPer100k }: PAFDisplayProps) {
   if (paf == null) {
     return (
-      <p className="text-sm text-muted">
-        Threshold contaminant — no single PAF; see hazard quotient instead.
+      <p className="text-sm text-provenance">
+        Threshold contaminant: no single PAF. See hazard quotient instead.
       </p>
     );
   }
@@ -23,14 +23,14 @@ export function PAFDisplay({ paf, ci, disease, attributableCasesPer100k }: PAFDi
   return (
     <div title="PAF = Population Attributable Fraction. This is a statistical model estimate, not a diagnosis.">
       <p className="text-sm leading-relaxed">
-        <span className="font-serif text-2xl font-semibold text-forest">{pct}%</span> of {disease.toLowerCase()}{" "}
+        <span className="font-display text-2xl font-semibold text-ink">{pct}%</span> of {disease.toLowerCase()}{" "}
         cases in this district are estimated to be attributable to dietary exposure
         {lo && hi && (
-          <span className="ml-1 font-mono text-xs text-muted">(95% CI: {lo}%–{hi}%)</span>
+          <span className="ml-1 font-mono text-xs text-provenance">(95% CI: {lo}%–{hi}%)</span>
         )}
       </p>
       {attributableCasesPer100k != null && (
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-xs text-provenance">
           ≈ {attributableCasesPer100k.toFixed(2)} estimated attributable cases / 100,000 population
         </p>
       )}

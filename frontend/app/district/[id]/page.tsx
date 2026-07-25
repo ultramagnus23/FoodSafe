@@ -24,8 +24,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     ? `${district.name} Food Safety Report | FoodSafe India`
     : "District Food Safety Report | FoodSafe India";
   const description = district
-    ? `Food contamination risk and disease-burden estimates for ${district.name}, ${district.state} — based on public FSSAI/USFDA enforcement records, compared against Codex Alimentarius international standards.`
-    : "District-level food contamination risk from public enforcement records.";
+    ? `Food contamination risk and disease-burden estimates for ${district.name}, ${district.state}. See the report for data source and provenance, compared against Codex Alimentarius international standards.`
+    : "District-level food contamination risk estimates. See each report for data source and provenance.";
 
   return {
     title,

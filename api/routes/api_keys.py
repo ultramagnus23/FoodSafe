@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.auth_utils import require_tier, hash_token, CurrentUser
-from api.db import get_pool
+from api.db import user_scoped
 
 logger = logging.getLogger("foodsafe.routes.api_keys")
 
@@ -68,8 +68,7 @@ async def create_key(body: CreateKeyRequest, user: CurrentUser = Depends(require
         if body.expires_in_days else None
     )
 
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    async with user_scoped(user.user_id) as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO api_keys (user_id, key_hash, key_prefix, name, tier, rate_limit_per_day, expires_at)
@@ -88,8 +87,7 @@ async def create_key(body: CreateKeyRequest, user: CurrentUser = Depends(require
 
 @api_keys_router.get("", response_model=list[KeySummary])
 async def list_keys(user: CurrentUser = Depends(require_tier("fmcg", "insurance"))):
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    async with user_scoped(user.user_id) as conn:
         rows = await conn.fetch(
             """
             SELECT id, key_prefix, name, tier, rate_limit_per_day, created_at,
@@ -114,8 +112,7 @@ async def list_keys(user: CurrentUser = Depends(require_tier("fmcg", "insurance"
 
 @api_keys_router.delete("/{key_id}")
 async def revoke_key(key_id: str, user: CurrentUser = Depends(require_tier("fmcg", "insurance"))):
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    async with user_scoped(user.user_id) as conn:
         row = await conn.fetchrow("SELECT id FROM api_keys WHERE id = $1::uuid AND user_id = $2", key_id, user.user_id)
         if not row:
             raise HTTPException(404, "API key not found")
@@ -130,8 +127,7 @@ class UsageDay(BaseModel):
 
 @api_keys_router.get("/{key_id}/usage", response_model=list[UsageDay])
 async def key_usage(key_id: str, user: CurrentUser = Depends(require_tier("fmcg", "insurance"))):
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    async with user_scoped(user.user_id) as conn:
         row = await conn.fetchrow("SELECT id FROM api_keys WHERE id = $1::uuid AND user_id = $2", key_id, user.user_id)
         if not row:
             raise HTTPException(404, "API key not found")

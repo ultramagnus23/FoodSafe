@@ -25,7 +25,7 @@ from api.auth_utils import (
     _verify_token,
     REFRESH_TTL,
 )
-from api.db import get_pool
+from api.db import get_pool, user_scoped
 
 auth_router = APIRouter()
 
@@ -171,8 +171,9 @@ async def refresh_token(body: RefreshRequest):
     payload = _verify_token(body.refresh_token, "refresh")
     user_id = payload["sub"]
 
-    pool = get_pool()
-    async with pool.acquire() as conn:
+    # user_id comes from a signature-verified JWT, so it's safe to scope
+    # this transaction's RLS context to it even before the DB lookup below.
+    async with user_scoped(user_id) as conn:
         rt_row = await conn.fetchrow(
             """
             SELECT id, revoked_at FROM refresh_tokens
@@ -214,9 +215,27 @@ async def refresh_token(body: RefreshRequest):
 
 @auth_router.post("/logout", status_code=204)
 async def logout(body: RefreshRequest):
-    pool = get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1",
-            hash_token(body.refresh_token),
-        )
+    # Best-effort: an expired/garbled refresh token can't be verified, but
+    # we still want the revoke-by-hash UPDATE to run so a stale token gets
+    # invalidated either way. Only scope to user_id (for RLS) when the
+    # token verifies; otherwise fall back to the unscoped pool exactly as
+    # before.
+    try:
+        payload = _verify_token(body.refresh_token, "refresh")
+        user_id = payload["sub"]
+    except Exception:
+        user_id = None
+
+    if user_id:
+        async with user_scoped(user_id) as conn:
+            await conn.execute(
+                "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1",
+                hash_token(body.refresh_token),
+            )
+    else:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1",
+                hash_token(body.refresh_token),
+            )

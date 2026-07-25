@@ -2,54 +2,106 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ported verbatim from index.html's design tokens for visual continuity. */
+/* ============================================================
+   The Public Register — design tokens.
+   Every color is OKLCH, tinted cool (never pure #000/#fff), and
+   defined for both light (default) and dark (.dark class on <html>).
+   ============================================================ */
 :root {
-  --bg: #f7f4ef;
-  --bg-card: #fdfbf8;
-  --forest: #1b4332;
-  --forest-lt: #2d6a4f;
-  --forest-pale: #e8f0eb;
-  --amber: #d97706;
-  --amber-lt: #fef3c7;
-  --red: #dc2626;
-  --red-lt: #fee2e2;
-  --sage: #4caf7d;
-  --sage-lt: #d1fae5;
-  --ink: #1c1917;
-  --muted: #78716c;
-  --border: #e7e2da;
-  --shadow: 0 1px 3px rgba(28, 25, 23, 0.08), 0 4px 16px rgba(28, 25, 23, 0.04);
-  --shadow-lg: 0 8px 32px rgba(28, 25, 23, 0.12);
-  --font-serif: "Cormorant Garamond", Georgia, serif;
-  --font-sans: "DM Sans", system-ui, sans-serif;
-  --font-mono: "DM Mono", monospace;
+  /* surfaces */
+  --porcelain: oklch(97% 0.005 210);
+  --slab: oklch(99% 0.003 210);
+
+  /* text / primary */
+  --ink: oklch(32% 0.06 195);
+  --on-ink: oklch(98% 0.005 210);
+  --provenance: oklch(45% 0.02 210);
+  --provenance-pale: oklch(93% 0.008 210);
+
+  /* hairlines */
+  --line: oklch(88% 0.008 210);
+  --line-strong: oklch(78% 0.01 210);
+
+  /* 3-step risk scale — risk is reserved for genuine risk states only */
+  --clear: oklch(50% 0.11 155);
+  --clear-pale: oklch(94% 0.035 155);
+  --caution: oklch(50% 0.14 70);
+  --caution-pale: oklch(94% 0.045 70);
+  --risk: oklch(50% 0.19 30);
+  --risk-pale: oklch(94% 0.04 30);
+
+  --shadow: 0 1px 2px oklch(30% 0.02 210 / 0.06), 0 4px 12px oklch(30% 0.02 210 / 0.04);
+
+  --font-display: var(--font-familjen), Georgia, serif;
+  --font-body: var(--font-instrument), system-ui, sans-serif;
+  --font-register: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+.dark {
+  --porcelain: oklch(17% 0.015 220);
+  --slab: oklch(22% 0.017 220);
+
+  --ink: oklch(80% 0.08 195);
+  --on-ink: oklch(15% 0.02 220);
+  --provenance: oklch(65% 0.02 210);
+  --provenance-pale: oklch(27% 0.015 210);
+
+  --line: oklch(32% 0.02 220);
+  --line-strong: oklch(40% 0.02 220);
+
+  --clear: oklch(68% 0.13 155);
+  --clear-pale: oklch(28% 0.05 155);
+  --caution: oklch(74% 0.13 70);
+  --caution-pale: oklch(30% 0.05 70);
+  --risk: oklch(70% 0.18 30);
+  --risk-pale: oklch(28% 0.06 30);
+
+  --shadow: 0 1px 2px oklch(0% 0 0 / 0.3), 0 4px 16px oklch(0% 0 0 / 0.25);
 }
 
 html {
   scroll-behavior: smooth;
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 body {
-  background: var(--bg);
+  background: var(--porcelain);
   color: var(--ink);
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
 }
 
-@keyframes ticker {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* register line: the mono metadata layer used for source · date · batch,
+   confidence figures, "last verified" lines — the thing that makes the
+   product read as a register rather than a dashboard. */
+.register {
+  font-family: var(--font-register);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .disclaimer {
-  background: var(--amber-lt);
-  border: 1px solid #fde68a;
-  border-radius: 8px;
+  background: var(--caution-pale);
+  border: 1px solid var(--line);
+  border-radius: 6px;
   padding: 12px 16px;
   font-size: 12.5px;
-  color: #78350f;
+  color: var(--provenance);
   line-height: 1.5;
 }

@@ -19,6 +19,12 @@ from pydantic import BaseModel
 from api.auth_utils import get_current_user, CurrentUser
 from api.db import get_pool
 from api.routes.risk import build_disclaimer
+from api.provenance import (
+    ProvenanceSummary,
+    EMPTY_PROVENANCE,
+    fetch_provenance,
+    fetch_provenance_by_district,
+)
 
 logger = logging.getLogger("foodsafe.routes.compare")
 
@@ -37,6 +43,7 @@ class DistrictSummary(BaseModel):
     codex_compliant_fraction: Optional[float]
     top_contaminants: list[dict]
     inference_type: str
+    provenance: ProvenanceSummary
 
 
 class CompareDelta(BaseModel):
@@ -76,6 +83,9 @@ async def _district_summary(conn, district_id: int, commodity_id: int) -> Distri
         top_contaminants = json.loads(raw) if isinstance(raw, str) else list(raw)
 
     n_tests = agg["n_tests"] if agg else 0
+    provenance = await fetch_provenance(
+        conn, "district_id = $1 AND commodity_id = $2", district_id, commodity_id,
+    )
     return DistrictSummary(
         district_id=district_id,
         district_name=district["name_canonical"],
@@ -88,6 +98,7 @@ async def _district_summary(conn, district_id: int, commodity_id: int) -> Distri
         codex_compliant_fraction=float(agg["codex_compliant_fraction"]) if agg and agg["codex_compliant_fraction"] is not None else None,
         top_contaminants=top_contaminants,
         inference_type="direct_test" if n_tests and n_tests >= 3 else "insufficient_data",
+        provenance=provenance,
     )
 
 
@@ -135,6 +146,7 @@ class BestDistrict(BaseModel):
     risk_score: float
     n_tests: int
     codex_compliant_fraction: Optional[float]
+    provenance: ProvenanceSummary
 
 
 @compare_router.get("/best", response_model=list[BestDistrict])
@@ -155,12 +167,14 @@ async def best_districts(commodity_id: int, limit: int = 10, user: CurrentUser =
             """,
             commodity_id,
         )
+        provenance_by_district = await fetch_provenance_by_district(conn, commodity_id)
     ranked = sorted(rows, key=lambda r: r["risk_score"])[:limit]
     return [
         BestDistrict(
             district_id=r["district_id"], district_name=r["district_name"], state=r["state"],
             risk_score=float(r["risk_score"]), n_tests=r["n_tests"],
             codex_compliant_fraction=float(r["codex_compliant_fraction"]) if r["codex_compliant_fraction"] is not None else None,
+            provenance=provenance_by_district.get(r["district_id"], EMPTY_PROVENANCE),
         )
         for r in ranked
     ]

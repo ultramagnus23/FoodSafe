@@ -49,10 +49,10 @@ export function AuthModal() {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-ink/50 p-6" onClick={closeAuth}>
-      <div className="w-full max-w-[480px] rounded-2xl bg-bg-card p-8 shadow-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-[480px] rounded-2xl bg-slab p-8 shadow-lg" onClick={(e) => e.stopPropagation()}>
         {step === 0 ? (
           <>
-            <h2 className="mb-5 font-serif text-2xl font-normal">
+            <h2 className="mb-5 font-display text-2xl font-normal">
               {mode === "login" ? "Welcome back" : "Create your account"}
             </h2>
             <form onSubmit={handleSubmit}>
@@ -63,7 +63,7 @@ export function AuthModal() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-bg-card px-3.5 py-2.5 outline-none focus:border-forest"
+                  className="w-full rounded-lg border border-line bg-slab px-3.5 py-2.5 outline-none focus:border-ink"
                   placeholder="you@example.com"
                 />
               </div>
@@ -74,24 +74,24 @@ export function AuthModal() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-bg-card px-3.5 py-2.5 outline-none focus:border-forest"
+                  className="w-full rounded-lg border border-line bg-slab px-3.5 py-2.5 outline-none focus:border-ink"
                   placeholder="••••••••"
                 />
               </div>
-              {error && <div className="mb-3 rounded-md bg-red-lt px-3 py-2 text-sm text-red">{error}</div>}
+              {error && <div className="mb-3 rounded-md bg-risk-pale px-3 py-2 text-sm text-risk">{error}</div>}
               <button
                 type="submit"
                 disabled={busy}
-                className="w-full rounded-lg bg-forest px-4 py-3 text-sm font-medium text-white disabled:opacity-70"
+                className="w-full rounded-lg bg-ink px-4 py-3 text-sm font-medium text-on-ink disabled:opacity-70"
               >
                 {busy ? "Please wait…" : mode === "login" ? "Sign In →" : "Create Account →"}
               </button>
             </form>
-            <div className="mt-4 text-center text-sm text-muted">
+            <div className="mt-4 text-center text-sm text-provenance">
               {mode === "login" ? "No account? " : "Already registered? "}
               <button
                 type="button"
-                className="font-medium text-forest"
+                className="font-medium text-ink"
                 onClick={() => setMode(mode === "login" ? "register" : "login")}
               >
                 {mode === "login" ? "Register free" : "Sign in"}
@@ -101,10 +101,10 @@ export function AuthModal() {
         ) : (
           <div className="flex flex-col items-center gap-6 py-4 text-center">
             <div className="text-4xl">📍</div>
-            <h2 className="font-serif text-2xl">Where do you eat?</h2>
-            <p className="max-w-[300px] text-muted">Select your home district for personalised alerts.</p>
+            <h2 className="font-display text-2xl">Where do you eat?</h2>
+            <p className="max-w-[300px] text-provenance">Select your home district for personalised alerts.</p>
             <select
-              className="w-full rounded-lg border border-border bg-bg-card px-3.5 py-2.5"
+              className="w-full rounded-lg border border-line bg-slab px-3.5 py-2.5"
               value={homeDistrict}
               onChange={(e) => setHomeDistrictId(e.target.value)}
             >
@@ -115,7 +115,7 @@ export function AuthModal() {
                 </option>
               ))}
             </select>
-            <button type="button" onClick={finishOnboarding} className="rounded-lg bg-forest px-5 py-2.5 text-sm font-medium text-white">
+            <button type="button" onClick={finishOnboarding} className="rounded-lg bg-ink px-5 py-2.5 text-sm font-medium text-on-ink">
               Get Started →
             </button>
           </div>

@@ -67,6 +67,24 @@ export function useTriggerDiseaseBurden() {
   });
 }
 
+export interface PipelineRunStatus {
+  source: string;
+  status: "running" | "success" | "expected_failure" | "failed" | "never_run";
+  rows_ingested: number | null;
+  error_detail: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export function usePipelineRuns(enabled = true) {
+  return useQuery({
+    queryKey: ["admin-pipeline-runs"],
+    queryFn: () => apiFetch<PipelineRunStatus[]>("/v1/admin/pipeline-runs"),
+    enabled,
+    staleTime: 60 * 1000,
+  });
+}
+
 export interface LabFraudSummary {
   lab_id: number;
   lab_name: string;
@@ -115,5 +133,35 @@ export function useReviewDispute() {
     mutationFn: ({ id, outcome, resolver_notes }: { id: number; outcome: string; resolver_notes: string }) =>
       apiFetch(`/v1/admin/disputes/${id}/review`, { method: "POST", body: { outcome, resolver_notes } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-disputes"] }),
+  });
+}
+
+export interface ConsumerReport {
+  id: number;
+  submitted_at: string;
+  description: string;
+  reporter_email: string | null;
+  commodity_id: number | null;
+  district_id: number | null;
+  brand_id: number | null;
+  contaminant_suspected: string | null;
+  review_status: "pending" | "published" | "rejected";
+  reviewer_notes: string | null;
+}
+
+export function useAdminReports(status = "pending", enabled = true) {
+  return useQuery({
+    queryKey: ["admin-reports", status],
+    queryFn: () => apiFetch<ConsumerReport[]>(`/v1/admin/reports?status=${status}`),
+    enabled,
+  });
+}
+
+export function useReviewReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action, reviewer_notes }: { id: number; action: "publish" | "reject"; reviewer_notes?: string }) =>
+      apiFetch(`/v1/admin/reports/${id}`, { method: "PATCH", body: { action, reviewer_notes } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-reports"] }),
   });
 }

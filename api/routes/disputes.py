@@ -15,11 +15,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
 from api.auth_utils import get_current_user, CurrentUser
 from api.db import get_pool
+from api.public_rate_limit import enforce_public_rate_limit
 
 logger = logging.getLogger("foodsafe.routes.disputes")
 
@@ -101,12 +102,13 @@ class FraudRecordSummary(BaseModel):
 # ============================================================
 
 @disputes_router.post("/submit", status_code=201)
-async def submit_dispute(body: DisputeSubmit):
+async def submit_dispute(body: DisputeSubmit, request: Request):
     """
     Any brand or member of the public can submit a dispute.
     No auth required — we want to make this easy.
     Dispute is flagged on platform within 48 hours per spec.
     """
+    await enforce_public_rate_limit(request, "disputes")
     pool = get_pool()
     async with pool.acquire() as conn:
         brand = await conn.fetchrow(
@@ -263,7 +265,7 @@ async def review_dispute(
         raise HTTPException(400, f"outcome must be one of {valid}")
 
     pool = get_pool()
-    async with pool.acquire() as conn:
+    async with pool.acquire() as conn, conn.transaction():
         row = await conn.fetchrow(
             "SELECT * FROM brand_disputes WHERE id = $1", dispute_id
         )
@@ -278,12 +280,48 @@ async def review_dispute(
             WHERE id = $3
         """, body.outcome, body.resolver_notes, dispute_id)
 
-        # If resolved_removed, flag the enforcement record
-        if body.outcome == "resolved_removed" and row["enforcement_record_id"]:
-            await conn.execute("""
-                UPDATE enforcement_records SET confidence_score = 0.0
-                WHERE id = $1
-            """, row["enforcement_record_id"])
+        # H2.6: pipe the review outcome back into the underlying record's
+        # confidence so the next aggregation recompute reflects it, instead
+        # of the resolution only living in the admin dispute log.
+        record_id = row["enforcement_record_id"]
+        if record_id:
+            record = await conn.fetchrow(
+                "SELECT id, test_date, confidence_score FROM enforcement_records WHERE id = $1",
+                record_id,
+            )
+            if record:
+                if body.outcome == "resolved_removed":
+                    # Retracted, not merely low-confidence — kept distinct
+                    # from is_duplicate (a re-scrape) and from OCR-driven
+                    # low confidence, so each exclusion reason stays auditable.
+                    await conn.execute(
+                        """UPDATE enforcement_records
+                           SET confidence_score = 0.0, is_retracted = TRUE
+                           WHERE id = $1 AND test_date = $2""",
+                        record_id, record["test_date"],
+                    )
+                elif body.outcome == "resolved_flagged":
+                    new_confidence = round(float(record["confidence_score"]) * 0.5, 3)
+                    await conn.execute(
+                        "UPDATE enforcement_records SET confidence_score = $1 WHERE id = $2 AND test_date = $3",
+                        new_confidence, record_id, record["test_date"],
+                    )
+                    # review_outcome is the fraud-review vocabulary
+                    # (confirmed_fraud/false_positive/needs_more_data), a
+                    # different set of states from the dispute outcome —
+                    # left NULL here since this row is auto-flagged from a
+                    # dispute resolution, not yet through fraud review.
+                    await conn.execute(
+                        """INSERT INTO fraud_audit
+                               (enforcement_record_id, enforcement_date, flag_type, flag_detail,
+                                flag_score, auto_flagged)
+                           VALUES ($1, $2, 'dispute_flagged', $3, $4, TRUE)""",
+                        record_id, record["test_date"],
+                        f"Dispute #{dispute_id} resolved 'resolved_flagged' by admin: {body.resolver_notes}",
+                        1.0 - new_confidence,
+                    )
+                # resolved_kept: no change to the record — the dispute is
+                # timestamped/resolved above, that's the full effect.
 
         # If no more open disputes for this brand, clear the flag
         remaining = await conn.fetchval("""

@@ -2,13 +2,27 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import type { DistrictRiskResponse, BrandRiskResponse, MapDataPoint, AlertEvent } from "./types";
 
-export function useMapData(commodityId: number, enabled = true) {
+export function useMapData(commodityId: number, enabled = true, quarter?: string) {
   return useQuery({
-    queryKey: ["risk-map", commodityId],
-    queryFn: () => apiFetch<MapDataPoint[]>(`/v1/risk/map?commodity_id=${commodityId}`),
+    queryKey: ["risk-map", commodityId, quarter],
+    queryFn: () =>
+      apiFetch<MapDataPoint[]>(
+        `/v1/risk/map?commodity_id=${commodityId}${quarter ? `&quarter=${quarter}` : ""}`
+      ),
     enabled,
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: quarter ? false : 5 * 60 * 1000,
+  });
+}
+
+// Real quarters with at least one aggregation row — never fabricated. This
+// is the range the time scrubber (map page + landing hero) steps through.
+export function useMapQuarters(commodityId: number, enabled = true) {
+  return useQuery({
+    queryKey: ["risk-map-quarters", commodityId],
+    queryFn: () => apiFetch<string[]>(`/v1/risk/map/quarters?commodity_id=${commodityId}`),
+    enabled,
+    staleTime: 60 * 60 * 1000,
   });
 }
 

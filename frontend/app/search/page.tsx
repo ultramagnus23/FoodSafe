@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useSearch } from "@/lib/api/search";
 import { fmt } from "@/lib/constants";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 
 function SearchInner() {
   const searchParams = useSearchParams();
@@ -26,9 +27,9 @@ function SearchInner() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-6 font-serif text-4xl font-light">Search</h1>
+      <h1 className="mb-6 font-display text-4xl font-light">Search</h1>
       <input
-        className="mb-6 w-full rounded-lg border border-border bg-bg-card px-4 py-3 outline-none focus:border-forest"
+        className="mb-6 w-full rounded-lg border border-line bg-slab px-4 py-3 outline-none focus:border-ink"
         placeholder="Search commodity, district, or contaminant…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -42,39 +43,42 @@ function SearchInner() {
       )}
 
       {!loggedIn ? (
-        <div className="rounded-xl bg-forest-pale p-10 text-center">
-          <p className="mb-4 font-medium text-forest">Sign in to search live data.</p>
-          <button type="button" onClick={openAuth} className="rounded-md bg-forest px-4 py-2 text-sm font-medium text-white">
+        <div className="rounded-xl bg-provenance-pale p-10 text-center">
+          <p className="mb-4 font-medium text-ink">Sign in to search live data.</p>
+          <button type="button" onClick={openAuth} className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-on-ink">
             Sign In →
           </button>
         </div>
       ) : !debounced ? (
-        <p className="text-muted">Start typing to search commodities, districts, and contaminants.</p>
+        <p className="text-provenance">Start typing to search commodities, districts, and contaminants.</p>
       ) : results.isLoading ? (
-        <p className="text-muted">Searching…</p>
+        <p className="text-provenance">Searching…</p>
       ) : !results.data || results.data.length === 0 ? (
-        <p className="text-muted">No results for &ldquo;{debounced}&rdquo;.</p>
+        <p className="text-provenance">No results for &ldquo;{debounced}&rdquo;.</p>
       ) : (
         <div className="grid gap-3">
           {results.data.map((r, i) => (
-            <div key={i} className="rounded-lg border border-border bg-bg-card p-4">
+            <div key={i} className="rounded-lg border border-line bg-slab p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="mr-2 rounded bg-forest-pale px-2 py-0.5 text-[11px] uppercase text-forest">
+                  <span className="mr-2 rounded bg-provenance-pale px-2 py-0.5 text-[11px] uppercase text-ink">
                     {r.type}
                   </span>
                   <span className="font-medium">{r.name}</span>
                 </div>
                 {r.risk_score != null && <span className="font-mono text-sm">{fmt(r.risk_score, 0)}</span>}
               </div>
-              {r.n_tests != null && <div className="mt-1 text-xs text-muted">{r.n_tests} tests</div>}
+              <div className="mt-2 flex items-center gap-2">
+                {r.n_tests != null && <span className="text-xs text-provenance">{r.n_tests} tests</span>}
+                <ProvenanceBadge provenance={r.provenance} compact />
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="mt-10 border-t border-border pt-6 text-sm text-muted">
-        Looking for a specific place? Try the <Link href="/map" className="text-forest underline">risk map</Link>.
+      <div className="mt-10 border-t border-line pt-6 text-sm text-provenance">
+        Looking for a specific place? Try the <Link href="/map" className="text-ink underline">risk map</Link>.
       </div>
     </div>
   );
