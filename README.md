@@ -1,288 +1,102 @@
-# FoodSafe India — Data Pipeline + Risk API + Web App
+# FoodSafe India
 
-Four layers: an ingestion **pipeline** (real openFDA/AGMARKNET feeds + an
-FSSAI OCR path, PostgreSQL/Supabase), a risk-scoring **API** (FastAPI, 12+
-routers), a **Next.js** web app (`frontend/`), and a legacy single-file React
-app (`index.html`) kept as a CDN-only fallback.
+## What the pipeline does
 
-## Project Structure
+FoodSafe India pulls food-safety enforcement and recall data from public
+sources (currently: real US FDA recalls via openFDA, real Indian
+district/commodity data via AGMARKNET, plus best-effort FSSAI/local-news
+sources that are honestly gated or thin — see Planned) into a Postgres
+database. It then computes statistical risk scores — fail rate, Wilson
+confidence interval — per district and per brand from whatever real
+records exist.
 
-```
-foodsafe/
-├── schema.sql                    ← Run first. Full PostgreSQL schema + core seed.
-├── schema_migration_002.sql      ← Lab reliability, fraud flags, disputes, ICMR.
-├── schema_migration_003.sql      ← Dietary exposure / disease burden / Codex benchmark tables.
-├── schema_migration_004.sql      ← Trend analysis, alert subscriptions, API keys, admin.
-├── seed_demo.sql                 ← Reference data only (districts/brands/labs) — no fake risk scores.
-├── requirements.txt              ← Full pipeline stack (OCR, Airflow, boto3) — optional for v1.
-├── requirements-api.txt          ← Minimal deps for running just the API + live ingesters.
-├── index.html                    ← Legacy single-file React SPA (CDN React, no build step).
-├── tests/                        ← pytest — stage2 standardisation + stage3 dedup/scoring.
-├── render.yaml                   ← Render.com deploy config for the API (Supabase via DATABASE_URL).
-├── vercel.json                   ← Vercel deploy config for frontend/.
-│
-├── api/                          ← FastAPI backend (run: uvicorn api.main:app)
-│   ├── main.py                   ← App, CORS, tiered rate limiting, router wiring.
-│   ├── db.py                     ← asyncpg connection pool.
-│   ├── auth.py                   ← register / login / refresh / logout (bcrypt + JWT).
-│   ├── auth_utils.py             ← JWT create/verify, tier enforcement, API-key auth.
-│   ├── other_routes.py           ← search, autocomplete, fmcg market-gaps, insurance, /v1/meta/*.
-│   └── routes/
-│       ├── risk.py               ← district / brand / map (heatmap) / alerts.
-│       ├── user.py               ← location, profile.
-│       ├── disputes.py           ← public dispute submission + admin fraud review.
-│       ├── disease.py            ← disease-burden (PAF) estimates, exposure alerts.
-│       ├── trends.py             ← Mann-Kendall trend + Sen's slope, per district/national.
-│       ├── compare.py            ← district-vs-district and FSSAI-vs-Codex/EU comparisons.
-│       ├── admin_panel.py        ← platform stats, record review, manual aggregate/burden recompute.
-│       ├── api_keys.py           ← B2B API key issuance/revocation/usage (fmcg/insurance tiers).
-│       └── subscriptions.py      ← per-user alert subscriptions (email via models/notifications.py).
-│
-├── models/                       ← Analytics (standalone CLIs, also invoked by API routes/cron)
-│   ├── aggregate.py              ← Computes agg_district_commodity_risk / agg_brand_safety_profile.
-│   ├── district_risk.py          ← Random Forest risk model, geographic-holdout CV.
-│   ├── supply_chain.py           ← Bayesian contaminant-propagation graph.
-│   ├── fraud_detection.py        ← Benford's Law + lab reliability scoring.
-│   ├── dietary_exposure.py       ← PPB → daily intake (EFSA methodology).
-│   ├── disease_burden.py         ← Intake → Population Attributable Fraction / hazard quotient.
-│   ├── codex_benchmark.py        ← FSSAI limit vs Codex/EU/WHO-JECFA comparison.
-│   ├── trend_analysis.py         ← Mann-Kendall + Sen's slope trend detection.
-│   └── notifications.py          ← Email alerts for active subscriptions (Resend).
-│
-├── pipeline/
-│   ├── config.py                 ← All constants, env vars, alias maps (contaminants/units/states).
-│   ├── ingest.py                 ← FSSAI OCR batch entry point (CLI + Airflow callable).
-│   ├── seed_enforcement.py       ← Generates demo enforcement_records for the India heatmap.
-│   ├── stage1_extract.py         ← PDF OCR + NER → RawRecord.
-│   ├── stage2_standardise.py     ← Canonicalise → StandardisedRecord.
-│   ├── stage3_and_4.py           ← Dedup + confidence score → ScoredRecord.
-│   ├── airflow_dags.py           ← Optional — only needed if running the full Airflow stack.
-│   └── sources/
-│       ├── openfda.py            ← Real US FDA food-recall API (no key, no OCR). Live in prod.
-│       ├── agmarknet.py          ← Real Indian district/commodity data from data.gov.in. Live in prod.
-│       ├── fssai_recall.py       ← FoSCoS food-recall scraper (headless browser, Playwright).
-│       └── fssai.py              ← FSSAI enforcement-report scraper (link discovery + download).
-│
-└── frontend/                     ← Next.js 14 app (App Router, TypeScript, Tailwind)
-    ├── app/                      ← Pages: home, /search, /map, /district/[id], /compare,
-    │                                /alerts, /account, /admin, /methodology.
-    ├── components/                 UI (RiskBadge, EvidenceGradeBadge, PAFDisplay, LeafletMap, ...).
-    └── lib/api/                    Typed fetch clients, one per router (search, risk, trends, ...).
-```
+## Validated: one real run, small slice
 
-## Setup
+The pipeline has been run once, end to end, against real data. On
+2026-07-27, `pipeline/run_and_log.py` was executed against a freshly
+migrated local Postgres instance (the project's cloud database is
+currently unreachable — see below) and:
 
-### 1. Python (API + live ingesters — no OCR tooling needed)
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-api.txt
-```
+- **21 real US FDA recall records** were fetched live from
+  `accessdata.fda.gov` (no API key) and inserted.
+- **10 real Indian districts** and **33 commodity rows** were fetched
+  live from data.gov.in's AGMARKNET API and upserted.
+- `models.aggregate` computed **11 district-level and 20 brand-level**
+  risk scores from the resulting data.
+- The FoSCoS-recall and local-news sources were also run against the
+  same database; both completed without error and logged an honest
+  zero-row result (a documented 401 auth gate and a day with no matching
+  articles, respectively — not a crash).
 
-### 2. OS + Python deps for the full OCR pipeline (optional, v1 doesn't need this)
-```bash
-# Ubuntu/Debian
-sudo apt-get install tesseract-ocr tesseract-ocr-hin poppler-utils
-pip install -r requirements.txt          # adds boto3, apache-airflow, playwright, spaCy, etc.
-python -m spacy download en_core_web_sm
-```
-S3 and Airflow are **not required** — `pipeline.ingest` runs locally without
-`--use-s3`, and the live ingesters (`openfda`, `agmarknet`) need neither.
+This is a small slice, not a production-scale run — 21 records, one pass.
+The full input, output, and run log are committed at
+[`data/`](data/) and rendered at the deployed page below, so this claim
+is checkable without running anything yourself.
 
-### 3. Database
-```bash
-createdb foodsafe
-psql foodsafe < schema.sql
-psql foodsafe < schema_migration_002.sql
-psql foodsafe < schema_migration_003.sql
-psql foodsafe < schema_migration_004.sql
-psql foodsafe < seed_demo.sql            # districts, brands, labs — reference data only
+**What "the DAGs" actually means here:** `pipeline/airflow_dags.py`
+contains real Apache Airflow DAG definitions, but no Airflow instance has
+ever been deployed for this project — those DAGs have never executed.
+The orchestration that has actually run (in CI, and in the local
+validation above) is `pipeline/run_and_log.py`, a plain Python script
+invoked with `python -m pipeline.run_and_log <source> --limit N`.
+**Recommendation: don't stand up Airflow for this project's current
+scale.** One scheduler + one metadata database + one webserver is a lot
+of infrastructure to run five short-lived ingest jobs a day; the existing
+GitHub Actions cron (`.github/workflows/ingest.yml`) calling
+`run_and_log.py` already does the job, is what's actually been exercised,
+and is what this README's validated claim above is based on. This is a
+recommendation, not a decision — `airflow_dags.py` is left in place,
+unmodified, for whoever wants to make that call.
 
-# Populate enforcement_records + computed risk scores (set DATABASE_URL first, see step 4):
-python -m pipeline.seed_enforcement      # one-shot demo dataset (~1900 realistic records)
-python -m pipeline.sources.openfda       # real US FDA recalls (optional)
-python -m pipeline.sources.agmarknet     # real Indian districts/commodities (optional)
-python -m models.aggregate               # compute district + brand risk scores
-```
+## What is deployed, and where
 
-> Note: `schema.sql` creates a restricted `foodsafe_app` role and enables
-> row-level security on `users`. The API does not yet set the `app.user_id`
-> RLS context, so for local development run the API as the database owner
-> (e.g. `postgres`). See "Honest limitations" below.
+- **Static execution-record page:** [`site/`](site/) — a single static
+  HTML page, no backend, no database, no auth, reading the committed
+  JSON in `data/` to render the real run described above.
+  <!-- DEPLOY_URL: fill in once `vercel --prod` has been run against site/ -->
+  Not yet deployed to a public URL — the page is built and was verified
+  locally (served and checked for console errors) but publishing it
+  requires a Vercel login this environment doesn't have credentials for.
+  Deploy command: `cd site && npx vercel --prod --yes`.
+- **API (`api/`):** not confirmed deployed. `render.yaml` targets
+  Render.com, but no live Render URL was found anywhere in this repo, and
+  the database it would connect to is currently unreachable (see below) —
+  so even if a Render service exists, it cannot be doing real work right
+  now.
+- **Next.js frontend (`frontend/`):** not confirmed deployed. No `.vercel`
+  project link or live URL was found in this repo.
+- **Cloud database:** the Supabase project this repo's `DATABASE_URL` is
+  configured to use is currently unreachable —
+  `psycopg2.OperationalError: ... FATAL: (ENOTFOUND) tenant/user ... not
+  found`. Checking GitHub Actions history directly: **every scheduled run
+  of the "Ingest food enforcement data" workflow since it was created
+  (2026-07-04) has failed**, always on this database connection step.
+  This needs a human with Supabase dashboard access to fix (recreate or
+  unpause the project, update the `DATABASE_URL` secret) — it is not a
+  code problem. Full detail in [`data/README.md`](data/README.md).
 
-#### Hosted database (Supabase)
+## Planned (not built yet)
 
-The same migration sequence runs unchanged against a Supabase project:
+- Publishing the static page above to a real URL (blocked on Vercel
+  credentials, not code — see above).
+- Restoring the cloud database connection and confirming the API/frontend
+  are actually reachable somewhere live.
+- Real Indian district- or locality-level enforcement/violation data.
+  Nothing in this pipeline has one today — FSSAI/FoSCoS publish no open,
+  structured feed (see `docs/FSSAI_INGESTION.md`), and the India-labeled
+  rows historically seeded into this database
+  (`pipeline/seed_enforcement.py`) are synthetic demo data, not real
+  measurements.
+- Running the pipeline on an actual schedule against a reachable
+  database, so the "one real run" above becomes a continuously growing
+  dataset instead of a single snapshot.
+- Everything else this repo has code for but no verified live proof of —
+  auth, search, alerts, admin panel, disputes, B2B API keys, disease
+  burden modeling, and the rest of the `api/routes/` and `frontend/app/`
+  surface. The code exists and has unit test coverage (`pytest tests/`,
+  currently 62 passing), but "code exists and passes unit tests" is not
+  the same claim as "this is running and reachable," and this README
+  only makes the second kind of claim where it's been checked.
 
-- **Use the Session pooler connection string**, not the direct
-  `db.<ref>.supabase.co` host — the direct host is IPv6-only and unreachable
-  on IPv4-only networks. The pooler
-  (`aws-1-<region>.pooler.supabase.com:5432`, user `postgres.<project-ref>`)
-  is IPv4. `?sslmode=require` is mandatory.
-- Load it via `.env` (see below); the API and pipeline both pick it up
-  automatically via `DATABASE_URL`.
-
-```bash
-PGURL="postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
-for f in schema.sql schema_migration_002.sql schema_migration_003.sql schema_migration_004.sql seed_demo.sql; do
-  psql "$PGURL" -f "$f"
-done
-```
-
-### 4. Environment variables
-
-Copy `.env.example` to `.env` (gitignored):
-```bash
-cp .env.example .env
-# DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require
-# JWT_SECRET=change-me
-```
-
-### 5. One-shot demo ingest
-
-To go from an empty Supabase DB to a searchable API without touching OCR or
-Airflow:
-```bash
-psql "$DATABASE_URL" -f schema.sql -f schema_migration_002.sql \
-  -f schema_migration_003.sql -f schema_migration_004.sql -f seed_demo.sql
-python -m pipeline.seed_enforcement
-python -m models.aggregate
-```
-
-### 6. API + web app
-```bash
-uvicorn api.main:app --reload --port 8000
-
-# Next.js frontend
-cd frontend && npm install && npm run dev     # http://localhost:3000
-
-# or the legacy static app:
-python -m http.server 3000 --directory .      # then open http://localhost:3000/index.html
-```
-Search, `/v1/meta/*`, district risk, and disputes are **public read-only
-endpoints** — no login required. JWT auth is only needed for
-account-specific features (subscriptions, API keys, admin).
-
-### 7. Automated data ingestion (real data, runs in the cloud)
-
-`.github/workflows/ingest.yml` runs daily (+ manual trigger) against a
-`DATABASE_URL` repo secret — no laptop required:
-```bash
-gh secret set DATABASE_URL --body "postgresql://postgres.<ref>:<pwd>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
-```
-It chains: openFDA (real US recalls) → AGMARKNET (real Indian
-districts/commodities) → FoSCoS scrape (real Indian recalls, best-effort) →
-`models.aggregate` → `models.disease_burden` → `models.notifications`.
-
-### 8. Tests
-```bash
-pip install pytest rapidfuzz
-python -m pytest tests/ -v
-```
-`.github/workflows/tests.yml` runs the same suite on every push/PR. Coverage
-is `pipeline/stage2_standardise.py` (contaminant/unit/date/geo
-standardisation) and `pipeline/stage3_and_4.py` (dedup hashing + confidence
-scoring) — both testable without a live database.
-
-### 9. Deploying
-- **API** → Render, via [`render.yaml`](render.yaml) (`requirements-api.txt`
-  only, `DATABASE_URL`/`JWT_SECRET`/`FRONTEND_URL` as env vars).
-- **Frontend** → Vercel, via [`vercel.json`](vercel.json).
-- Optional heavier pipeline components (Airflow, S3, Tesseract) are **not**
-  part of the deploy path — they only matter if you're running the FSSAI OCR
-  batch pipeline yourself.
-
-## Data Flow
-
-```
-FSSAI PDFs (OCR)      openFDA RSS          AGMARKNET JSON       FoSCoS (headless browser)
-     │                    │                     │                     │
-     ▼                    ▼                     ▼                     ▼
-Stage 1: Extract → RawRecord         (openFDA/AGMARKNET/FoSCoS write enforcement_records directly)
-     │
-     ▼
-Stage 2: Standardise → StandardisedRecord
-  - Contaminant → canonical name (fuzzy match)
-  - Value → PPB
-  - State/District → Census 2021 canonical
-  - Date → ISO 8601 (ambiguous MM/DD vs DD/MM flagged)
-     │
-     ▼
-Stage 3: Deduplicate → DeduplicatedRecord
-  - Hash: date + lab + commodity + contaminant + value + district
-  - Cross-source duplicates flagged, not deleted
-     │
-     ▼
-Stage 4: Confidence Score → ScoredRecord
-  - Base 0.70, +0.15 manually verified, +0.10 tier-1 lab, +0.05 typical range, -0.10 low OCR
-  - Only ≥ 0.75 used in downstream models
-     │
-     ▼
-PostgreSQL enforcement_records
-     │
-     ▼  (nightly via GitHub Actions, or run manually)
-models.aggregate        → agg_district_commodity_risk, agg_brand_safety_profile
-models.dietary_exposure → daily intake estimates
-models.disease_burden   → Population Attributable Fraction, exposure_alerts
-models.trend_analysis   → Mann-Kendall trend + Sen's slope
-models.codex_benchmark  → FSSAI vs Codex/EU/WHO-JECFA comparison
-models.notifications    → email alerts for matching subscriptions
-```
-
-## Status
-
-**Built and working:**
-- **Pipeline** — Stages 1–4 (extract → standardise → dedup → confidence
-  score), unit-tested (`tests/`). Real live ingesters:
-  `pipeline/sources/openfda.py` (US FDA recalls, no key/OCR) and
-  `pipeline/sources/agmarknet.py` (Indian district/commodity data from
-  data.gov.in), both idempotent. `pipeline/sources/fssai_recall.py` scrapes
-  real FoSCoS recalls via headless Chromium. `pipeline/seed_enforcement.py`
-  provides a one-shot demo dataset for the India district heatmap.
-- **API** — FastAPI with 12+ routers: auth, risk, user, search (+
-  autocomplete), fmcg, insurance, meta, disputes, disease, trends, compare,
-  admin panel, API keys, subscriptions. Search/risk/meta/disputes are public
-  read-only; JWT + API-key auth with tier-based rate limiting gate
-  account-specific features. Every record response includes a `source_url`
-  and `confidence_score`.
-- **Analytics** — computed district/brand risk (Wilson 95% CI), dietary
-  exposure → disease burden (PAF), Codex/EU/WHO benchmark gaps, Mann-Kendall
-  contamination trends, Bayesian supply-chain propagation, Benford's-Law
-  fraud detection, Random Forest district risk (geographic holdout CV).
-- **Frontend** — Next.js app (`frontend/`) with search, map, district
-  detail, compare, alerts, account, admin, methodology pages, plus a legacy
-  single-file `index.html` fallback.
-- **Automation** — `.github/workflows/ingest.yml` (daily ingest → aggregate
-  → notify) and `.github/workflows/tests.yml` (pytest on every push/PR), both
-  against a Supabase Postgres via `DATABASE_URL`.
-- **Trust & safety** — disclaimer banners on every risk/record response,
-  public dispute submission (`POST /v1/disputes/submit`) with admin review
-  queue for fraud/correction flags.
-
-**Honest limitations:**
-- **No open API for Indian district-level contamination data** — it exists
-  only in FSSAI PDFs, so the India heatmap runs on demo records
-  (`pipeline/seed_enforcement.py`) that the aggregation computes over exactly
-  as it would real data. FSSAI no longer publishes structured enforcement
-  data (recalls are JS-rendered/qualitative; "reports" are news clippings).
-  Full investigation + roadmap: [`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md).
-- **Random Forest** trains on the aggregation table but needs more data than
-  the demo set to be meaningful; served scores come from the statistical
-  aggregation, not the RF, until enough records accumulate.
-- **Supply-chain graph** — `supply_chain: []` until `supply_chain_nodes/edges`
-  are populated (no seed graph yet).
-- **Production DB role** — API connects as the DB owner; it does not yet set
-  the `app.user_id` RLS context the restricted `foodsafe_app` role needs.
-- **Disputes → risk feedback loop** — admin review flags/corrects records but
-  does not automatically recompute aggregate scores.
-- **In-memory rate limiting** resets on deploy and doesn't share state across
-  multiple Render instances (API-key usage is persisted; JWT/anonymous is
-  not) — accepted tradeoff pending Redis.
-
-**Not started:**
-- NER fine-tuning; APEDA / state-health scrapers; age-gating / DOB
-  collection.
-- Census-2021 district **polygon** choropleth (the map uses risk-coloured
-  markers, not GeoJSON polygons).
-
-See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for what's left before this is
-production-ready for real users.
+For the fuller technical inventory (data model, security posture, what
+each module does) see `LAUNCH_CHECKLIST.md` and `docs/`.
