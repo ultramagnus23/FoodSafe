@@ -50,14 +50,15 @@ unmodified, for whoever wants to make that call.
 
 ## What is deployed, and where
 
-- **Static execution-record page:** [`site/`](site/) — a single static
-  HTML page, no backend, no database, no auth, reading the committed
-  JSON in `data/` to render the real run described above.
-  <!-- DEPLOY_URL: fill in once `vercel --prod` has been run against site/ -->
-  Not yet deployed to a public URL — the page is built and was verified
-  locally (served and checked for console errors) but publishing it
-  requires a Vercel login this environment doesn't have credentials for.
-  Deploy command: `cd site && npx vercel --prod --yes`.
+- **Static execution-record page:** **live at
+  [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)**
+  — a single static HTML page, no backend, no database, no auth, reading
+  the committed JSON in `data/` to render the real run described above.
+  Deployed via GitHub Pages (`.github/workflows/deploy-pages.yml`), not
+  Vercel — this environment had no Vercel credentials, and GitHub Pages
+  needed none beyond the GitHub access already in use for this repo.
+  Verified live: page loads (HTTP 200), all four tables render the real
+  data, zero console errors.
 - **API (`api/`):** not confirmed deployed. `render.yaml` targets
   Render.com, but no live Render URL was found anywhere in this repo, and
   the database it would connect to is currently unreachable (see below) —
@@ -77,8 +78,6 @@ unmodified, for whoever wants to make that call.
 
 ## Planned (not built yet)
 
-- Publishing the static page above to a real URL (blocked on Vercel
-  credentials, not code — see above).
 - Restoring the cloud database connection and confirming the API/frontend
   are actually reachable somewhere live.
 - Real Indian district- or locality-level enforcement/violation data.
