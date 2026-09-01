@@ -57,9 +57,88 @@ SEARCH_KEYWORDS = [
     "FSSAI enforcement",
     "food samples",
     "Food Safety and Standards Act",
+    "FSSAI",
+    "adulterated milk",
+    "milk adulteration",
+    "food business operator",
+    "unsafe food",
+    "FSSAI inspections",
+    "food license",
+    "food testing",
 ]
 
 _YEAR_RE = re.compile(r"\((\d{4})-(\d{4})\)")
+
+# PDF cell text for State/UT names arrives mangled in inconsistent ways
+# across different answers — multi-line cells joined without a space
+# ("TamilNadu", "AndNicobar"), abbreviations ("A&N Islands", "J&K"), and
+# at least one outright misspelling ("Chattisgarh" for Chhattisgarh,
+# confirmed in AU3459's own table). Without canonicalizing, the same state
+# fragments across three separate source questions instead of merging,
+# which defeats the point of cross-referencing multiple Parliamentary
+# answers. This list is explicit rather than fuzzy-matched — silently
+# guessing at a state name is worse than skipping an unrecognized one.
+_STATE_CANON_RAW: dict[str, str] = {
+    "andamanandnicobarislands": "Andaman and Nicobar Islands",
+    "a&nislands": "Andaman and Nicobar Islands",
+    "andhrapradesh": "Andhra Pradesh",
+    "arunachalpradesh": "Arunachal Pradesh",
+    "assam": "Assam",
+    "bihar": "Bihar",
+    "chandigarh": "Chandigarh",
+    "chhattisgarh": "Chhattisgarh",
+    "chattisgarh": "Chhattisgarh",
+    "dadraandnagarhaveli&daman&diu": "Dadra and Nagar Haveli and Daman and Diu",
+    "dadranh&dd": "Dadra and Nagar Haveli and Daman and Diu",
+    "delhi": "Delhi",
+    "goa": "Goa",
+    "gujarat": "Gujarat",
+    "haryana": "Haryana",
+    "himachalpradesh": "Himachal Pradesh",
+    "jammu&kashmir": "Jammu and Kashmir",
+    "j&k": "Jammu and Kashmir",
+    "jharkhand": "Jharkhand",
+    "karnataka": "Karnataka",
+    "kerala": "Kerala",
+    "ladakh": "Ladakh",
+    "lakshadweep": "Lakshadweep",
+    "lakshwadeep": "Lakshadweep",
+    "madhyapradesh": "Madhya Pradesh",
+    "maharashtra": "Maharashtra",
+    "maharasthra": "Maharashtra",
+    "manipur": "Manipur",
+    "meghalaya": "Meghalaya",
+    "mizoram": "Mizoram",
+    "nagaland": "Nagaland",
+    "orissa": "Odisha",
+    "odisha": "Odisha",
+    "puducherry": "Puducherry",
+    "punjab": "Punjab",
+    "rajasthan": "Rajasthan",
+    "sikkim": "Sikkim",
+    "tamilnadu": "Tamil Nadu",
+    "telangana": "Telangana",
+    "tripura": "Tripura",
+    "uttarpradesh": "Uttar Pradesh",
+    "uttarakhand": "Uttarakhand",
+    "westbengal": "West Bengal",
+}
+
+# Keys above are written human-readably (some contain "&") but the lookup
+# in _canon_state() strips everything but letters before matching — so the
+# dict keys must go through the identical transform, or e.g. "J&K" (key
+# "j&k") would never match a normalized lookup of "jk". Built once here
+# rather than trusting every key above to already be pre-stripped by hand.
+_STATE_CANON: dict[str, str] = {
+    re.sub(r"[^a-z]", "", k): v for k, v in _STATE_CANON_RAW.items()
+}
+
+
+def _canon_state(raw: str) -> str | None:
+    """Normalize a scraped state/UT name to a canonical form, or None if
+    unrecognized (caller should skip the row rather than guess)."""
+    key = re.sub(r"[^a-z]", "", raw.lower())
+    return _STATE_CANON.get(key)
 
 
 def _search(keyword: str, page_size: int = 50) -> list[dict]:
@@ -143,6 +222,10 @@ def parse_state_annexure(pdf_bytes: bytes) -> list[dict]:
         sno = (row[0] or "").strip()
         if not state_raw or not sno.isdigit():
             continue  # header continuation / page-break artifact / Total row
+        state = _canon_state(state_raw)
+        if state is None:
+            logger.warning("unrecognized state/UT name %r — skipping row", state_raw)
+            continue
         for col, year in blocks:
             vals = [(row[col + k] or "").replace(",", "").strip() for k in range(block_width)]
             if not any(vals):
@@ -152,7 +235,7 @@ def parse_state_annexure(pdf_bytes: bytes) -> list[dict]:
             except ValueError:
                 continue
             out.append({
-                "state": state_raw,
+                "state": state,
                 "fiscal_year": year,
                 "samples_analyzed": samples,
                 "civil_cases_decided_penalty": civil,
@@ -160,6 +243,97 @@ def parse_state_annexure(pdf_bytes: bytes) -> list[dict]:
                 "licenses_cancelled": cancelled,
             })
     return out
+
+
+_BARE_YEAR_RE = re.compile(r"\b(20\d{2})[-–](\d{2,4})\b")
+_METRIC_KEYWORDS = [
+    ("licenses_cancelled", ("cancel",)),
+    ("samples_analyzed", ("sample", "analys")),
+    ("civil_cases_decided_penalty", ("civil",)),
+    ("criminal_cases_convictions", ("criminal", "convict")),
+]
+
+
+def _classify_metric(header_text: str) -> str | None:
+    low = header_text.lower()
+    for field, keywords in _METRIC_KEYWORDS:
+        if any(k in low for k in keywords):
+            return field
+    return None
+
+
+def parse_single_metric_annexure(pdf_bytes: bytes) -> list[dict]:
+    """A second, simpler "State/UT x year" shape seen in some answers (e.g.
+    AU4786 "FSSAI Inspections"): no S.No column, no 4-column-per-year
+    block — each year is exactly one column, reporting a single metric
+    (e.g. licenses cancelled), with the metric name only identifiable from
+    the header text (not position), and years written bare ("2021-22")
+    rather than "(2021-2022)". Independent of parse_state_annexure above —
+    tried as a fallback in run(), not a replacement."""
+    import pdfplumber
+
+    all_rows: list[list] = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page in pdf.pages:
+            for table in page.extract_tables():
+                all_rows.extend(table)
+
+    header_idx = None
+    year_cols: list[tuple[int, str, str]] = []  # (col, "YYYY-YYYY", metric_field)
+    for i, row in enumerate(all_rows):
+        if not row or not (row[0] or "").strip().lower().startswith("state"):
+            continue
+        hits = []
+        for j, c in enumerate(row):
+            if j == 0 or not c:
+                continue
+            m = _BARE_YEAR_RE.search(c)
+            if not m:
+                continue
+            yr2 = m.group(2)
+            year = f"{m.group(1)}-{yr2}" if len(yr2) == 4 else f"{m.group(1)}-20{yr2}"
+            metric = _classify_metric(c)
+            if metric:
+                hits.append((j, year, metric))
+        if len(hits) >= 2:
+            header_idx = i
+            year_cols = hits
+            break
+    if header_idx is None:
+        return []
+
+    # Keyed by (state, fiscal_year) so multiple single-metric columns for
+    # the same year (if a table ever has them) merge into one row instead
+    # of separately-inserted rows clobbering each other via upsert.
+    merged: dict[tuple[str, str], dict] = {}
+    for row in all_rows[header_idx + 1:]:
+        if not row:
+            continue
+        state_raw = (row[0] or "").replace("\n", " ").strip()
+        if not state_raw or not re.search(r"[A-Za-z]{2,}", state_raw) or state_raw.lower().startswith("total"):
+            continue
+        state = _canon_state(state_raw)
+        if state is None:
+            logger.warning("unrecognized state/UT name %r — skipping row", state_raw)
+            continue
+        for col, year, metric in year_cols:
+            if col >= len(row):
+                continue
+            val = (row[col] or "").replace(",", "").strip()
+            if not val:
+                continue
+            try:
+                num = int(val)
+            except ValueError:
+                continue
+            key = (state, year)
+            entry = merged.setdefault(key, {
+                "state": state, "fiscal_year": year,
+                "samples_analyzed": None, "civil_cases_decided_penalty": None,
+                "criminal_cases_convictions": None, "licenses_cancelled": None,
+            })
+            entry[metric] = num
+    return list(merged.values())
 
 
 def ingest(conn, question: dict, rows: list[dict]) -> int:
@@ -206,7 +380,7 @@ def run() -> dict:
                 continue
             try:
                 pdf_bytes = _download(url)
-                rows = parse_state_annexure(pdf_bytes)
+                rows = parse_state_annexure(pdf_bytes) or parse_single_metric_annexure(pdf_bytes)
             except Exception as e:  # noqa: BLE001
                 logger.warning("failed to fetch/parse Q%s (%s): %s", q.get("quesNo"), url, e)
                 summary["skipped"] += 1
