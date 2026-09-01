@@ -80,6 +80,15 @@ jobs:
           python -m playwright install --with-deps chromium
           python -m pipeline.run_and_log fssai_labs
 
+      - name: Refresh Lok Sabha FSSAI enforcement Q&A data (real state-wise data)
+        id: loksabha_qa
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # new Parliament questions appear a few times a year, not daily
+        run: |
+          pip install --quiet pdfplumber
+          python -m pipeline.run_and_log loksabha_qa
+
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'
         env:

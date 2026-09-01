@@ -64,6 +64,18 @@ class LabOut(BaseModel):
     accreditation_ref: Optional[str]
     source_url: Optional[str]
 
+class StateEnforcementOut(BaseModel):
+    state: str
+    fiscal_year: str
+    samples_analyzed: Optional[int]
+    civil_cases_decided_penalty: Optional[int]
+    criminal_cases_convictions: Optional[int]
+    licenses_cancelled: Optional[int]
+    source_question_no: int
+    source_question_subject: Optional[str]
+    answered_date: Optional[str]
+    source_url: str
+
 @meta_router.get("/districts", response_model=list[DistrictOut])
 async def list_districts():
     pool = get_pool()
@@ -139,6 +151,29 @@ async def list_labs(state: Optional[str] = None, tier: Optional[int] = None):
             state, tier,
         )
     return [LabOut(**dict(r)) for r in rows]
+
+@meta_router.get("/state-enforcement", response_model=list[StateEnforcementOut])
+async def list_state_enforcement(state: Optional[str] = None, fiscal_year: Optional[str] = None):
+    """Real State/UT x fiscal-year FSSAI enforcement counts (samples
+    analysed, civil/criminal cases, license cancellations), sourced from
+    Lok Sabha written answers — not FSSAI's own portal, which publishes no
+    structured state-level data. See schema_migration_013.sql and
+    pipeline/sources/loksabha_qa.py. Two different Parliamentary questions
+    can each independently report a given (state, year) — both are kept,
+    distinguished by source_question_no, rather than merged."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT state, fiscal_year, samples_analyzed, civil_cases_decided_penalty,
+                      criminal_cases_convictions, licenses_cancelled, source_question_no,
+                      source_question_subject, answered_date::text, source_url
+               FROM state_enforcement_annual
+               WHERE ($1::text IS NULL OR state ILIKE $1)
+                 AND ($2::text IS NULL OR fiscal_year = $2)
+               ORDER BY state, fiscal_year DESC""",
+            state, fiscal_year,
+        )
+    return [StateEnforcementOut(**dict(r)) for r in rows]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():

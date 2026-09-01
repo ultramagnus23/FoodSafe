@@ -32,6 +32,7 @@ SOURCES = {
     "local_news":           ("pipeline.sources.local_news",           "run",                  "limit",          True),
     "fssai_commissioners":  ("pipeline.sources.fssai_commissioners",  "run",                  None,             True),
     "fssai_labs":           ("pipeline.sources.fssai_labs",           "run",                  None,             True),
+    "loksabha_qa":          ("pipeline.sources.loksabha_qa",          "run",                  None,             True),
 }
 
 # Sources where zero rows ingested is a known, accepted outcome (documented

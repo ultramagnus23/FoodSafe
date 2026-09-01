@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useCommissioners, useLabs } from "@/lib/api/directory";
-import type { CommissionerOut, LabOut } from "@/lib/api/types";
+import { useCommissioners, useLabs, useStateEnforcement } from "@/lib/api/directory";
+import type { CommissionerOut, LabOut, StateEnforcementOut } from "@/lib/api/types";
 
 const TIER_LABEL: Record<number, string> = {
   1: "National reference / NABL-accredited",
@@ -72,13 +72,39 @@ function LabRow({ l }: { l: LabOut }) {
   );
 }
 
+function EnforcementRow({ r }: { r: StateEnforcementOut }) {
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="py-2 pr-3 text-sm font-medium text-ink">{r.state}</td>
+      <td className="py-2 pr-3 text-sm text-provenance">{r.fiscal_year}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{r.samples_analyzed ?? "—"}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{r.civil_cases_decided_penalty ?? "—"}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{r.criminal_cases_convictions ?? "—"}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{r.licenses_cancelled ?? "—"}</td>
+      <td className="py-2 text-right">
+        <a
+          className="text-xs text-provenance underline"
+          href={r.source_url}
+          target="_blank"
+          rel="noreferrer"
+          title={r.source_question_subject ?? undefined}
+        >
+          LS Q{r.source_question_no}
+        </a>
+      </td>
+    </tr>
+  );
+}
+
 export default function DirectoryPage() {
   const [commissionerState, setCommissionerState] = useState("");
   const [labState, setLabState] = useState("");
   const [labTier, setLabTier] = useState<number | undefined>(undefined);
+  const [enfState, setEnfState] = useState("");
 
   const commissioners = useCommissioners(commissionerState || undefined);
   const labs = useLabs(labState || undefined, labTier);
+  const enforcement = useStateEnforcement(enfState || undefined);
 
   const commissionerStates = useMemo(
     () => (commissioners.data ?? []).map((c) => c.state).sort(),
@@ -88,13 +114,59 @@ export default function DirectoryPage() {
     () => Array.from(new Set((labs.data ?? []).map((l) => l.state).filter((s): s is string => !!s))).sort(),
     [labs.data]
   );
+  const enfStates = useMemo(
+    () => Array.from(new Set((enforcement.data ?? []).map((r) => r.state))).sort(),
+    [enforcement.data]
+  );
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="mb-2 font-display text-4xl font-light">Directory</h1>
       <p className="mb-8 text-provenance">
-        Who to contact and where samples get tested — real FSSAI-published directories, refreshed daily.
+        Real State/UT enforcement numbers, who to contact, and where samples get tested — sourced from Parliament
+        and FSSAI&apos;s own published directories, refreshed regularly.
       </p>
+
+      <section className="mb-12">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-2xl font-normal">State Enforcement (Lok Sabha)</h2>
+          {enfStates.length > 0 && <StatePicker value={enfState} onChange={setEnfState} states={enfStates} />}
+        </div>
+        <p className="mb-4 text-sm text-provenance">
+          Source: written answers to Lok Sabha (Parliament) questions to the Ministry of Health &amp; Family
+          Welfare — FSSAI itself publishes no structured state-level enforcement data; this is the same
+          government, disclosed through a different, unauthenticated public channel. Two questions can each
+          independently report the same state/year, shown separately rather than merged.
+        </p>
+        {enforcement.isLoading ? (
+          <p className="text-provenance">Loading…</p>
+        ) : enforcement.error ? (
+          <p className="text-provenance">Could not load enforcement data.</p>
+        ) : !enforcement.data || enforcement.data.length === 0 ? (
+          <p className="text-provenance">No records.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line bg-slab px-4">
+            <table className="w-full min-w-[640px]">
+              <thead>
+                <tr className="border-b border-line text-left text-xs uppercase text-provenance">
+                  <th className="py-2 pr-3 font-medium">State/UT</th>
+                  <th className="py-2 pr-3 font-medium">FY</th>
+                  <th className="py-2 pr-3 text-right font-medium">Samples analyzed</th>
+                  <th className="py-2 pr-3 text-right font-medium">Civil cases (penalty)</th>
+                  <th className="py-2 pr-3 text-right font-medium">Criminal convictions</th>
+                  <th className="py-2 pr-3 text-right font-medium">Licenses cancelled</th>
+                  <th className="py-2 text-right font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {enforcement.data.map((r, i) => (
+                  <EnforcementRow key={`${r.state}-${r.fiscal_year}-${r.source_question_no}-${i}`} r={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="mb-12">
         <div className="mb-4 flex items-center justify-between">

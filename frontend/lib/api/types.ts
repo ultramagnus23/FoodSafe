@@ -211,6 +211,19 @@ export interface CommissionerOut {
   source_url: string;
 }
 
+export interface StateEnforcementOut {
+  state: string;
+  fiscal_year: string;
+  samples_analyzed: number | null;
+  civil_cases_decided_penalty: number | null;
+  criminal_cases_convictions: number | null;
+  licenses_cancelled: number | null;
+  source_question_no: number;
+  source_question_subject: string | null;
+  answered_date: string | null;
+  source_url: string;
+}
+
 export interface LabOut {
   id: number;
   name: string;
