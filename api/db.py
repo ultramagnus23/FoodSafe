@@ -52,12 +52,18 @@ def _connect_kwargs() -> dict:
     host = u.hostname or ""
     if "supabase.com" in host or "sslmode=require" in _ASYNCPG_URL:
         import ssl as _ssl
-        # Verify the server cert against the system CA store (Supabase's
-        # pooler presents a publicly-trusted cert) — do NOT disable
-        # verification here. An unverified TLS context lets any
-        # network-level attacker between this process and Supabase silently
-        # MITM every query, including login credentials and JWTs.
-        ctx = _ssl.create_default_context()
+        # Verify the server cert against certifi's bundled root CAs, not the
+        # OS trust store — do NOT disable verification here. An unverified
+        # TLS context lets any network-level attacker between this process
+        # and Supabase silently MITM every query, including login
+        # credentials and JWTs. We use certifi explicitly (rather than
+        # ssl.create_default_context()'s OS-default paths) because minimal
+        # container images (e.g. Render's Python runtime) often ship without
+        # a populated system CA bundle, which surfaces as a misleading
+        # "self-signed certificate in certificate chain" error even though
+        # Supabase's pooler cert is publicly trusted.
+        import certifi
+        ctx = _ssl.create_default_context(cafile=certifi.where())
         kwargs["ssl"] = ctx
     return kwargs
 
