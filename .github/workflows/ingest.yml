@@ -70,6 +70,16 @@ jobs:
           python -m playwright install --with-deps chromium
           python -m pipeline.run_and_log fssai_commissioners
 
+      - name: Refresh FSSAI food testing lab directories (PDF table extraction)
+        id: fssai_labs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # lab directory, not core enforcement data — don't fail the run
+        run: |
+          pip install --quiet playwright pdfplumber
+          python -m playwright install --with-deps chromium
+          python -m pipeline.run_and_log fssai_labs
+
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'
         env:
