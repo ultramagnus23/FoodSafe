@@ -55,6 +55,15 @@ class CommissionerOut(BaseModel):
     nodal_officer: Optional[str]
     source_url: str
 
+class LabOut(BaseModel):
+    id: int
+    name: str
+    tier: int
+    state: Optional[str]
+    accreditation: Optional[str]
+    accreditation_ref: Optional[str]
+    source_url: Optional[str]
+
 @meta_router.get("/districts", response_model=list[DistrictOut])
 async def list_districts():
     pool = get_pool()
@@ -111,6 +120,25 @@ async def list_commissioners(state: Optional[str] = None):
             state,
         )
     return [CommissionerOut(**dict(r)) for r in rows]
+
+@meta_router.get("/labs", response_model=list[LabOut])
+async def list_labs(state: Optional[str] = None, tier: Optional[int] = None):
+    """FSSAI-notified food testing laboratories — NABL-accredited Primary
+    labs (tier 1), statutory Referral labs (tier 2), and National Reference
+    Labs (tier 1) — plus a handful of pre-existing synthetic demo rows.
+    source_url IS NULL is the discriminator for those synthetic rows; see
+    schema_migration_012.sql and pipeline/sources/fssai_labs.py."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT id, name, tier, state, accreditation, accreditation_ref, source_url
+               FROM labs
+               WHERE ($1::text IS NULL OR state ILIKE $1)
+                 AND ($2::int IS NULL OR tier = $2)
+               ORDER BY state NULLS LAST, name""",
+            state, tier,
+        )
+    return [LabOut(**dict(r)) for r in rows]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():

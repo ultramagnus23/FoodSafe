@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/compare", label: "Compare" },
   { href: "/alerts", label: "Alerts" },
   { href: "/search", label: "Search" },
+  { href: "/directory", label: "Directory" },
   { href: "/report", label: "Report an Issue" },
   { href: "/methodology", label: "Methodology" },
 ];

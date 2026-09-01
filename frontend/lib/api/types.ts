@@ -201,6 +201,26 @@ export interface LocalityOut {
   longitude: number | null;
 }
 
+export interface CommissionerOut {
+  state: string;
+  commissioner_name: string | null;
+  address: string | null;
+  contact: string | null;
+  email: string | null;
+  nodal_officer: string | null;
+  source_url: string;
+}
+
+export interface LabOut {
+  id: number;
+  name: string;
+  tier: number;
+  state: string | null;
+  accreditation: string | null;
+  accreditation_ref: string | null;
+  source_url: string | null;
+}
+
 export interface CommodityOut {
   id: number;
   name: string;
