@@ -60,6 +60,16 @@ jobs:
           python -m playwright install --with-deps chromium
           python -m pipeline.run_and_log fssai_recall --limit 100
 
+      - name: Refresh FSSAI state commissioner directory (headless browser)
+        id: fssai_commissioners
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # contact directory, not core enforcement data — don't fail the run
+        run: |
+          pip install --quiet playwright
+          python -m playwright install --with-deps chromium
+          python -m pipeline.run_and_log fssai_commissioners
+
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'
         env:

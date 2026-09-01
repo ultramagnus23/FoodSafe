@@ -46,6 +46,15 @@ class LocalityOut(BaseModel):
     latitude: Optional[float]
     longitude: Optional[float]
 
+class CommissionerOut(BaseModel):
+    state: str
+    commissioner_name: Optional[str]
+    address: Optional[str]
+    contact: Optional[str]
+    email: Optional[str]
+    nodal_officer: Optional[str]
+    source_url: str
+
 @meta_router.get("/districts", response_model=list[DistrictOut])
 async def list_districts():
     pool = get_pool()
@@ -84,6 +93,24 @@ async def list_localities(district_id: Optional[int] = None, pincode: Optional[s
         )
         for r in rows
     ]
+
+@meta_router.get("/commissioners", response_model=list[CommissionerOut])
+async def list_commissioners(state: Optional[str] = None):
+    """Real State/UT Commissioner of Food Safety contact directory, scraped
+    from fssai.gov.in — see schema_migration_011.sql and
+    pipeline/sources/fssai_commissioners.py. Escalation/contact metadata,
+    not enforcement data — who to reach in a given state, not what was found
+    there."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT state, commissioner_name, address, contact, email, nodal_officer, source_url
+               FROM state_commissioners
+               WHERE ($1::text IS NULL OR state ILIKE $1)
+               ORDER BY state""",
+            state,
+        )
+    return [CommissionerOut(**dict(r)) for r in rows]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():

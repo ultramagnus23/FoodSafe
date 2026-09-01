@@ -26,10 +26,11 @@ logger = logging.getLogger("foodsafe.run_and_log")
 # (module path, ingest function name, kwarg name for --limit, whether the
 # function opens its own DB connection or expects one passed in)
 SOURCES = {
-    "openfda":      ("pipeline.sources.openfda",      "run_openfda_ingest",   "limit_per_term", False),
-    "agmarknet":    ("pipeline.sources.agmarknet",    "run_agmarknet_ingest", "limit",          False),
-    "fssai_recall": ("pipeline.sources.fssai_recall", "run",                  "limit",          True),
-    "local_news":   ("pipeline.sources.local_news",   "run",                  "limit",          True),
+    "openfda":              ("pipeline.sources.openfda",              "run_openfda_ingest",   "limit_per_term", False),
+    "agmarknet":            ("pipeline.sources.agmarknet",            "run_agmarknet_ingest", "limit",          False),
+    "fssai_recall":         ("pipeline.sources.fssai_recall",         "run",                  "limit",          True),
+    "local_news":           ("pipeline.sources.local_news",           "run",                  "limit",          True),
+    "fssai_commissioners":  ("pipeline.sources.fssai_commissioners",  "run",                  None,             True),
 }
 
 # Sources where zero rows ingested is a known, accepted outcome (documented
@@ -71,13 +72,14 @@ def main() -> None:
     status = "failed"
     rows = 0
     error_detail = None
+    kwargs = {limit_kwarg: args.limit} if limit_kwarg else {}
     try:
         if owns_connection:
-            summary = func(**{limit_kwarg: args.limit})
+            summary = func(**kwargs)
         else:
             conn = pg_connect()
             try:
-                summary = func(conn, **{limit_kwarg: args.limit})
+                summary = func(conn, **kwargs)
             finally:
                 conn.close()
 
