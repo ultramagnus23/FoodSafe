@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import type { CommissionerOut, LabOut, StateEnforcementOut } from "./types";
+import type { CommissionerOut, LabOut, StateEnforcementOut, NationalEnforcementOut } from "./types";
 
 // Both endpoints are public (no auth) — see api/other_routes.py.
 export function useCommissioners(state?: string) {
@@ -32,6 +32,17 @@ export function useStateEnforcement(state?: string) {
   return useQuery({
     queryKey: ["meta-state-enforcement", state ?? null],
     queryFn: () => apiFetch<StateEnforcementOut[]>(`/v1/meta/state-enforcement${qs}`, { auth: false }),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+// Real, national-level FSSAI enforcement metrics, one row per fiscal
+// year, sourced from FSSAI's own Annual Report PDFs — see
+// api/other_routes.py's list_national_enforcement docstring.
+export function useNationalEnforcement() {
+  return useQuery({
+    queryKey: ["meta-national-enforcement"],
+    queryFn: () => apiFetch<NationalEnforcementOut[]>("/v1/meta/national-enforcement", { auth: false }),
     staleTime: 60 * 60 * 1000,
   });
 }

@@ -1,8 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useCommissioners, useLabs, useStateEnforcement } from "@/lib/api/directory";
-import type { CommissionerOut, LabOut, StateEnforcementOut } from "@/lib/api/types";
+import { useCommissioners, useLabs, useStateEnforcement, useNationalEnforcement } from "@/lib/api/directory";
+import type { CommissionerOut, LabOut, StateEnforcementOut, NationalEnforcementOut } from "@/lib/api/types";
+
+function fmtNum(n: number | null): string {
+  return n == null ? "—" : n.toLocaleString("en-IN");
+}
+function fmtRupees(n: number | null): string {
+  return n == null ? "—" : `₹${n.toLocaleString("en-IN")}`;
+}
 
 const TIER_LABEL: Record<number, string> = {
   1: "National reference / NABL-accredited",
@@ -72,6 +79,36 @@ function LabRow({ l }: { l: LabOut }) {
   );
 }
 
+function NationalEnforcementRow({ r }: { r: NationalEnforcementOut }) {
+  const civilOutcome = r.civil_cases_convictions ?? r.civil_cases_decided;
+  const civilLabel = r.civil_cases_convictions != null ? "convicted" : "decided";
+  const criminalOutcome = r.criminal_cases_convictions ?? r.criminal_cases_decided;
+  const criminalLabel = r.criminal_cases_convictions != null ? "convicted" : "decided";
+  const summedPenalty = (r.civil_penalty_amount ?? 0) + (r.criminal_penalty_amount ?? 0) || null;
+  const penalty = r.total_penalty_amount ?? summedPenalty;
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="py-2 pr-3 text-sm font-medium text-ink">{r.fiscal_year}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtNum(r.samples_analyzed)}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtNum(r.samples_non_conforming)}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">
+        {fmtNum(r.civil_cases_launched)}
+        <span className="ml-1 text-xs text-provenance">({fmtNum(civilOutcome)} {civilLabel})</span>
+      </td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">
+        {fmtNum(r.criminal_cases_launched)}
+        <span className="ml-1 text-xs text-provenance">({fmtNum(criminalOutcome)} {criminalLabel})</span>
+      </td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtRupees(penalty)}</td>
+      <td className="py-2 text-right">
+        <a className="text-xs text-provenance underline" href={r.source_url} target="_blank" rel="noreferrer">
+          Annual Report
+        </a>
+      </td>
+    </tr>
+  );
+}
+
 function EnforcementRow({ r }: { r: StateEnforcementOut }) {
   return (
     <tr className="border-b border-line last:border-0">
@@ -105,6 +142,7 @@ export default function DirectoryPage() {
   const commissioners = useCommissioners(commissionerState || undefined);
   const labs = useLabs(labState || undefined, labTier);
   const enforcement = useStateEnforcement(enfState || undefined);
+  const national = useNationalEnforcement();
 
   const commissionerStates = useMemo(
     () => (commissioners.data ?? []).map((c) => c.state).sort(),
@@ -126,6 +164,46 @@ export default function DirectoryPage() {
         Real State/UT enforcement numbers, who to contact, and where samples get tested — sourced from Parliament
         and FSSAI&apos;s own published directories, refreshed regularly.
       </p>
+
+      <section className="mb-12">
+        <h2 className="mb-4 font-display text-2xl font-normal">National Enforcement (FSSAI Annual Reports)</h2>
+        <p className="mb-4 text-sm text-provenance">
+          Source: each fiscal year&apos;s FSSAI Annual Report, &quot;Progress on enforcement metrics&quot; table —
+          FSSAI&apos;s own annual publication, not a third party or Parliament. Report format changed over the
+          years (some years report case outcomes as &quot;decided&quot;, others as &quot;convicted&quot; — these
+          are shown separately, not merged, since they are not the same claim). Only years with a
+          reasonably-sized PDF have been ingested so far; several recent years run 130–600MB for one document
+          and are not yet included.
+        </p>
+        {national.isLoading ? (
+          <p className="text-provenance">Loading…</p>
+        ) : national.error ? (
+          <p className="text-provenance">Could not load national enforcement data.</p>
+        ) : !national.data || national.data.length === 0 ? (
+          <p className="text-provenance">No records.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line bg-slab px-4">
+            <table className="w-full min-w-[720px]">
+              <thead>
+                <tr className="border-b border-line text-left text-xs uppercase text-provenance">
+                  <th className="py-2 pr-3 font-medium">FY</th>
+                  <th className="py-2 pr-3 text-right font-medium">Samples analyzed</th>
+                  <th className="py-2 pr-3 text-right font-medium">Non-conforming</th>
+                  <th className="py-2 pr-3 text-right font-medium">Civil cases</th>
+                  <th className="py-2 pr-3 text-right font-medium">Criminal cases</th>
+                  <th className="py-2 pr-3 text-right font-medium">Penalty</th>
+                  <th className="py-2 text-right font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {national.data.map((r) => (
+                  <NationalEnforcementRow key={r.fiscal_year} r={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="mb-12">
         <div className="mb-4 flex items-center justify-between">

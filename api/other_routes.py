@@ -64,6 +64,25 @@ class LabOut(BaseModel):
     accreditation_ref: Optional[str]
     source_url: Optional[str]
 
+class NationalEnforcementOut(BaseModel):
+    fiscal_year: str
+    samples_analyzed: Optional[int]
+    samples_non_conforming: Optional[int]
+    non_conforming_unsafe: Optional[int]
+    non_conforming_substandard: Optional[int]
+    non_conforming_labelling: Optional[int]
+    civil_cases_launched: Optional[int]
+    civil_cases_decided: Optional[int]
+    civil_cases_convictions: Optional[int]
+    civil_penalty_amount: Optional[int]
+    criminal_cases_launched: Optional[int]
+    criminal_cases_decided: Optional[int]
+    criminal_cases_convictions: Optional[int]
+    criminal_penalty_amount: Optional[int]
+    criminal_acquittals: Optional[int]
+    total_penalty_amount: Optional[int]
+    source_url: str
+
 class StateEnforcementOut(BaseModel):
     state: str
     fiscal_year: str
@@ -174,6 +193,28 @@ async def list_state_enforcement(state: Optional[str] = None, fiscal_year: Optio
             state, fiscal_year,
         )
     return [StateEnforcementOut(**dict(r)) for r in rows]
+
+@meta_router.get("/national-enforcement", response_model=list[NationalEnforcementOut])
+async def list_national_enforcement():
+    """Real, national-level FSSAI enforcement metrics, one row per fiscal
+    year, sourced directly from each year's FSSAI Annual Report PDF's own
+    "Progress on enforcement metrics" table (not a third party, not
+    Parliament — FSSAI's own annual publication). See
+    schema_migration_014.sql and pipeline/sources/fssai_annual_report.py.
+    Some columns are null for years where that report didn't break out
+    that particular figure (report format changed over the years)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT fiscal_year, samples_analyzed, samples_non_conforming, non_conforming_unsafe,
+                      non_conforming_substandard, non_conforming_labelling, civil_cases_launched,
+                      civil_cases_decided, civil_cases_convictions, civil_penalty_amount,
+                      criminal_cases_launched, criminal_cases_decided, criminal_cases_convictions,
+                      criminal_penalty_amount, criminal_acquittals, total_penalty_amount, source_url
+               FROM national_enforcement_annual
+               ORDER BY fiscal_year"""
+        )
+    return [NationalEnforcementOut(**dict(r)) for r in rows]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():

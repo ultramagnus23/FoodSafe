@@ -89,6 +89,15 @@ jobs:
           pip install --quiet pdfplumber
           python -m pipeline.run_and_log loksabha_qa
 
+      - name: Refresh FSSAI Annual Report national enforcement metrics
+        id: fssai_annual_report
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # annual reports change once a year — never a real regression signal
+        run: |
+          pip install --quiet pdfplumber
+          python -m pipeline.run_and_log fssai_annual_report
+
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'
         env:

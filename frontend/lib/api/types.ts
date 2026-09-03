@@ -201,6 +201,26 @@ export interface LocalityOut {
   longitude: number | null;
 }
 
+export interface NationalEnforcementOut {
+  fiscal_year: string;
+  samples_analyzed: number | null;
+  samples_non_conforming: number | null;
+  non_conforming_unsafe: number | null;
+  non_conforming_substandard: number | null;
+  non_conforming_labelling: number | null;
+  civil_cases_launched: number | null;
+  civil_cases_decided: number | null;
+  civil_cases_convictions: number | null;
+  civil_penalty_amount: number | null;
+  criminal_cases_launched: number | null;
+  criminal_cases_decided: number | null;
+  criminal_cases_convictions: number | null;
+  criminal_penalty_amount: number | null;
+  criminal_acquittals: number | null;
+  total_penalty_amount: number | null;
+  source_url: string;
+}
+
 export interface CommissionerOut {
   state: string;
   commissioner_name: string | null;
