@@ -20,8 +20,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Hand-maintained list: the full requirements.txt pulls Airflow, Playwright
+      # and spaCy models, which is minutes of install time for a suite that needs
+      # none of it. The cost is that this list drifts when a pipeline module gains
+      # an import — which is exactly what happened: beautifulsoup4 (via
+      # pipeline/sources/local_news.py) was missing, so tests/test_local_news.py
+      # failed to import and pytest exited 2 at collection on every push from
+      # 2026-09-01 to 2026-09-11. Only 47 of 62 tests were being collected.
+      #
+      # If you add an import to a pipeline/ or api/ module that the tests reach,
+      # add it here. Verified 2026-09-11 in a clean venv with exactly this list:
+      # 62 passed.
       - name: Install test dependencies
-        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image
+        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image beautifulsoup4 dateparser python-dotenv pdfplumber pydantic
 
       - name: Run tests
         run: python -m pytest tests/ -v
