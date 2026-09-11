@@ -62,16 +62,31 @@ CORE_TABLES = [
 
 
 def migration_files() -> list[Path]:
-    """schema.sql first, then schema_migration_NNN.sql sorted numerically."""
+    """
+    schema.sql, then reference geography, then schema_migration_NNN.sql in
+    numeric order.
+
+    schema_reference_districts.sql must run BEFORE the migrations: 009 and 010
+    attach their locality seeds to districts by name, and on a real-only
+    database those districts do not exist until this file creates them. Run it
+    afterwards and both locality seeds silently insert zero rows. See that
+    file's header for the full explanation.
+    """
     base = REPO_ROOT / "schema.sql"
     if not base.exists():
         sys.exit(f"schema.sql not found at {base} — run this from the repo.")
 
-    migrations = sorted(
+    ordered = [base]
+
+    reference = REPO_ROOT / "schema_reference_districts.sql"
+    if reference.exists():
+        ordered.append(reference)
+
+    ordered += sorted(
         REPO_ROOT.glob("schema_migration_*.sql"),
         key=lambda p: int(re.search(r"(\d+)", p.name).group(1)),
     )
-    return [base] + migrations
+    return ordered
 
 
 def connect(url: str):

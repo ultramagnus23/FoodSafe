@@ -61,10 +61,29 @@ export DATABASE_URL="<the Session pooler URI from step 1>"
 python -m scripts.bootstrap_db
 ```
 
-Applies `schema.sql` plus all 13 `schema_migration_*.sql` files in numeric order
-(there is no `001`). Expect **39 tables**. Safe to re-run — already-applied files
+Applies `schema.sql`, then `schema_reference_districts.sql`, then all 13
+`schema_migration_*.sql` files in numeric order (there is no `001`). Expect
+**39 tables** and **73 localities**. Safe to re-run — already-applied files
 report `present` rather than failing, so a run interrupted by a network drop can
 simply be repeated.
+
+The reference-districts file runs before the migrations for a reason worth
+knowing, because it fails silently rather than loudly. Migrations 009 and 010
+attach ~70 real localities (India Post pincodes and centroids) to districts by
+name — Mumbai, Delhi, Bengaluru, Chennai, Pune. On a real-only database the
+districts table holds whatever AGMARKNET returned that day, which on 2026-09-11
+was 21 districts across Punjab, Kerala, Andhra Pradesh and elsewhere, with none
+of those five cities. Every locality INSERT matched nothing and seeded **zero**
+rows, with no error — taking `/v1/meta/localities`, the pincode resolution on
+`POST /v1/reports`, and the report form's locality field down with it. Seeding
+the five reference rows first fixes this in a single pass (verified: 73
+localities, stable across three consecutive runs).
+
+Those five rows are real reference geography — real districts, real centroids —
+in the same category as the FSSAI lab directory. They assert that a place
+exists, not that anything was measured there, and they add no record, no test
+result and no risk score. A district with no records still aggregates to
+nothing, which is exactly right.
 
 Check without changing anything:
 
@@ -94,12 +113,12 @@ Measured on a clean database on 2026-09-11:
 
 | Source | Result |
 |---|---|
-| openFDA | 45 records inserted from 135 fetched (87 skipped: no commodity mapping) |
+| openFDA | 119 records inserted (`--limit 200`) |
 | AGMARKNET | 21 districts, 32 commodities |
 | Lok Sabha Q&A | **350 rows** of real state-wise enforcement |
 | FSSAI Annual Report | 3 fiscal years (2019-20 → 2021-22) |
-| FSSAI labs | 203 inserted, 40 updated |
-| `models.aggregate` | 45 brand rows, **0 district rows** |
+| FSSAI labs | 215 inserted |
+| `models.aggregate` | 119 brand rows, **0 district rows** |
 | `models.disease_burden` | **0 estimates** (0 combinations even eligible) |
 
 **A production database built only from real sources has an empty India risk map
@@ -107,29 +126,37 @@ and zero disease-burden estimates.** This is not a bug. openFDA records are US
 geography, and no source in this pipeline publishes Indian district-level
 contamination measurements — that is the central finding of the paper.
 
-The populated Mumbai map, the locality data and the lead-in-chilli alert come from
-`seed_demo.sql` and `pipeline/seed_enforcement.py`, which are **synthetic**.
+The populated risk map and the lead-in-chilli alert come from `seed_demo.sql`
+and `pipeline/seed_enforcement.py`, which are **synthetic**. The locality layer
+is not among them — those pincodes and centroids are real India Post data and
+are loaded by step 2 on a real-only build.
 
-So decide deliberately:
+### Decision: real-only (2026-09-11)
 
-- **Real-only** — honest, but the map and disease pages are empty. Correct for
-  anything a reviewer will see.
-- **Real + synthetic demo seed** — a fuller-looking demo. If you do this, the
-  synthetic rows must stay labelled. They are distinguishable only by the
-  `fssai.gov.in/demo/...` pattern in `source_url`, which is exactly the
-  indistinguishability problem the paper documents. The API already exposes a
-  `real_count` provenance field for this purpose — make sure any demo UI shows it.
+**This deployment loads no synthetic data.** `seed_demo.sql` and
+`pipeline/seed_enforcement.py` are not run. Do not run them against the
+production database.
 
-To add the demo seed:
+The consequence is deliberate and must not be treated as a bug to fix later:
+the district risk map has no risk markers, and the disease pages return no
+estimates. The paper's central claim is that India publishes no accessible
+district-level contamination data. An instance that demonstrates exactly that
+is the honest artifact; one padded with synthetic records to look fuller would
+undercut the argument it exists to support.
 
-```bash
-psql "$DATABASE_URL" -f seed_demo.sql
-python -m pipeline.seed_enforcement
-python -m models.aggregate
-python -m models.disease_burden compute_all
-```
+Verified on a real-only instance the same day: the UI states this rather than
+implying safety. `components/ui/RiskBadge.tsx` renders "Insufficient data" in a
+neutral colour and explicitly never renders a score when
+`inference_type = insufficient_data`; `components/LeafletMap.tsx` gates marker
+colour on `risk_score != null` and draws no-data districts in a distinct grey.
+The map legend says so in as many words: *"Districts with no data are shown as
+a distinct grey dashed marker, never as zero or low risk."*
 
-Do not present a synthetic-seeded instance as real data.
+**Demo the `/directory` page, not `/map`.** Under real-only, `/directory` is
+the surface carrying real content — FSSAI Annual Report enforcement metrics for
+three fiscal years (1,18,775 samples analysed in 2019-20, ₹56.28 crore in civil
+penalties) and the Lok Sabha state-wise table. `/map` is legitimately, and
+visibly, empty.
 
 ---
 
