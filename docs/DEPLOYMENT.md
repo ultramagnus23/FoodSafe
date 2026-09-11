@@ -162,16 +162,38 @@ visibly, empty.
 
 ## 4. Deploy the API to Render **[you]**
 
-`render.yaml` is already correct — Render will detect it as a Blueprint.
+**Blueprints are a paid feature — do not use `render.yaml` on the free plan.**
+Create the service by hand instead; the settings below reproduce `render.yaml`
+exactly, so that file stays useful as the reference for what to type (and for
+a future paid plan).
 
-1. **New → Blueprint**, point it at this repo, pick `main`.
-2. Set these environment variables (all are `sync: false`, so Render will prompt):
+**New → Web Service → connect this repo → branch `main`**, then:
+
+| Setting | Value |
+|---|---|
+| Language / Runtime | `Python 3` |
+| Root Directory | *(leave blank — `api/` is at the repo root)* |
+| Build Command | `pip install -r requirements-api.txt` |
+| Start Command | `uvicorn api.main:app --host 0.0.0.0 --port $PORT` |
+| Instance Type | `Free` |
+| Health Check Path | `/` |
+
+Verified 2026-09-11 before writing this: `requirements-api.txt` resolves in a
+clean virtualenv, and the app boots with **only** those dependencies, in
+`ENVIRONMENT=production`, against the live Supabase database — TLS verified,
+pool initialised, real data served on every `/v1/meta/*` endpoint. The build
+and start commands above are the ones that were exercised.
+
+Then set these environment variables (the manual path does **not** read
+`render.yaml`, so every one of these must be entered by hand — including
+`ENVIRONMENT` and `PYTHON_VERSION`, which the Blueprint would have supplied):
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | the Session pooler URI from step 1 |
+| `DATABASE_URL` | the Session pooler URI from step 1, **including `?sslmode=require`** |
 | `JWT_SECRET` | generate one, see below |
-| `ENVIRONMENT` | `production` (already set in `render.yaml`) |
+| `ENVIRONMENT` | `production` — **must be set manually** |
+| `PYTHON_VERSION` | `3.11.9` — **must be set manually** |
 | `FRONTEND_URL` | leave blank for now; set in step 5 |
 | `SENTRY_DSN` | optional; omit to run without error tracking |
 
