@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/alerts", label: "Alerts" },
   { href: "/search", label: "Search" },
   { href: "/directory", label: "Directory" },
+  { href: "/research", label: "Research" },
   { href: "/report", label: "Report an Issue" },
   { href: "/methodology", label: "Methodology" },
 ];

@@ -260,6 +260,37 @@ export interface CommodityOut {
   category: string;
 }
 
+// Real OpenAlex scientific-literature citations linking a contaminant to a
+// disease/health outcome — see api/routes/research.py and
+// docs/RESEARCH_EVIDENCE_INGESTION.md. Not a claim about any Indian sample.
+export interface ResearchListItem {
+  id: number;
+  contaminant_id: number;
+  contaminant_name: string;
+  title: string;
+  authors: string[];
+  journal: string | null;
+  publication_year: number | null;
+  doi: string | null;
+  landing_page_url: string;
+  evidence_level: "B" | "C";
+  matched_health_terms: string[];
+  is_oa: boolean | null;
+}
+
+export interface ResearchListResponse {
+  results: ResearchListItem[];
+  total: number;
+  disclaimer: string;
+}
+
+export interface ResearchDetail extends ResearchListItem {
+  abstract: string;
+  pmid: string | null;
+  oa_status: string | null;
+  work_type: string | null;
+}
+
 export interface CurrentUserProfile {
   email: string;
   tier: string;

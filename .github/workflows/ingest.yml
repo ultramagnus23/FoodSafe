@@ -98,6 +98,13 @@ jobs:
           pip install --quiet pdfplumber
           python -m pipeline.run_and_log fssai_annual_report
 
+      - name: Ingest scientific evidence links (OpenAlex, real DOIs/abstracts)
+        id: research_evidence
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # supplementary literature layer, not core enforcement data
+        run: python -m pipeline.run_and_log research_evidence --limit 5
+
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'
         env:

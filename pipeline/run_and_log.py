@@ -34,6 +34,7 @@ SOURCES = {
     "fssai_labs":           ("pipeline.sources.fssai_labs",           "run",                  None,             True),
     "loksabha_qa":          ("pipeline.sources.loksabha_qa",          "run",                  None,             True),
     "fssai_annual_report":  ("pipeline.sources.fssai_annual_report",  "run",                  None,             True),
+    "research_evidence":    ("pipeline.sources.research_evidence",    "run",                  "limit",          True),
 }
 
 # Sources where zero rows ingested is a known, accepted outcome (documented
