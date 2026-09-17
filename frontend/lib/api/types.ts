@@ -276,6 +276,8 @@ export interface ResearchListItem {
   evidence_level: "B" | "C";
   matched_health_terms: string[];
   is_oa: boolean | null;
+  study_design: string | null;
+  source_apis: string[];
 }
 
 export interface ResearchListResponse {
@@ -287,6 +289,7 @@ export interface ResearchListResponse {
 export interface ResearchDetail extends ResearchListItem {
   abstract: string;
   pmid: string | null;
+  pmcid: string | null;
   oa_status: string | null;
   work_type: string | null;
 }

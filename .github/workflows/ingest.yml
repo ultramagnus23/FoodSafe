@@ -105,6 +105,16 @@ jobs:
         continue-on-error: true   # supplementary literature layer, not core enforcement data
         run: python -m pipeline.run_and_log research_evidence --limit 5
 
+      - name: Enrich scientific evidence with Europe PMC study-design data
+        id: europepmc_evidence
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # supplementary literature layer, not core enforcement data
+        # Runs after research_evidence so it can enrich those rows by
+        # DOI/PMID (real pubType-based study_design) instead of just adding
+        # duplicates — see pipeline/sources/europepmc_evidence.py.
+        run: python -m pipeline.run_and_log europepmc_evidence --limit 5
+
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'
         env:

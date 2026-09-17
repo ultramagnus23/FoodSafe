@@ -4,10 +4,12 @@ GET /v1/research               list, optionally filtered by contaminant_id
 GET /v1/research/{id}          single record with full abstract
 
 Public reference content (no auth), same as the other read-only lookup
-endpoints in api/other_routes.py's meta_router. Backed by
-pipeline/sources/research_evidence.py — real OpenAlex works, never
+endpoints in api/other_routes.py's meta_router. Backed by two real,
+cross-deduped connectors — pipeline/sources/research_evidence.py (OpenAlex)
+and pipeline/sources/europepmc_evidence.py (Europe PMC) — never
 AI-generated. See docs/RESEARCH_EVIDENCE_INGESTION.md for the evidence-level
-rule (only 'B'/'C' are ever stored — see schema_migration_015.sql).
+rule (only 'B'/'C' are ever stored — see schema_migration_015/016.sql) and
+what study_design values mean.
 """
 
 from __future__ import annotations
@@ -43,11 +45,14 @@ class ResearchListItem(BaseModel):
     evidence_level: str
     matched_health_terms: list[str]
     is_oa: Optional[bool]
+    study_design: Optional[str]
+    source_apis: list[str]
 
 
 class ResearchDetail(ResearchListItem):
     abstract: str
     pmid: Optional[str]
+    pmcid: Optional[str]
     oa_status: Optional[str]
     work_type: Optional[str]
 
@@ -68,7 +73,7 @@ _LIST_SELECT = f"""
     SELECT rs.id, crl.contaminant_id, c.name_canonical AS contaminant_name,
            rs.title, rs.authors, rs.journal, rs.publication_year, rs.doi,
            rs.landing_page_url, crl.evidence_level, crl.matched_health_terms,
-           rs.is_oa
+           rs.is_oa, rs.study_design, rs.source_apis
     {_JOIN_CLAUSE}
 """
 
@@ -76,7 +81,8 @@ _DETAIL_SELECT = f"""
     SELECT rs.id, crl.contaminant_id, c.name_canonical AS contaminant_name,
            rs.title, rs.authors, rs.journal, rs.publication_year, rs.doi,
            rs.landing_page_url, crl.evidence_level, crl.matched_health_terms,
-           rs.is_oa, rs.abstract, rs.pmid, rs.oa_status, rs.work_type
+           rs.is_oa, rs.study_design, rs.source_apis,
+           rs.abstract, rs.pmid, rs.pmcid, rs.oa_status, rs.work_type
     {_JOIN_CLAUSE}
 """
 
@@ -110,6 +116,7 @@ async def list_research(
                 publication_year=r["publication_year"], doi=r["doi"],
                 landing_page_url=r["landing_page_url"], evidence_level=r["evidence_level"],
                 matched_health_terms=list(r["matched_health_terms"]), is_oa=r["is_oa"],
+                study_design=r["study_design"], source_apis=list(r["source_apis"]),
             )
             for r in rows
         ],
@@ -135,6 +142,7 @@ async def get_research(source_id: int):
         publication_year=row["publication_year"], doi=row["doi"],
         landing_page_url=row["landing_page_url"], evidence_level=row["evidence_level"],
         matched_health_terms=list(row["matched_health_terms"]), is_oa=row["is_oa"],
-        abstract=row["abstract"], pmid=row["pmid"], oa_status=row["oa_status"],
-        work_type=row["work_type"],
+        study_design=row["study_design"], source_apis=list(row["source_apis"]),
+        abstract=row["abstract"], pmid=row["pmid"], pmcid=row["pmcid"],
+        oa_status=row["oa_status"], work_type=row["work_type"],
     )

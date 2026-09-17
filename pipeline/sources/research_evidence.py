@@ -44,6 +44,13 @@ logger = logging.getLogger("foodsafe.research_evidence")
 OPENALEX_URL = "https://api.openalex.org/works"
 REQUEST_DELAY_S = 1.0
 
+
+def build_search_term(canonical_contaminant_name: str) -> str:
+    """Shared with pipeline/sources/europepmc_evidence.py so both connectors
+    search for the same thing per contaminant."""
+    return f"{canonical_contaminant_name.replace('_', ' ')} health disease toxicity"
+
+
 # OpenAlex concept display names that count as a "health outcome" match.
 # Deliberately a small, literal keyword filter over OpenAlex's own tags —
 # not an invented taxonomy.
@@ -163,19 +170,26 @@ def _upsert_source(conn, work: dict, fetched_query: str) -> tuple[int | None, bo
         if row:
             return row[0], False
 
+        work_type = work.get("type")
+        # OpenAlex's 'type' only distinguishes review vs. not — a coarser
+        # study_design than europepmc_evidence.py can report from real
+        # pubType tags, but still a real, source-reported value, not a guess.
+        study_design = "review" if (work_type or "").lower() == "review" else "unclassified"
+
         cur.execute(
             """INSERT INTO research_sources (
                     title, authors, journal, publication_year, doi, openalex_id,
                     pmid, abstract, work_type, oa_status, is_oa, landing_page_url,
-                    fetched_query
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    fetched_query, study_design, source_apis
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (doi) DO NOTHING
                 RETURNING id""",
             (
                 title[:1000], authors, journal, work.get("publication_year"),
                 doi, openalex_id, _clean_pmid(work.get("ids") or {}), abstract,
-                work.get("type"), open_access.get("oa_status"),
+                work_type, open_access.get("oa_status"),
                 open_access.get("is_oa"), landing_url, fetched_query,
+                study_design, ["openalex"],
             ),
         )
         row = cur.fetchone()
@@ -218,7 +232,7 @@ def run(limit: int = 5) -> dict:
     try:
         contaminants = _load_contaminants(conn)
         for cid, canonical in contaminants:
-            search_term = f"{canonical.replace('_', ' ')} health disease toxicity"
+            search_term = build_search_term(canonical)
             results = _fetch(search_term, per_page=limit)
             summary["fetched"] += len(results)
 

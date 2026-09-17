@@ -37,7 +37,13 @@ function ResearchCard({ r }: { r: ResearchListItem }) {
         {r.contaminant_name.replace(/_/g, " ")}
         {r.journal ? ` · ${r.journal}` : ""}
         {r.publication_year ? ` · ${r.publication_year}` : ""}
+        {r.study_design && r.study_design !== "unclassified" ? ` · ${r.study_design.replace(/_/g, " ")}` : ""}
       </div>
+      {r.source_apis.length > 1 && (
+        <div className="mt-1 text-[11px] text-provenance">
+          Confirmed by {r.source_apis.join(" & ")}
+        </div>
+      )}
       {r.authors.length > 0 && (
         <div className="mt-1 text-xs text-provenance">{r.authors.slice(0, 4).join(", ")}{r.authors.length > 4 ? " et al." : ""}</div>
       )}

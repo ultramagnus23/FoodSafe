@@ -1,18 +1,38 @@
-# Scientific evidence ingestion (OpenAlex)
+# Scientific evidence ingestion (OpenAlex + Europe PMC)
 
-**What this is:** `pipeline/sources/research_evidence.py` links each
-contaminant already in the `contaminants` table to real, peer-reviewed
-literature about its health effects, using the
-[OpenAlex](https://openalex.org) works API — free, no API key, ~250M
-scholarly works with real DOIs, titles, authors, journals, abstracts, and
-concept tags.
+**What this is:** two connectors link each contaminant already in the
+`contaminants` table to real, peer-reviewed literature about its health
+effects, sharing one set of tables so the second source enriches the
+first instead of duplicating it:
+
+- `pipeline/sources/research_evidence.py` — [OpenAlex](https://openalex.org)
+  works API, free, no API key, ~250M scholarly works with real DOIs,
+  titles, authors, journals, abstracts, and concept tags.
+- `pipeline/sources/europepmc_evidence.py` — [Europe PMC](https://europepmc.org)
+  REST API, free, no API key, PubMed/PMC plus preprints and patents. Its
+  value here isn't more volume, it's `pubTypeList`: a real per-work
+  publication-type tag (Systematic Review, Meta-Analysis, Randomized
+  Controlled Trial, Cohort Studies, Case Reports, ...) that OpenAlex's
+  single `type` field (article/review) can't distinguish.
+
+**Cross-dedup, not duplication:** Europe PMC looks up each candidate work
+by DOI or PMID against `research_sources` before inserting. A match
+found from an earlier OpenAlex pass is *enriched* — `study_design` filled
+in from Europe PMC's real pubType tag, `pmcid` added, `source_apis` grows
+to `{openalex, europepmc}` — never inserted as a second row. If that
+richer classification turns out to be a systematic review or
+meta-analysis that OpenAlex's coarser `type` field missed, the existing
+`contaminant_research_links.evidence_level` is upgraded from `'C'` to
+`'B'` — upgraded only, never downgraded, and never past `'B'`/`'C'` (see
+below).
 
 **What this is NOT:** a claim that a contaminant was found in any Indian
 sample or product. It is a citation layer only — "peer-reviewed literature
 associates X with Y" — kept in `research_sources` /
-`contaminant_research_links` (`schema_migration_015.sql`), entirely
-separate from `enforcement_records`. Nothing here feeds the risk scores in
-`models/aggregate.py` or `models/disease_burden.py`.
+`contaminant_research_links` (`schema_migration_015.sql`,
+`schema_migration_016.sql`), entirely separate from `enforcement_records`.
+Nothing here feeds the risk scores in `models/aggregate.py` or
+`models/disease_burden.py`.
 
 ## How a record is built
 
@@ -39,6 +59,27 @@ separate from `enforcement_records`. Nothing here feeds the risk scores in
    `HEALTH_TERM_KEYWORDS` in the connector). This is OpenAlex's existing
    tagging, filtered, not a new classification invented here.
 
+Europe PMC (`europepmc_evidence.py`) runs the same per-contaminant search
+against `GET ebi.ac.uk/europepmc/webservices/rest/search`
+(`resultType=core`), strips the HTML/entities its abstracts and titles
+carry (`<i>`, `<sub>`, `&lt;`, ...), and additionally:
+
+- Classifies `study_design` from the work's real `pubTypeList` via an
+  ordered keyword table (`_STUDY_DESIGN_RULES` in the connector) —
+  `systematic_review`, `meta_analysis`, `randomized_trial`, `cohort`,
+  `case_control`, `cross_sectional`, `case_report`, `clinical_trial`,
+  `comparative_study`, `review`, `commentary`, or `unclassified` if only
+  a generic "Journal Article" tag is present. This column has no `CHECK`
+  constraint — Europe PMC's vocabulary is broad enough that a new
+  legitimate pubType value shouldn't need a migration to record.
+- Derives `evidence_level` from `study_design`: `'B'` only for
+  `systematic_review`/`meta_analysis`, `'C'` otherwise — same two-value
+  ceiling as OpenAlex, just triggered by a more specific, source-reported
+  field.
+- Extracts `matched_health_terms` from the work's real MeSH heading list
+  (`meshHeadingList.meshHeading[].descriptorName`) when PubMed has
+  indexed one, through the same keyword filter OpenAlex's concepts use.
+
 ## Idempotency
 
 `research_sources.doi` is `UNIQUE`; `contaminant_research_links` is unique
@@ -64,9 +105,14 @@ safe — matches every other source's `ON CONFLICT DO NOTHING` convention.
 ## Run
 
 ```bash
-python -m pipeline.run_and_log research_evidence --limit 5
+python -m pipeline.run_and_log research_evidence --limit 5     # OpenAlex, run first
+python -m pipeline.run_and_log europepmc_evidence --limit 5    # Europe PMC, enriches the above
 ```
 
-Scheduled daily in `.github/workflows/ingest.yml`, `continue-on-error:
-true` (supplementary literature layer, not core enforcement data — a
-failure here should not block the rest of the ingest run).
+Scheduled daily in `.github/workflows/ingest.yml` in that order, each
+`continue-on-error: true` (supplementary literature layer, not core
+enforcement data — a failure here should not block the rest of the
+ingest run). Running Europe PMC before OpenAlex on a given day still
+works correctly (dedup is by DOI/PMID lookup, not by run order) but
+misses that day's enrichment opportunity for OpenAlex-only rows until
+the next run.
