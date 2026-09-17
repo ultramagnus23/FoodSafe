@@ -114,6 +114,19 @@ jobs:
           pip install --quiet pdfplumber
           python -m pipeline.run_and_log fssai_annual_report
 
+      - name: Refresh Mumbai local-news food-safety signal (locality-tagged)
+        id: local_news
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # best-effort scrape of two news sites; 0 rows is expected, not a regression
+        # docs/LOCAL_NEWS_INGESTION.md: real test run found 1/28 listing items
+        # relevant. Running daily lets real signal accumulate over time
+        # instead of being a one-off manual pull. Idempotent (dedups on
+        # sha256(source_url|contaminant_id)) so re-running daily is safe.
+        run: |
+          pip install --quiet beautifulsoup4 lxml
+          python -m pipeline.run_and_log local_news --limit 20
+
       - name: Ingest scientific evidence links (OpenAlex, real DOIs/abstracts)
         id: research_evidence
         env:
