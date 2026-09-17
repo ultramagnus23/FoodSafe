@@ -35,6 +35,22 @@ jobs:
       # result (FoSCoS's documented auth gate, AGMARKNET's flaky public rate
       # limit) from a *real* regression. Only a real regression exits 1.
 
+      - name: Sync database schema (idempotent — applies any new migrations)
+        id: bootstrap_db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # scripts/bootstrap_db.py applies schema.sql + every
+        # schema_migration_*.sql in order. Already-applied files report
+        # "skipped" via Postgres's duplicate-object error codes rather than
+        # failing, so running this daily is a no-op once a migration has
+        # landed — but it means a new migration file merged to main goes
+        # live on the next scheduled run instead of needing someone to
+        # remember the manual `docs/DEPLOYMENT.md` step. No continue-on-error:
+        # every other step in this workflow depends on the schema this
+        # produces, so a real failure here should stop the job loudly, the
+        # same as the openFDA step below.
+        run: python -m scripts.bootstrap_db
+
       - name: Ingest openFDA food enforcement (real US FDA recalls)
         id: openfda
         env:
@@ -103,7 +119,13 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         continue-on-error: true   # supplementary literature layer, not core enforcement data
-        run: python -m pipeline.run_and_log research_evidence --limit 5
+        # limit=20/contaminant (~8 contaminants in the DB today) = ~160
+        # OpenAlex works/day, well inside its free common-pool rate limit.
+        # First run does the bulk load; later daily runs mostly re-hit the
+        # same top-relevance works and dedupe on doi, so this doesn't grow
+        # unbounded — it converges once each contaminant's real literature
+        # is covered.
+        run: python -m pipeline.run_and_log research_evidence --limit 20
 
       - name: Enrich scientific evidence with Europe PMC study-design data
         id: europepmc_evidence
@@ -112,8 +134,9 @@ jobs:
         continue-on-error: true   # supplementary literature layer, not core enforcement data
         # Runs after research_evidence so it can enrich those rows by
         # DOI/PMID (real pubType-based study_design) instead of just adding
-        # duplicates — see pipeline/sources/europepmc_evidence.py.
-        run: python -m pipeline.run_and_log europepmc_evidence --limit 5
+        # duplicates — see pipeline/sources/europepmc_evidence.py. Same
+        # limit=20/contaminant reasoning as the OpenAlex step above.
+        run: python -m pipeline.run_and_log europepmc_evidence --limit 20
 
       - name: Alert on unexpected AGMARKNET failure
         if: steps.agmarknet.outcome == 'failure'

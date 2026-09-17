@@ -56,6 +56,16 @@ Two things that have bitten this project before:
 
 ## 2. Build the schema **[cli]**
 
+**Now automatic once step 6 is done:** `.github/workflows/ingest.yml` runs
+`python -m scripts.bootstrap_db` as its first step, daily and on every
+manual dispatch. It's idempotent (already-applied files report "skipped"
+via Postgres's duplicate-object codes), so this also means any new
+`schema_migration_*.sql` merged to `main` goes live automatically on the
+next scheduled run — no more remembering to run this by hand after adding
+a migration. This section is still the manual path for the very first
+bootstrap, before the GitHub secret exists (step 6), or for running it
+locally against a database you're pointing `DATABASE_URL` at directly:
+
 ```bash
 export DATABASE_URL="<the Session pooler URI from step 1>"
 python -m scripts.bootstrap_db
