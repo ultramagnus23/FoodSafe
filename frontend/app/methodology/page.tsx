@@ -32,7 +32,7 @@ const MODEL_CARD_SECTIONS = [
   },
   {
     title: "Data currently backing India scores",
-    body: "FSSAI has no programmatically accessible enforcement dataset today (see the FSSAI ingestion findings below), so district-level India risk scores are computed from synthetic demonstration records, not real government test results. Every score, map marker, and search result carries a provenance badge, either \"Demo data\" or \"Verified source\", so this is never ambiguous. The aggregation logic itself is real and would compute identically over real data the moment it exists.",
+    body: "FSSAI has no programmatically accessible enforcement dataset today (see the FSSAI ingestion findings below), so this deployment shows no district-level India risk scores: the map is empty on purpose rather than filled with invented numbers, and synthetic demonstration data is not loaded here. If demo data is ever loaded (for example in a local demo), every score, map marker, and search result carries a provenance badge, either \"Demo data\" or \"Verified source\", so it is never ambiguous. The real India enforcement data that exists today is at State/UT level: counts of food samples analysed and found non-conforming, disclosed to Parliament (see the Directory). The aggregation logic itself is real and would compute identically over district-level data the moment it exists.",
   },
   {
     title: "Calibration",
@@ -41,6 +41,10 @@ const MODEL_CARD_SECTIONS = [
   {
     title: "Backtest status",
     body: "A temporal-split backtest was run against every real (non-synthetic) enforcement record in the database: 66 openFDA records, 2020–2026. Result: not statistically meaningful, and we're publishing that null result rather than a misleading metric. Every one of those 66 records is a confirmed recall (openFDA's feed is a recall log, not a sampled pass/fail test set), so there is no negative class to score discrimination against, and the records are too sparse per commodity regardless. See the full report for the methodology and what would unblock a real backtest.",
+  },
+  {
+    title: "Backtest on real state sampling outcomes",
+    body: "A pre-specified temporal backtest was later run on real State/UT counts of food samples analysed and found non-conforming (Lok Sabha answers, 2013–14 to 2025–26; 173 one-year-ahead forecasts across six years). A state's rate in one year predicts its rate the next year far better than the national rate does (average error 4.8 vs 13.2 percentage points, and the ordering of states is highly stable); a control with shuffled state labels removes the effect. But no model beat simply reusing last year's rate, and that stability may reflect where and how inspectors sample rather than how contaminated food is. This is a statement about a testing rate, not a food-risk score.",
   },
 ];
 
@@ -85,6 +89,15 @@ export default function MethodologyPage() {
             className="underline"
           >
             docs/BACKTEST_REPORT.md
+          </a>{" "}
+          and the state-level backtest in{" "}
+          <a
+            href="https://github.com/ultramagnus23/FoodSafe/blob/main/docs/BACKTEST_SAMPLING.md"
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            docs/BACKTEST_SAMPLING.md
           </a>
           . FSSAI/FoSCoS access findings: see{" "}
           <a

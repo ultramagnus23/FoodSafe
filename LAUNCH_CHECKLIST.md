@@ -48,24 +48,34 @@ architecture; this is the "what's left" list.
 
 ## Before real users hit this
 
-- [ ] **India district (and now locality) contamination data is still
-      demo-seeded.** The only real signal is FSSAI PDFs (blocked — see
-      [`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md)) and FoSCoS
-      recalls (`pipeline/sources/fssai_recall.py`, best-effort headless
-      browser scrape). This is now disclosed end-to-end (H1.1/H1.2), so
-      "launch with a demo-data label" is effectively the decision already
-      made — remaining question is only whether that's sufficient or you
-      hold for real coverage. Since this was last written: added
-      locality-level geography below district (`schema_migration_009.sql`
-      — real Mumbai neighborhoods/pincodes, see
-      [`docs/LOCALITY_DATA.md`](docs/LOCALITY_DATA.md)) with a pincode-aware
-      report form as the realistic near-term real-data path; confirmed
-      FoSCoS's FBO/license search is blocked the same way the recall API is
-      ([`docs/FSSAI_FBO_LICENSE_INVESTIGATION.md`](docs/FSSAI_FBO_LICENSE_INVESTIGATION.md));
-      built and validated a local-Mumbai-news ingester that found real
-      neighborhood-tagged signal where national FSSAI PDFs found none
-      ([`docs/LOCAL_NEWS_INGESTION.md`](docs/LOCAL_NEWS_INGESTION.md), not
-      yet wired into the DB).
+- [ ] **District- and locality-level India contamination data does not
+      exist in real form, and the production deploy is real-only.**
+      (Rewritten 2026-09-19; this item previously described a
+      "demo-data label" launch, which is no longer the plan.) The
+      2026-09-11 decision was to deploy REAL-ONLY: `seed_demo.sql` /
+      `pipeline/seed_enforcement.py` are not loaded in production, so the
+      district risk map is empty on purpose. FSSAI PDFs and FoSCoS are
+      blocked ([`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md),
+      [`docs/FSSAI_FBO_LICENSE_INVESTIGATION.md`](docs/FSSAI_FBO_LICENSE_INVESTIGATION.md)).
+      What real India data exists now:
+      - **State/UT sampled-testing outcomes** (samples analysed vs found
+        non-conforming, 2013-14 → 2025-26) from Lok Sabha answers —
+        [`docs/LOKSABHA_SAMPLING.md`](docs/LOKSABHA_SAMPLING.md), shown in the
+        Directory; the first source with a pass side, backtested in
+        [`docs/BACKTEST_SAMPLING.md`](docs/BACKTEST_SAMPLING.md).
+      - State/UT enforcement counts (Lok Sabha), FSSAI Annual Report national
+        metrics, FSSAI lab and commissioner directories.
+      - Locality-tagged local-news signal for five metros, scheduled daily
+        ([`docs/LOCAL_NEWS_INGESTION.md`](docs/LOCAL_NEWS_INGESTION.md)) —
+        real but thin (~1 usable record per run).
+      - ~1,860 peer-reviewed papers as a citation layer
+        ([`docs/RESEARCH_EVIDENCE_INGESTION.md`](docs/RESEARCH_EVIDENCE_INGESTION.md));
+        this feeds no score.
+      Remaining question is whether launching with an empty district map
+      plus a state-level real layer is acceptable, and the pitch should lead
+      with that (the emptiness is the finding, see `docs/PAPER_SCOPING.md`).
+      The RTI (FSSAI/R/E/26/00836, filed 2026-07-11) was answered as unable
+      to provide the data; the reply letter is not yet in `docs/`.
 - [x] **TLS/JWT-secret gaps closed** — the Supabase connection had
       certificate verification fully disabled (`api/db.py`); `JWT_SECRET`
       silently fell back to a hardcoded string if unset (`api/auth_utils.py`,
