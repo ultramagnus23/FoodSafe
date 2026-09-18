@@ -26,3 +26,21 @@ The master build prompt requires evaluating the risk model against real, corrobo
 A source with both outcomes for the same commodity/geography over time — e.g. routine FSSAI/state surveillance testing results (most samples pass), rather than an enforcement/recall log (which by definition only contains failures). See `docs/FSSAI_INGESTION.md` for why that data isn't reachable today.
 
 This report is not regenerated automatically — re-run `python -m models.backtest` after real data volume changes meaningfully (e.g. a new real ingestion source comes online).
+
+## Update 2026-09-19 — a source with both outcomes now exists (backtest NOT run)
+
+`state_sampling_annual` (`docs/LOKSABHA_SAMPLING.md`) holds real State/UT × fiscal-
+year counts of samples analysed and found non-conforming from Lok Sabha answers —
+so a pass side (`analysed − non-conforming`) exists for the first time. As of the
+first production load it has 539 rows over 2013-14 to 2025-26 with uneven state
+coverage (e.g. no accepted state table for 2017-18 or 2019-20), and two
+definitions that must not be pooled (`non_conforming` vs the older
+`adulterated_misbranded`, changing around 2016-17).
+
+This changes what is *possible*, not what has been *measured*: no model has been
+evaluated on it and the verdict above stands until one is. Caveats any such
+backtest must respect: sampling is inspector-targeted (rates are not prevalence),
+"non-conforming" is not "unsafe", the same state-year can appear at different
+vintages (the API marks each `corroborated`/`conflicting`), and the series is
+short (≤ 13 points per state) so a naive persistence baseline must be beaten
+before anything more elaborate is claimed.

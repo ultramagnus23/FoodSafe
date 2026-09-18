@@ -104,6 +104,19 @@ national year-by-year tables (a different grain, see below). Every rejection is
 written to `loksabha_question_log.reject_detail` (JSONB) so it can be audited or
 recovered by a later parser version.
 
+## First production run (2026-09-18)
+
+`ingest.yml` step "Refresh Lok Sabha State-wise sampling outcomes": 135 questions
+discovered, 127 processed, **16 tables accepted, 539 rows inserted** — identical
+to the local dry run — and 58 tables rejected. 8 questions could not be fetched
+(5 URLs returned something that is not a valid PDF; 3 had no URL) and are logged
+as `fetch_error`, which the runner retries on every run instead of treating as
+done. This step is `continue-on-error`, so its green check is not evidence on its
+own; the row counts above come from reading the job log after the run finished.
+The skip-already-processed path (every run after the first inserting 0) is unit-
+and scratch-DB-tested but had not yet been observed in production at the time of
+writing.
+
 ## Known limits
 
 * **Coverage is uneven.** Years present for a state depend on which answers
