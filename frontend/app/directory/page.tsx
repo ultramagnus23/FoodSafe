@@ -204,11 +204,40 @@ export default function DirectoryPage() {
   const [labTier, setLabTier] = useState<number | undefined>(undefined);
   const [enfState, setEnfState] = useState("");
 
-  const commissioners = useCommissioners(commissionerState || undefined);
-  const labs = useLabs(labState || undefined, labTier);
-  const enforcement = useStateEnforcement(enfState || undefined);
+  // Each list is fetched once, unfiltered, and filtered here. Filtering on the
+  // server and then building the state picker from the filtered result made the
+  // picker collapse to the chosen state, so switching states meant resetting to
+  // "All" first.
+  const commissionersAll = useCommissioners();
+  const labsAll = useLabs();
+  const enforcementAll = useStateEnforcement();
   const sampling = useStateSampling();
   const national = useNationalEnforcement();
+
+  const commissioners = useMemo(
+    () => ({
+      isLoading: commissionersAll.isLoading,
+      error: commissionersAll.error,
+      data: commissionersAll.data?.filter((c) => !commissionerState || c.state === commissionerState),
+    }),
+    [commissionersAll.isLoading, commissionersAll.error, commissionersAll.data, commissionerState]
+  );
+  const labs = useMemo(
+    () => ({
+      isLoading: labsAll.isLoading,
+      error: labsAll.error,
+      data: labsAll.data?.filter((l) => (!labState || l.state === labState) && (!labTier || l.tier === labTier)),
+    }),
+    [labsAll.isLoading, labsAll.error, labsAll.data, labState, labTier]
+  );
+  const enforcement = useMemo(
+    () => ({
+      isLoading: enforcementAll.isLoading,
+      error: enforcementAll.error,
+      data: enforcementAll.data?.filter((r) => !enfState || r.state === enfState),
+    }),
+    [enforcementAll.isLoading, enforcementAll.error, enforcementAll.data, enfState]
+  );
 
   const sampStates = useMemo(
     () => Array.from(new Set((sampling.data ?? []).map((r) => r.state))).sort(),
@@ -220,16 +249,16 @@ export default function DirectoryPage() {
   );
 
   const commissionerStates = useMemo(
-    () => (commissioners.data ?? []).map((c) => c.state).sort(),
-    [commissioners.data]
+    () => (commissionersAll.data ?? []).map((c) => c.state).sort(),
+    [commissionersAll.data]
   );
   const labStates = useMemo(
-    () => Array.from(new Set((labs.data ?? []).map((l) => l.state).filter((s): s is string => !!s))).sort(),
-    [labs.data]
+    () => Array.from(new Set((labsAll.data ?? []).map((l) => l.state).filter((s): s is string => !!s))).sort(),
+    [labsAll.data]
   );
   const enfStates = useMemo(
-    () => Array.from(new Set((enforcement.data ?? []).map((r) => r.state))).sort(),
-    [enforcement.data]
+    () => Array.from(new Set((enforcementAll.data ?? []).map((r) => r.state))).sort(),
+    [enforcementAll.data]
   );
 
   return (
