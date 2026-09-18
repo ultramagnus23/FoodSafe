@@ -130,9 +130,23 @@ writing.
 * 10 of the 16 accepted tables take their year from the text above the table
   (†). Five of those years are independently confirmed by national totals or by
   a second answer; treat the rest as slightly weaker.
-* National year-by-year tables (LS18 Q737/Q2149, LS17 Q1385/Q2995/Q3357) carry
-  the same two counts nationally back to 2013-14 and are **not yet ingested**
-  (different grain; would also let state sums be checked automatically).
+* National year-by-year tables (LS18 Q737/Q2149/Q1956/Q4604/Q985, LS17
+  Q1385/Q2995/Q3357) carry the same two counts nationally back to 2014-15 and are
+  **not yet ingested** (different grain; would also let state sums be checked
+  automatically). A 2026-09-19 survey of 15 such tables found traps that make a
+  generic parser riskier than it looks — record them before trying:
+  * a serial-number column leaks into "the first two numbers" (`[1, 107829,
+    28347]`), so columns must come from headers, not position;
+  * **single-state tables look national** (LS18 Q2281/Q3418 are Maharashtra
+    only; "for Maharashtra" was invisible to a word-boundary match because the
+    PDF glued the words together);
+  * **scope is often not in the table** — LS17 Q3076 (2,977 samples analysed in
+    2013-14 against ~72,000 nationally) is packaged drinking water, which only
+    the question *subject* reveals, so scope checks must include it;
+  * **vintages disagree**: 2021-22 samples analysed is 165,381 in LS17 Q1385 but
+    144,345 in four other answers, 2022-23 non-conforming is 44,421 vs 44,626,
+    and 2018-19 is 85,172 in an early-2019 answer vs 106,459 (the FSSAI Annual
+    Report figure) later — so every answer must be kept and marked, never merged.
 * The 15th Lok Sabha and earlier (Prevention of Food Adulteration Act era) were
   not examined. Only Health & Family Welfare questions are searched.
 * Parser version is `sampling-1`. Bump `PARSER_VERSION` when rules change: the
