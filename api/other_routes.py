@@ -90,6 +90,7 @@ class StateEnforcementOut(BaseModel):
     civil_cases_decided_penalty: Optional[int]
     criminal_cases_convictions: Optional[int]
     licenses_cancelled: Optional[int]
+    lok_sabha_no: int
     source_question_no: int
     source_question_subject: Optional[str]
     answered_date: Optional[str]
@@ -179,17 +180,18 @@ async def list_state_enforcement(state: Optional[str] = None, fiscal_year: Optio
     structured state-level data. See schema_migration_013.sql and
     pipeline/sources/loksabha_qa.py. Two different Parliamentary questions
     can each independently report a given (state, year) — both are kept,
-    distinguished by source_question_no, rather than merged."""
+    distinguished by (lok_sabha_no, source_question_no) — question numbers
+    restart every Lok Sabha — rather than merged."""
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """SELECT state, fiscal_year, samples_analyzed, civil_cases_decided_penalty,
-                      criminal_cases_convictions, licenses_cancelled, source_question_no,
+                      criminal_cases_convictions, licenses_cancelled, lok_sabha_no, source_question_no,
                       source_question_subject, answered_date::text, source_url
                FROM state_enforcement_annual
                WHERE ($1::text IS NULL OR state ILIKE $1)
                  AND ($2::text IS NULL OR fiscal_year = $2)
-               ORDER BY state, fiscal_year DESC""",
+               ORDER BY state, fiscal_year DESC, lok_sabha_no DESC, source_question_no""",
             state, fiscal_year,
         )
     return [StateEnforcementOut(**dict(r)) for r in rows]

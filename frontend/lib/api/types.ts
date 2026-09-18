@@ -238,6 +238,7 @@ export interface StateEnforcementOut {
   civil_cases_decided_penalty: number | null;
   criminal_cases_convictions: number | null;
   licenses_cancelled: number | null;
+  lok_sabha_no: number;
   source_question_no: number;
   source_question_subject: string | null;
   answered_date: string | null;

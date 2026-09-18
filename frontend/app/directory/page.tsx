@@ -126,7 +126,7 @@ function EnforcementRow({ r }: { r: StateEnforcementOut }) {
           rel="noreferrer"
           title={r.source_question_subject ?? undefined}
         >
-          LS Q{r.source_question_no}
+          LS{r.lok_sabha_no} Q{r.source_question_no}
         </a>
       </td>
     </tr>
@@ -238,7 +238,7 @@ export default function DirectoryPage() {
               </thead>
               <tbody>
                 {enforcement.data.map((r, i) => (
-                  <EnforcementRow key={`${r.state}-${r.fiscal_year}-${r.source_question_no}-${i}`} r={r} />
+                  <EnforcementRow key={`${r.state}-${r.fiscal_year}-${r.lok_sabha_no}-${r.source_question_no}-${i}`} r={r} />
                 ))}
               </tbody>
             </table>
