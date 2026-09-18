@@ -19,6 +19,11 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    # Explicit rather than relying on the repo's default token permissions:
+    # the alert step needs to create a label and open/comment on one issue.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v4
 
@@ -186,25 +191,21 @@ jobs:
         # (Europe PMC's own pageSize max is 1,000, so 150 has headroom).
         run: python -m pipeline.run_and_log europepmc_evidence --limit 150
 
-      - name: Alert on unexpected AGMARKNET failure
-        if: steps.agmarknet.outcome == 'failure'
+      # Replaces two per-source alert steps that ran
+      # `gh issue create --label ingest-failure || true`: that label never
+      # existed, so gh failed and `|| true` swallowed it — no alert had ever
+      # fired. This one covers EVERY step with an id (including the
+      # continue-on-error ones, whose green check hides a failure), keeps one
+      # rolling open issue instead of one per day, and never fails the run.
+      # See scripts/ingest_alert.py and tests/test_ingest_alert.py.
+      - name: Alert on failed ingest steps
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create --repo "${{ github.repository }}" \
-            --title "Ingest regression: AGMARKNET failed ($(date -u +%F))" \
-            --body "AGMARKNET raised an exception (not just an empty/rate-limited result) in the scheduled ingest run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "ingest-failure" || true
-
-      - name: Alert on unexpected FoSCoS scrape failure
-        if: steps.fssai_recall.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create --repo "${{ github.repository }}" \
-            --title "Ingest regression: FoSCoS scraper failed ($(date -u +%F))" \
-            --body "The FoSCoS scraper raised an exception (not the documented 401/maintenance gate) in the scheduled ingest run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. This may mean FoSCoS access changed — see docs/FSSAI_INGESTION.md." \
-            --label "ingest-failure" || true
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py
 
       - name: Recompute aggregation (district + brand risk scores)
         env:

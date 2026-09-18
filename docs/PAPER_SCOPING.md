@@ -110,6 +110,57 @@ South data infrastructure) better than a US-only hazard classifier would.
 - Weeks 4–7: writing/revision (argument-heavy — this is where most of the
   real time goes, not data processing).
 
+## 5b. Status update 2026-09-19 — one claim to qualify, and what the evidence does and doesn't support
+
+**Claim 1 needs a qualifier before it is written as "zero".** It is true of
+FSSAI's *own* channels. It is not true of government as a whole: State/UT
+annual counts of samples analysed / found non-conforming (2013-14 → 2025-26)
+and enforcement counts are disclosed to Parliament and are reachable through
+sansad.in's unauthenticated JSON search API plus the answers' PDFs. Recovering
+them was costly: of 73 candidate tables in 124 answers, 57 were rejected for
+extraction defects (rows fused, misaligned by one state, garbled names, merged
+headers), leaving 16 tables / 539 state-year rows with uneven coverage
+(`docs/LOKSABHA_SAMPLING.md`). Suggested framing: the regulator publishes
+nothing machine-readable; the same aggregates leak through a parliamentary PDF
+channel at State/UT-year granularity only — no district, brand, product or lab
+level — at high extraction cost. That strengthens the argument, but the
+absolute "zero programmatically accessible" wording should go.
+
+**Claim 2 (tightening): what the probe log actually contains.**
+`docs/foscos_access_log.jsonl` has 12 entries, 2026-07-04 → 2026-09-14. It is
+**not** a clean time series:
+* Six valid readings (2026-07-04 → 08-03): recall API 401, dropdown API 401,
+  CSRF-token endpoint 200.
+* Six failures (every weekly run from 2026-08-10): `Page.inner_text: Timeout`.
+  Because of a probe flaw these recorded null endpoint data even though the
+  responses had been observed (fixed 2026-09-19; entries now also record vantage
+  point, body length, console errors, failed requests and HTTP errors).
+* One local diagnostic on 2026-09-18, outside the maintenance window: the CSRF
+  bootstrap returned **401** to an anonymous visitor, the app's own unauthorised
+  handler then threw (`TypeError: Cannot read properties of undefined (reading
+  'filter')`), and the body rendered empty. A later local run **inside** the
+  daily 23:30–03:00 IST maintenance window saw 503s and CSRF 200.
+* What is NOT established: the cause of the CI failures since 08-10 (redesign vs
+  auth tightening vs network-edge/bot defence), because no CI-side endpoint data
+  exists for those weeks. Do not assert a cause until the improved probe has
+  accumulated readings from the runner; report the local CSRF 200 → 401 change
+  as a single dated observation from one vantage point.
+
+**Other dated observations (2026-09-18, one reading each):** the State Food
+Safety Index page moved from `/cms/foodsafetyindex.php` to `/food-safety-index`
+and the old URL now returns HTTP 200 with a "Page Not Found" screen (a soft
+404 a status-code check would miss); `fssai.gov.in/robots.txt` returns the
+site's HTML shell rather than a robots file; ICMR-NCDIR's cancer-registry data
+is registry-level with interactive charts and no API/CSV (not district-level).
+
+**Open items, updated:** #1 running but see above; #2 partly done — arXiv API
+queries for FSSAI/FoSCoS and for "data accessibility" + India + "food safety"
+returned 0 results, Semantic Scholar was rate-limited so that leg is
+**incomplete**; #3 done — RTI filed 2026-07-11 (FSSAI/R/E/26/00836) and
+answered as unable to provide the data directly (per repo code comments; the
+reply letter itself is not in the repo, add it under `docs/`); #4 done
+(`docs/REACHABLE_TEXT_INVENTORY.md`).
+
 ## 6. Open items before writing starts
 
 1. ~~Set up a recurring probe of the FoSCoS endpoints.~~ **Done
