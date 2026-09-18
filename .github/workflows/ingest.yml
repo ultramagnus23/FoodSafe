@@ -128,15 +128,21 @@ jobs:
         # records_produced across all 6 sources (fetch_records() stops
         # once it's hit, not per-source), so raised from the original
         # single-city value to give every city a fair shot at the cap.
-        # boto3 is needed only because pipeline.stage1_extract does a
-        # module-level `import boto3` for its (unused-by-this-source)
-        # Textract OCR class — local_news only imports FSSAINERExtractor
-        # from that module, which never touches boto3 itself, but Python
-        # still has to satisfy the import at load time. Confirmed live
-        # 2026-09-18: this step failed with ModuleNotFoundError('boto3')
-        # on its first scheduled run without this.
+        # local_news only imports FSSAINERExtractor from
+        # pipeline.stage1_extract for its spaCy NER — it never touches
+        # OCR/Textract — but that module does unconditional module-level
+        # imports (boto3, pytesseract, PIL, pdf2image) for its OCR classes,
+        # so Python has to satisfy all of them just to load the file.
+        # Confirmed live 2026-09-18, one ModuleNotFoundError at a time
+        # (boto3, then pytesseract) before installing the full set here.
+        # Not fixed at the source (lazy-importing those inside their OCR
+        # classes) because stage1_extract.py is the shared module the
+        # paper's own OCR-pipeline-runs-end-to-end claim depends on —
+        # not something to restructure under this workflow's time
+        # pressure without dedicated testing.
         run: |
-          pip install --quiet beautifulsoup4 lxml boto3
+          pip install --quiet beautifulsoup4 lxml boto3 pytesseract Pillow pdf2image spacy rapidfuzz
+          python -m spacy download en_core_web_sm
           python -m pipeline.run_and_log local_news --limit 50
 
       - name: Ingest scientific evidence links (OpenAlex, real DOIs/abstracts)
