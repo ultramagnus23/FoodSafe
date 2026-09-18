@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import type { CommissionerOut, LabOut, StateEnforcementOut, NationalEnforcementOut } from "./types";
+import type { CommissionerOut, LabOut, StateEnforcementOut, StateSamplingOut, NationalEnforcementOut } from "./types";
 
 // Both endpoints are public (no auth) — see api/other_routes.py.
 export function useCommissioners(state?: string) {
@@ -32,6 +32,18 @@ export function useStateEnforcement(state?: string) {
   return useQuery({
     queryKey: ["meta-state-enforcement", state ?? null],
     queryFn: () => apiFetch<StateEnforcementOut[]>(`/v1/meta/state-enforcement${qs}`, { auth: false }),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+// Real State/UT x fiscal-year samples analysed vs found non-conforming, from
+// Lok Sabha written answers — see api/other_routes.py's list_state_sampling.
+// The full set (~500 rows) is fetched once and filtered client-side so the
+// state picker keeps listing every state after one is chosen.
+export function useStateSampling() {
+  return useQuery({
+    queryKey: ["meta-state-sampling"],
+    queryFn: () => apiFetch<StateSamplingOut[]>("/v1/meta/state-sampling", { auth: false }),
     staleTime: 60 * 60 * 1000,
   });
 }

@@ -245,6 +245,24 @@ export interface StateEnforcementOut {
   source_url: string;
 }
 
+export interface StateSamplingOut {
+  state: string;
+  fiscal_year: string;
+  samples_analyzed: number;
+  samples_non_conforming: number;
+  non_conforming_pct: number | null;
+  non_conforming_basis: "non_conforming" | "adulterated_misbranded";
+  verification: "total_row_sum" | "total_row_close" | "row_invariants";
+  fy_source: "table_title" | "text_above";
+  corroboration: "single_source" | "corroborated" | "conflicting";
+  n_sources: number;
+  lok_sabha_no: number;
+  source_question_no: number;
+  source_question_subject: string | null;
+  answered_date: string | null;
+  source_url: string;
+}
+
 export interface LabOut {
   id: number;
   name: string;

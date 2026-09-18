@@ -4,7 +4,7 @@ Adapted from other_routes.py to use asyncpg pool.
 """
 from __future__ import annotations
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from api.auth_utils import get_current_user, require_tier, CurrentUser
 from api.db import get_pool
@@ -90,6 +90,23 @@ class StateEnforcementOut(BaseModel):
     civil_cases_decided_penalty: Optional[int]
     criminal_cases_convictions: Optional[int]
     licenses_cancelled: Optional[int]
+    lok_sabha_no: int
+    source_question_no: int
+    source_question_subject: Optional[str]
+    answered_date: Optional[str]
+    source_url: str
+
+class StateSamplingOut(BaseModel):
+    state: str
+    fiscal_year: str
+    samples_analyzed: int
+    samples_non_conforming: int
+    non_conforming_pct: Optional[float]
+    non_conforming_basis: str
+    verification: str
+    fy_source: str
+    corroboration: str
+    n_sources: int
     lok_sabha_no: int
     source_question_no: int
     source_question_subject: Optional[str]
@@ -195,6 +212,52 @@ async def list_state_enforcement(state: Optional[str] = None, fiscal_year: Optio
             state, fiscal_year,
         )
     return [StateEnforcementOut(**dict(r)) for r in rows]
+
+@meta_router.get("/state-sampling", response_model=list[StateSamplingOut])
+async def list_state_sampling(
+    state: Optional[str] = None,
+    fiscal_year: Optional[str] = None,
+    basis: Optional[str] = Query(None, pattern="^(non_conforming|adulterated_misbranded)$"),
+):
+    """Real State/UT x fiscal-year counts of food samples analysed vs found
+    non-conforming (or, in older answers, adulterated and misbranded), from
+    Lok Sabha written answers. See schema_migration_019.sql and
+    pipeline/sources/loksabha_sampling.py.
+
+    One row per (state, year, basis, answer): the same figure can be disclosed
+    in several answers and is never merged. `corroboration` says whether the
+    other answers for that (state, year, basis) agree exactly ('corroborated'),
+    disagree ('conflicting', e.g. a provisional vs final vintage), or there is
+    only one ('single_source'). A non-conforming sample is not necessarily
+    unsafe, and the two `basis` definitions are not comparable across years."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """WITH agg AS (
+                   SELECT state, fiscal_year, non_conforming_basis,
+                          COUNT(*) AS n_sources,
+                          COUNT(DISTINCT (samples_analyzed, samples_non_conforming)) AS n_values
+                   FROM state_sampling_annual
+                   GROUP BY state, fiscal_year, non_conforming_basis
+               )
+               SELECT s.state, s.fiscal_year, s.samples_analyzed, s.samples_non_conforming,
+                      ROUND(100.0 * s.samples_non_conforming / NULLIF(s.samples_analyzed, 0), 2)::float AS non_conforming_pct,
+                      s.non_conforming_basis, s.verification, s.fy_source,
+                      CASE WHEN a.n_sources = 1 THEN 'single_source'
+                           WHEN a.n_values = 1 THEN 'corroborated'
+                           ELSE 'conflicting' END AS corroboration,
+                      a.n_sources::int AS n_sources,
+                      s.lok_sabha_no, s.source_question_no, s.source_question_subject,
+                      s.answered_date::text, s.source_url
+               FROM state_sampling_annual s
+               JOIN agg a USING (state, fiscal_year, non_conforming_basis)
+               WHERE ($1::text IS NULL OR s.state ILIKE $1)
+                 AND ($2::text IS NULL OR s.fiscal_year = $2)
+                 AND ($3::text IS NULL OR s.non_conforming_basis = $3)
+               ORDER BY s.state, s.fiscal_year DESC, s.lok_sabha_no DESC, s.source_question_no""",
+            state, fiscal_year, basis,
+        )
+    return [StateSamplingOut(**dict(r)) for r in rows]
 
 @meta_router.get("/national-enforcement", response_model=list[NationalEnforcementOut])
 async def list_national_enforcement():

@@ -1,8 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useCommissioners, useLabs, useStateEnforcement, useNationalEnforcement } from "@/lib/api/directory";
-import type { CommissionerOut, LabOut, StateEnforcementOut, NationalEnforcementOut } from "@/lib/api/types";
+import {
+  useCommissioners,
+  useLabs,
+  useStateEnforcement,
+  useStateSampling,
+  useNationalEnforcement,
+} from "@/lib/api/directory";
+import type {
+  CommissionerOut,
+  LabOut,
+  StateEnforcementOut,
+  StateSamplingOut,
+  NationalEnforcementOut,
+} from "@/lib/api/types";
+
+const BASIS_LABEL: Record<StateSamplingOut["non_conforming_basis"], string> = {
+  non_conforming: "Non-conforming",
+  adulterated_misbranded: "Adulterated & misbranded (older definition)",
+};
+const VERIFICATION_LABEL: Record<StateSamplingOut["verification"], string> = {
+  total_row_sum: "Matches the table's printed total",
+  total_row_close: "Within 0.1% of the printed total",
+  row_invariants: "Row-level checks only (no printed total)",
+};
+const CORROBORATION_LABEL: Record<StateSamplingOut["corroboration"], string> = {
+  single_source: "Single answer",
+  corroborated: "Agrees with another answer",
+  conflicting: "Conflicts with another answer",
+};
 
 function fmtNum(n: number | null): string {
   return n == null ? "—" : n.toLocaleString("en-IN");
@@ -133,7 +160,45 @@ function EnforcementRow({ r }: { r: StateEnforcementOut }) {
   );
 }
 
+function SamplingRow({ r }: { r: StateSamplingOut }) {
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="whitespace-nowrap py-2 pr-3 text-sm font-medium text-ink">{r.state}</td>
+      <td className="whitespace-nowrap py-2 pr-3 text-sm text-provenance">
+        {r.fiscal_year}
+        {r.fy_source === "text_above" && (
+          <span title="Fiscal year read from the text directly above the table, not from the table's own title"> †</span>
+        )}
+      </td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtNum(r.samples_analyzed)}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtNum(r.samples_non_conforming)}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">
+        {r.non_conforming_pct == null ? "—" : `${r.non_conforming_pct.toFixed(1)}%`}
+      </td>
+      <td className="py-2 pr-3 text-xs text-provenance">{BASIS_LABEL[r.non_conforming_basis]}</td>
+      <td className="py-2 pr-3 text-xs text-provenance">
+        <div>{VERIFICATION_LABEL[r.verification]}</div>
+        <div className={r.corroboration === "conflicting" ? "text-amber-800" : undefined}>
+          {CORROBORATION_LABEL[r.corroboration]}
+        </div>
+      </td>
+      <td className="whitespace-nowrap py-2 text-right">
+        <a
+          className="text-xs text-provenance underline"
+          href={r.source_url}
+          target="_blank"
+          rel="noreferrer"
+          title={r.source_question_subject ?? undefined}
+        >
+          LS{r.lok_sabha_no} Q{r.source_question_no}
+        </a>
+      </td>
+    </tr>
+  );
+}
+
 export default function DirectoryPage() {
+  const [sampState, setSampState] = useState("");
   const [commissionerState, setCommissionerState] = useState("");
   const [labState, setLabState] = useState("");
   const [labTier, setLabTier] = useState<number | undefined>(undefined);
@@ -142,7 +207,17 @@ export default function DirectoryPage() {
   const commissioners = useCommissioners(commissionerState || undefined);
   const labs = useLabs(labState || undefined, labTier);
   const enforcement = useStateEnforcement(enfState || undefined);
+  const sampling = useStateSampling();
   const national = useNationalEnforcement();
+
+  const sampStates = useMemo(
+    () => Array.from(new Set((sampling.data ?? []).map((r) => r.state))).sort(),
+    [sampling.data]
+  );
+  const sampRows = useMemo(
+    () => (sampling.data ?? []).filter((r) => !sampState || r.state === sampState),
+    [sampling.data, sampState]
+  );
 
   const commissionerStates = useMemo(
     () => (commissioners.data ?? []).map((c) => c.state).sort(),
@@ -239,6 +314,66 @@ export default function DirectoryPage() {
               <tbody>
                 {enforcement.data.map((r, i) => (
                   <EnforcementRow key={`${r.state}-${r.fiscal_year}-${r.lok_sabha_no}-${r.source_question_no}-${i}`} r={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-12">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-2xl font-normal">Samples Tested &amp; Found Non-Conforming (by State)</h2>
+          {sampStates.length > 0 && <StatePicker value={sampState} onChange={setSampState} states={sampStates} />}
+        </div>
+        <p className="mb-2 text-sm text-provenance">
+          How many food samples each State/UT analysed in a fiscal year, and how many were found non-conforming,
+          as disclosed to Parliament (Lok Sabha written answers, 2013-14 to 2025-26). These are the only sampled-test
+          results in this project with both a pass and a fail side.
+        </p>
+        <ul className="mb-4 list-disc space-y-1 pl-5 text-xs text-provenance">
+          <li>A non-conforming sample is not necessarily unsafe — it includes sub-standard and labelling findings.</li>
+          <li>
+            Older answers count samples &quot;adulterated and misbranded&quot;, a different definition; the two are labelled
+            and never merged, so percentages are not comparable across that change.
+          </li>
+          <li>
+            The same state and year can appear in several answers, sometimes with different figures (provisional vs
+            revised). Each is shown separately and marked as agreeing or conflicting.
+          </li>
+          <li>
+            Only tables that passed automated integrity checks are included; anything malformed is rejected and logged,
+            not guessed at. States missing from a year simply reported nothing usable in that answer. † = fiscal year
+            read from the text above the table rather than its title.
+          </li>
+        </ul>
+        {sampling.isLoading ? (
+          <p className="text-provenance">Loading…</p>
+        ) : sampling.error ? (
+          <p className="text-provenance">Could not load sampling data.</p>
+        ) : sampRows.length === 0 ? (
+          <p className="text-provenance">No records.</p>
+        ) : (
+          <div className="max-h-[32rem] overflow-auto rounded-lg border border-line bg-slab px-4">
+            <table className="w-full min-w-[760px]">
+              <thead className="sticky top-0 bg-slab">
+                <tr className="border-b border-line text-left text-xs uppercase text-provenance">
+                  <th className="py-2 pr-3 font-medium">State/UT</th>
+                  <th className="py-2 pr-3 font-medium">FY</th>
+                  <th className="py-2 pr-3 text-right font-medium">Analysed</th>
+                  <th className="py-2 pr-3 text-right font-medium">Non-conforming</th>
+                  <th className="py-2 pr-3 text-right font-medium">%</th>
+                  <th className="py-2 pr-3 font-medium">Definition</th>
+                  <th className="py-2 pr-3 font-medium">Checks</th>
+                  <th className="py-2 text-right font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sampRows.map((r) => (
+                  <SamplingRow
+                    key={`${r.state}-${r.fiscal_year}-${r.non_conforming_basis}-${r.lok_sabha_no}-${r.source_question_no}`}
+                    r={r}
+                  />
                 ))}
               </tbody>
             </table>
