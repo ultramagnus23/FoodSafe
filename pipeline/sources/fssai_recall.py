@@ -38,6 +38,44 @@ logger = logging.getLogger("foodsafe.fssai_recall")
 
 RECALL_URL = "https://foscos.fssai.gov.in/food-recall"
 API_MARKER = "getFoodRecallProductHomepage"
+CSRF_MARKER = "auth/csrf-token"
+
+
+def classify_portal_state(body_text: str, recall_status: Optional[int], csrf_status: Optional[int]) -> str:
+    """What is FoSCoS doing right now? One of:
+
+      'maintenance' — the daily maintenance window page
+      'auth_gate'   — an anonymous request was refused (401) by the recall API
+                      or by the CSRF-token bootstrap the app calls first
+      'unrendered'  — the page rendered no text and no status explains why
+                      (the scraper raises on this: an unexplained blank page
+                      must not be mistaken for the documented gate)
+      'open'        — otherwise
+
+    Observed 2026-09-18: since the week of 2026-08-10 the CSRF bootstrap
+    (`/gateway/api/auth/csrf-token`, HTTP 200 in the July probes) returns 401 to
+    an anonymous visitor and the app's own unauthorised handler throws, leaving
+    an EMPTY body. That is the documented access gate (docs/FSSAI_INGESTION.md),
+    not a scraper regression, and must not be reported as one.
+    """
+    if "Maintenance" in body_text and "unavailable" in body_text:
+        return "maintenance"
+    if recall_status == 401 or csrf_status == 401:
+        return "auth_gate"
+    if not body_text.strip():
+        return "unrendered"
+    return "open"
+
+
+def read_body_text(page) -> str:
+    """Body text WITHOUT a waiting locator: page.inner_text('body') blocks for
+    30s and raises when the app crashes on init, which used to turn the
+    documented gate into a daily TimeoutError."""
+    try:
+        return page.evaluate("document.body ? document.body.innerText : ''") or ""
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not read page body: %s", e)
+        return ""
 
 
 # ------------------------------------------------------------
@@ -64,11 +102,14 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         api_status = {"hit": False, "status": None}
+        csrf_status = {"status": None}
 
         def _on_resp(r):
             if API_MARKER in r.url:
                 api_status["hit"] = True
                 api_status["status"] = r.status
+            elif CSRF_MARKER in r.url:
+                csrf_status["status"] = r.status
         page.on("response", _on_resp)
 
         try:
@@ -77,12 +118,30 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
             logger.warning("page load warning: %s", e)
         page.wait_for_timeout(3000)
 
-        body_text = page.inner_text("body")
-        if "Maintenance" in body_text and "unavailable" in body_text:
+        body_text = read_body_text(page)
+        state = classify_portal_state(body_text, api_status["status"], csrf_status["status"])
+        if state == "maintenance":
             logger.warning("FoSCoS is in its daily maintenance window — try again "
                            "outside ~23:30–03:00 IST.")
             browser.close()
             return []
+        if state == "auth_gate":
+            logger.warning(
+                "FoSCoS refused an anonymous request (recall API status=%s, csrf-token status=%s) and "
+                "renders no content. This is the documented access gate, not a scraper regression; "
+                "see docs/FSSAI_INGESTION.md.", api_status["status"], csrf_status["status"],
+            )
+            browser.close()
+            return []
+        if state == "unrendered":
+            # Deliberately NOT swallowed: an explained gate (a 401) is quiet, but a
+            # blank page with no status to explain it is a real anomaly and must
+            # stay visible as a failure rather than hide behind "expected".
+            browser.close()
+            raise RuntimeError(
+                "FoSCoS rendered no text and no 401/maintenance response explains why — "
+                "investigate before assuming this is the documented gate."
+            )
 
         # The page is a filter/search form, not an auto-loading list — the
         # recall table only populates after Search is clicked (discovered

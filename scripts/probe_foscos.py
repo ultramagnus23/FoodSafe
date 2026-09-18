@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,10 +60,35 @@ def probe() -> dict:
         result["error"] = "playwright not installed"
         return result
 
+    # Vantage point matters: on 2026-09-18 a local run saw the CSRF bootstrap
+    # return 401 while six consecutive CI probes recorded no endpoint hits at
+    # all, so the same page can fail differently from different networks.
+    result["vantage"] = "github-actions" if os.environ.get("GITHUB_ACTIONS") else "local"
+    result["body_chars"] = None
+    result["console_errors"] = []
+    result["failed_requests"] = []
+    result["http_errors"] = []
+
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
+
+            def on_console(msg):
+                if msg.type == "error" and len(result["console_errors"]) < 3:
+                    result["console_errors"].append(msg.text[:160])
+
+            def on_request_failed(req):
+                if len(result["failed_requests"]) < 5:
+                    result["failed_requests"].append({"url": req.url[:100], "reason": (req.failure or "")[:60]})
+
+            def on_http_error(resp):
+                if resp.status >= 400 and len(result["http_errors"]) < 5:
+                    result["http_errors"].append({"status": resp.status, "url": resp.url[:100]})
+
+            page.on("console", on_console)
+            page.on("requestfailed", on_request_failed)
+            page.on("response", on_http_error)
 
             def on_response(resp):
                 for name, marker in TRACKED_MARKERS.items():
@@ -89,7 +115,16 @@ def probe() -> dict:
                 result["error"] = f"page.goto warning: {e}"
             page.wait_for_timeout(3000)
 
-            body_text = page.inner_text("body")
+            # Read the body WITHOUT a waiting locator. page.inner_text("body")
+            # blocks 30s and raises when the app crashes on init, which threw
+            # away the whole entry (six 2026-08/09 probes lost their endpoint
+            # data that way even though the responses had been observed).
+            try:
+                body_text = page.evaluate("document.body ? document.body.innerText : ''") or ""
+            except Exception as e:  # noqa: BLE001
+                body_text = ""
+                result["error"] = f"body read failed: {e}"
+            result["body_chars"] = len(body_text)
             result["maintenance_window"] = "Maintenance" in body_text and "unavailable" in body_text
 
             if not result["maintenance_window"]:
