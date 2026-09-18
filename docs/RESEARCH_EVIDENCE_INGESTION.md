@@ -105,9 +105,11 @@ safe — matches every other source's `ON CONFLICT DO NOTHING` convention.
 ## Run
 
 ```bash
-python -m pipeline.run_and_log research_evidence --limit 5     # OpenAlex, run first
-python -m pipeline.run_and_log europepmc_evidence --limit 5    # Europe PMC, enriches the above
+python -m pipeline.run_and_log research_evidence --limit 5     # OpenAlex, small local test
+python -m pipeline.run_and_log europepmc_evidence --limit 5    # Europe PMC, small local test
 ```
+
+Production (`.github/workflows/ingest.yml`) runs both at `--limit 150` — verified live against the real OpenAlex API at `per-page=200` (its documented max) returning ~150-165 usable (doi+title+abstract) rows per contaminant search term, so 150 has headroom without hitting the ceiling. Across the 9 seeded contaminants that's up to ~1,350 OpenAlex candidates plus Europe PMC's enrichment pass per run, comfortably past the 1,000-paper target — first run does the bulk load, later runs mostly re-hit the same top-relevance works and dedupe on `doi`, so growth converges rather than compounding daily.
 
 Scheduled daily in `.github/workflows/ingest.yml` in that order, each
 `continue-on-error: true` (supplementary literature layer, not core

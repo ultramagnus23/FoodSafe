@@ -66,6 +66,10 @@ HEALTH_TERM_KEYWORDS = (
 # ------------------------------------------------------------
 
 def _fetch(search_term: str, per_page: int) -> list[dict]:
+    # per_page can legally go up to OpenAlex's documented max of 200; a
+    # transient 429 (shared "polite pool" rate limit, not a per-caller quota)
+    # is worth one retry rather than silently dropping an entire
+    # contaminant's results for the run.
     params = urllib.parse.urlencode({
         "search": search_term,
         "filter": "has_doi:true",
@@ -73,16 +77,22 @@ def _fetch(search_term: str, per_page: int) -> list[dict]:
     })
     url = f"{OPENALEX_URL}?{params}"
     req = urllib.request.Request(url, headers={"User-Agent": "FoodSafe-India/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode())
-        return data.get("results", [])
-    except urllib.error.HTTPError as e:
-        logger.warning("OpenAlex HTTP %s for search=%s", e.code, search_term)
-        return []
-    except Exception as e:  # noqa: BLE001
-        logger.warning("OpenAlex fetch failed for search=%s: %s", search_term, e)
-        return []
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+            return data.get("results", [])
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 2:
+                logger.warning("OpenAlex 429 for search=%s, retrying in %ss", search_term, 5 * (attempt + 1))
+                time.sleep(5 * (attempt + 1))
+                continue
+            logger.warning("OpenAlex HTTP %s for search=%s", e.code, search_term)
+            return []
+        except Exception as e:  # noqa: BLE001
+            logger.warning("OpenAlex fetch failed for search=%s: %s", search_term, e)
+            return []
+    return []
 
 
 # ------------------------------------------------------------

@@ -123,6 +123,9 @@ def merge_study_design(existing: str | None, new: str) -> str:
 # ------------------------------------------------------------
 
 def _fetch(search_term: str, page_size: int) -> list[dict]:
+    # pageSize can legally go up to Europe PMC's documented max of 1000; a
+    # transient 429 is worth one retry rather than silently dropping an
+    # entire contaminant's results for the run.
     params = urllib.parse.urlencode({
         "query": search_term,
         "format": "json",
@@ -131,16 +134,22 @@ def _fetch(search_term: str, page_size: int) -> list[dict]:
     })
     url = f"{EUROPEPMC_URL}?{params}"
     req = urllib.request.Request(url, headers={"User-Agent": "FoodSafe-India/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode())
-        return (data.get("resultList") or {}).get("result", [])
-    except urllib.error.HTTPError as e:
-        logger.warning("Europe PMC HTTP %s for query=%s", e.code, search_term)
-        return []
-    except Exception as e:  # noqa: BLE001
-        logger.warning("Europe PMC fetch failed for query=%s: %s", search_term, e)
-        return []
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+            return (data.get("resultList") or {}).get("result", [])
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 2:
+                logger.warning("Europe PMC 429 for query=%s, retrying in %ss", search_term, 5 * (attempt + 1))
+                time.sleep(5 * (attempt + 1))
+                continue
+            logger.warning("Europe PMC HTTP %s for query=%s", e.code, search_term)
+            return []
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Europe PMC fetch failed for query=%s: %s", search_term, e)
+            return []
+    return []
 
 
 # ------------------------------------------------------------
