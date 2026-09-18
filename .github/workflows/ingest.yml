@@ -128,8 +128,15 @@ jobs:
         # records_produced across all 6 sources (fetch_records() stops
         # once it's hit, not per-source), so raised from the original
         # single-city value to give every city a fair shot at the cap.
+        # boto3 is needed only because pipeline.stage1_extract does a
+        # module-level `import boto3` for its (unused-by-this-source)
+        # Textract OCR class — local_news only imports FSSAINERExtractor
+        # from that module, which never touches boto3 itself, but Python
+        # still has to satisfy the import at load time. Confirmed live
+        # 2026-09-18: this step failed with ModuleNotFoundError('boto3')
+        # on its first scheduled run without this.
         run: |
-          pip install --quiet beautifulsoup4 lxml
+          pip install --quiet beautifulsoup4 lxml boto3
           python -m pipeline.run_and_log local_news --limit 50
 
       - name: Ingest scientific evidence links (OpenAlex, real DOIs/abstracts)
