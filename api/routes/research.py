@@ -1,6 +1,7 @@
 """
 FoodSafe India — Scientific Evidence Routes
-GET /v1/research               list, optionally filtered by contaminant_id
+GET /v1/research               list, filterable by contaminant_id and title search (q), paginated
+GET /v1/research/summary       distinct-paper count + breakdown by contaminant/study design/source
 GET /v1/research/{id}          single record with full abstract
 
 Public reference content (no auth), same as the other read-only lookup
@@ -87,25 +88,91 @@ _DETAIL_SELECT = f"""
 """
 
 
+class ContaminantPaperCount(BaseModel):
+    contaminant_id: int
+    contaminant_name: str
+    papers: int
+
+
+class ResearchSummary(BaseModel):
+    total_papers: int
+    total_links: int
+    by_contaminant: list[ContaminantPaperCount]
+    by_study_design: dict[str, int]
+    by_source: dict[str, int]
+
+
+@research_router.get("/summary", response_model=ResearchSummary)
+async def research_summary():
+    """Declared before /{source_id} so 'summary' isn't parsed as an int id.
+
+    total_papers counts distinct research_sources rows; total_links counts
+    (contaminant, paper) pairs, which is larger because one paper can be
+    linked to several contaminants (e.g. aflatoxin B1 and total aflatoxin).
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        total_papers = await conn.fetchval("SELECT COUNT(*) FROM research_sources")
+        total_links = await conn.fetchval("SELECT COUNT(*) FROM contaminant_research_links")
+        by_contaminant = await conn.fetch(
+            """
+            SELECT c.id AS contaminant_id, c.name_canonical AS contaminant_name, COUNT(*) AS papers
+            FROM contaminant_research_links crl
+            JOIN contaminants c ON c.id = crl.contaminant_id
+            GROUP BY c.id, c.name_canonical
+            ORDER BY c.id
+            """
+        )
+        by_design = await conn.fetch(
+            "SELECT COALESCE(study_design, 'unclassified') AS k, COUNT(*) AS n FROM research_sources GROUP BY 1 ORDER BY 2 DESC"
+        )
+        by_source = await conn.fetch(
+            "SELECT s AS k, COUNT(*) AS n FROM research_sources, unnest(source_apis) AS s GROUP BY s ORDER BY 2 DESC"
+        )
+
+    return ResearchSummary(
+        total_papers=total_papers or 0,
+        total_links=total_links or 0,
+        by_contaminant=[ContaminantPaperCount(**dict(r)) for r in by_contaminant],
+        by_study_design={r["k"]: r["n"] for r in by_design},
+        by_source={r["k"]: r["n"] for r in by_source},
+    )
+
+
 @research_router.get("", response_model=ResearchListResponse)
 async def list_research(
     contaminant_id: Optional[int] = None,
+    q: Optional[str] = Query(None, max_length=100),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
+    # $2 is a bound parameter, never interpolated into the SQL text. Escape
+    # LIKE wildcards so a user typing '%' or '_' searches for the literal.
+    pattern = None
+    if q and q.strip():
+        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+
     pool = get_pool()
     async with pool.acquire() as conn:
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM contaminant_research_links WHERE ($1::int IS NULL OR contaminant_id = $1)",
-            contaminant_id,
+            """
+            SELECT COUNT(*)
+            FROM contaminant_research_links crl
+            JOIN research_sources rs ON rs.id = crl.research_source_id
+            WHERE ($1::int IS NULL OR crl.contaminant_id = $1)
+              AND ($2::text IS NULL OR rs.title ILIKE $2)
+            """,
+            contaminant_id, pattern,
         )
         rows = await conn.fetch(
             _LIST_SELECT + """
             WHERE ($1::int IS NULL OR crl.contaminant_id = $1)
-            ORDER BY rs.publication_year DESC NULLS LAST, rs.id
-            LIMIT $2 OFFSET $3
+              AND ($2::text IS NULL OR rs.title ILIKE $2)
+            ORDER BY rs.publication_year DESC NULLS LAST, rs.id, crl.contaminant_id
+            LIMIT $3 OFFSET $4
             """,
-            contaminant_id, limit, offset,
+            contaminant_id, pattern, limit, offset,
         )
 
     return ResearchListResponse(

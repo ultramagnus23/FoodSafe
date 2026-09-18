@@ -99,8 +99,26 @@ safe — matches every other source's `ON CONFLICT DO NOTHING` convention.
   (`GET /v1/research`) surfaces exactly what was ingested, including any
   weak matches, so review by a human before treating any single result as
   authoritative.
+- At ~1,860 papers, relevance dilutes further down each contaminant's
+  ranking (limit=150 pulls deeper than the top-20 that was first
+  validated). Volume is not quality — read counts as "sources retrieved,"
+  not "sources vetted."
 - Like every other connector, run via `python -m pipeline.run_and_log
   research_evidence --limit N`, which logs the run in `pipeline_runs`.
+
+## API surface
+
+- `GET /v1/research?contaminant_id=&q=&limit=&offset=` — paginated list
+  (max 200/page). `q` is a case-insensitive title substring; LIKE wildcards
+  (`%`, `_`) in `q` are escaped so they search for the literal character.
+  One row per (contaminant, paper) link, so a paper tied to two
+  contaminants appears twice — the frontend keys cards on both ids.
+- `GET /v1/research/summary` — `total_papers` (distinct `research_sources`
+  rows; the number to quote), `total_links`, and breakdowns by contaminant,
+  study design and source API. Use this rather than counting `inserted`
+  lines in run logs.
+- Frontend `/research`: contaminant filter, debounced title search,
+  pagination (20/page), and the summary line.
 
 ## Run
 

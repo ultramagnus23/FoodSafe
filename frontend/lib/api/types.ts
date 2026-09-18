@@ -286,6 +286,14 @@ export interface ResearchListResponse {
   disclaimer: string;
 }
 
+export interface ResearchSummary {
+  total_papers: number;
+  total_links: number;
+  by_contaminant: { contaminant_id: number; contaminant_name: string; papers: number }[];
+  by_study_design: Record<string, number>;
+  by_source: Record<string, number>;
+}
+
 export interface ResearchDetail extends ResearchListItem {
   abstract: string;
   pmid: string | null;
