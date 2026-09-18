@@ -16,8 +16,24 @@
 -- ingester," not which city. New rows from every city now write
 -- 'local_news'; existing 'local_news_mumbai' rows are left as-is, not
 -- backfilled — both values remain valid.
+--
+-- Guarded like migration_009's identical step: bootstrap_db re-applies every
+-- file daily, and an unconditional drop-and-re-add would re-validate the
+-- constraint against rows written by any source added after this migration.
+-- Only widen when the live constraint lacks the exact value 'local_news'
+-- (the quote-delimited match doesn't false-hit 'local_news_mumbai').
 -- ============================================================
 
-ALTER TABLE enforcement_records DROP CONSTRAINT IF EXISTS enforcement_records_source_type_check;
-ALTER TABLE enforcement_records ADD CONSTRAINT enforcement_records_source_type_check
-    CHECK (source_type IN ('fssai','usfda','efsa','apeda','state_health','agmarknet','local_news_mumbai','local_news'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'enforcement_records_source_type_check'
+          AND conrelid = 'enforcement_records'::regclass
+          AND pg_get_constraintdef(oid) LIKE '%''local_news''%'
+    ) THEN
+        ALTER TABLE enforcement_records DROP CONSTRAINT IF EXISTS enforcement_records_source_type_check;
+        ALTER TABLE enforcement_records ADD CONSTRAINT enforcement_records_source_type_check
+            CHECK (source_type IN ('fssai','usfda','efsa','apeda','state_health','agmarknet','local_news_mumbai','local_news'));
+    END IF;
+END $$;

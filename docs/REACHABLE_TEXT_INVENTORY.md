@@ -62,6 +62,41 @@ over-fire on narrative text) rather than a quantitative eval table with
 per-field P/R/F1. Flagging for your decision before any hand-labeling
 starts, per your instruction.
 
+## Update 2026-09-18 — State Food Safety Index re-checked
+
+**The SFSI page moved and the old URL soft-404s.** The row above
+(`fssai.gov.in/cms/foodsafetyindex.php`, reachable 2026-07-04) now renders a
+"Page Not Found" screen while still returning HTTP 200 — a client-rendered
+SPA, so a status-code check alone would call it healthy. The page now lives
+at `fssai.gov.in/food-safety-index`. `fssai.gov.in/robots.txt` likewise
+returns the SPA's HTML shell rather than a real robots file, so the site
+publishes no machine-readable crawl policy. Both are additional data points
+for the paper's "the access surface is unstable" claim (one observation each,
+not a time series). The page sits behind an F5 `/TSbd/` bot-defence script;
+this project reads public pages as a normal headless visitor and does not
+attempt to evade it (same posture as the FoSCoS probe).
+
+Documents on the new page (sizes from HEAD requests):
+
+| Edition | File | Size | Extractable? |
+|---|---|---|---|
+| 2018-19 | `sfsi1819.pdf` | 0.34 MB | **No** — one page, zero text layer (scanned image); would need OCR |
+| 2019-20 | `Report_State_Food_Safety_Index_08_06_2020.pdf` | 0.13 MB | Yes — 3 tables, 5 scores + total per state |
+| 2020-21 | `Report_SFSI_20_09_2021.pdf` | 0.18 MB | Yes — tables split across pages 2-4 |
+| 2021-22 | `Report_SFSI_06_06_2022.pdf` | 0.08 MB | Yes — tables split across pages 2-4 |
+| 2022-23 | `Report_SFSI_080623.pdf` | 36 MB | Not attempted (size; same call as the annual-report manifest) |
+| 2023-24 | write-up 0.37 MB / full report 40 MB | | Write-up has the full ranking table (6 scores + total) |
+
+Extraction is messy (rotated header text, `None`-padded merged cells, tables
+spanning pages, differing column counts per edition) — the same trap that
+silently corrupted the 2018-19 annual-report parse. Any SFSI parser should
+accept a row only if the component scores sum to the printed total
+(verified by hand on Gujarat 2019-20: 17+24+16.5+4.75+16 = 78.25; Kerala
+2023-24: 6.25+17+31+4+7.5+8 = 73.75) and count/log rejected rows instead of
+guessing. **Not built yet** — SFSI is state *capacity* data (staffing,
+compliance, testing infrastructure), not enforcement outcomes, so it was
+ranked below extending the Lok Sabha state-wise enforcement tables.
+
 ## Open items not covered here
 
 - Only Maharashtra was spot-checked for state-level content. Other major

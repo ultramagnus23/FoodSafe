@@ -63,9 +63,26 @@ ALTER TABLE enforcement_records
 -- ppb reading, but real text naming a real neighborhood, which is exactly
 -- what locality_id above exists to carry. The original CHECK constraint
 -- (schema.sql:87) didn't anticipate a news-derived source type.
-ALTER TABLE enforcement_records DROP CONSTRAINT IF EXISTS enforcement_records_source_type_check;
-ALTER TABLE enforcement_records ADD CONSTRAINT enforcement_records_source_type_check
-    CHECK (source_type IN ('fssai','usfda','efsa','apeda','state_health','agmarknet','local_news_mumbai'));
+--
+-- Guarded, because scripts/bootstrap_db.py re-applies every migration on each
+-- daily CI run. An unconditional DROP + ADD here re-validates the CHECK
+-- against rows written by LATER sources, so once a row with a value this
+-- (narrower) list doesn't know — e.g. 'local_news' from migration_017 — exists,
+-- this file would fail on every run and take the whole ingest job down with
+-- it. Only widen when the live constraint doesn't already have the value.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'enforcement_records_source_type_check'
+          AND conrelid = 'enforcement_records'::regclass
+          AND pg_get_constraintdef(oid) LIKE '%local_news_mumbai%'
+    ) THEN
+        ALTER TABLE enforcement_records DROP CONSTRAINT IF EXISTS enforcement_records_source_type_check;
+        ALTER TABLE enforcement_records ADD CONSTRAINT enforcement_records_source_type_check
+            CHECK (source_type IN ('fssai','usfda','efsa','apeda','state_health','agmarknet','local_news_mumbai'));
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_consumer_reports_locality
     ON consumer_reports (locality_id) WHERE review_status = 'published';

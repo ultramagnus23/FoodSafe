@@ -46,7 +46,13 @@ from pipeline.config import pg_connect
 logger = logging.getLogger("foodsafe.loksabha_qa")
 
 SEARCH_API = "https://sansad.in/api_ls/question/qetFilteredQuestionsAns"
-LOKSABHA_NO = 18  # current (18th) Lok Sabha
+
+# Lok Sabha terms to search, newest first. Question numbers RESTART each term
+# (Q1234 in the 17th is unrelated to Q1234 in the 16th), which is why
+# state_enforcement_annual's uniqueness key includes lok_sabha_no
+# (schema_migration_018.sql) and why questions are deduplicated on
+# (lokNo, quesNo), never quesNo alone.
+LOKSABHA_TERMS: tuple[int, ...] = (18,)
 
 # Keywords likely to surface FSSAI/food-safety enforcement questions. Kept
 # broad on purpose — false positives are cheap (the table-shape check below
@@ -141,29 +147,44 @@ def _canon_state(raw: str) -> str | None:
     return _STATE_CANON.get(key)
 
 
-def _search(keyword: str, page_size: int = 50) -> list[dict]:
+def _search(keyword: str, loksabha_no: int, page_size: int = 200) -> list[dict]:
     params = urllib.parse.urlencode({
-        "loksabhaNo": LOKSABHA_NO, "pageNo": 1, "locale": "en",
+        "loksabhaNo": loksabha_no, "pageNo": 1, "locale": "en",
         "pageSize": page_size, "keyWord": keyword,
     })
     req = urllib.request.Request(f"{SEARCH_API}?{params}", headers={"User-Agent": "FoodSafe-India/1.0"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read().decode())
-    return data[0].get("listOfQuestions", []) if data else []
+    if not data:
+        return []
+    first = data[0]
+    total = first.get("totalRecordSize") or 0
+    if total > page_size:
+        # No pagination implemented — surface it instead of silently
+        # dropping the tail. Observed totals are far below this today.
+        logger.warning("keyword %r, LS%s: %s matches but only %s fetched", keyword, loksabha_no, total, page_size)
+    return first.get("listOfQuestions", [])
 
 
-def discover_questions() -> list[dict]:
-    """Search several keywords, dedupe by question number, keep only
-    HEALTH AND FAMILY WELFARE questions (FSSAI's parent ministry)."""
-    seen: dict[int, dict] = {}
-    for kw in SEARCH_KEYWORDS:
-        try:
-            for q in _search(kw):
-                if q.get("ministry", "").strip().upper() != "HEALTH AND FAMILY WELFARE":
-                    continue
-                seen[q["quesNo"]] = q
-        except Exception as e:  # noqa: BLE001
-            logger.warning("search failed for keyword %r: %s", kw, e)
+def question_key(q: dict) -> tuple[int, str]:
+    """Identity of a Parliamentary question: (Lok Sabha number, question no.)."""
+    return int(q["lokNo"]), str(q["quesNo"]).strip()
+
+
+def discover_questions(terms: tuple[int, ...] | None = None) -> list[dict]:
+    """Search several keywords across Lok Sabha terms, dedupe on
+    (lokNo, quesNo), keep only HEALTH AND FAMILY WELFARE questions
+    (FSSAI's parent ministry)."""
+    seen: dict[tuple[int, str], dict] = {}
+    for term in (terms or LOKSABHA_TERMS):
+        for kw in SEARCH_KEYWORDS:
+            try:
+                for q in _search(kw, term):
+                    if q.get("ministry", "").strip().upper() != "HEALTH AND FAMILY WELFARE":
+                        continue
+                    seen[question_key(q)] = q
+            except Exception as e:  # noqa: BLE001
+                logger.warning("search failed for keyword %r (LS%s): %s", kw, term, e)
     return list(seen.values())
 
 
@@ -346,17 +367,17 @@ def ingest(conn, question: dict, rows: list[dict]) -> int:
             cur.execute(
                 """INSERT INTO state_enforcement_annual
                      (state, fiscal_year, samples_analyzed, civil_cases_decided_penalty,
-                      criminal_cases_convictions, licenses_cancelled, source_question_no,
+                      criminal_cases_convictions, licenses_cancelled, lok_sabha_no, source_question_no,
                       source_ministry, source_question_subject, answered_date, source_url, fetched_at)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                   ON CONFLICT (state, fiscal_year, source_question_no) DO UPDATE SET
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (state, fiscal_year, lok_sabha_no, source_question_no) DO UPDATE SET
                      samples_analyzed = EXCLUDED.samples_analyzed,
                      civil_cases_decided_penalty = EXCLUDED.civil_cases_decided_penalty,
                      criminal_cases_convictions = EXCLUDED.criminal_cases_convictions,
                      licenses_cancelled = EXCLUDED.licenses_cancelled,
                      fetched_at = EXCLUDED.fetched_at""",
                 (r["state"], r["fiscal_year"], r["samples_analyzed"], r["civil_cases_decided_penalty"],
-                 r["criminal_cases_convictions"], r["licenses_cancelled"], question["quesNo"],
+                 r["criminal_cases_convictions"], r["licenses_cancelled"], int(question["lokNo"]), question["quesNo"],
                  question.get("ministry"), subject, answered_date, question["questionsFilePath"], now),
             )
             inserted += 1

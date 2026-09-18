@@ -1,6 +1,15 @@
-# Draft RTI request — NOT FILED
+# RTI request — FILED 2026-07-11 (reg. FSSAI/R/E/26/00836)
 
-Drafted 2026-07-04 for review. Do not submit until you've filled in the
+> **Status update 2026-09-18.** This draft was filed. Per the comments in
+> `schema_migration_013.sql` and `pipeline/sources/loksabha_qa.py`, FSSAI's
+> reply was that it was unable to provide the requested state/district
+> enforcement data directly. **The reply letter itself is not in this
+> repo** — add the scanned response (and its date) under `docs/` before the
+> paper cites it, and record whether a first appeal under Section 19 was
+> considered. Everything below is the original pre-filing draft, kept as
+> the record of what was asked.
+
+Drafted 2026-07-04 for review. (Original text follows.) Do not submit until you've filled in the
 bracketed placeholders and decided on scope (see notes at the bottom).
 Two things this is useful for even if you decide not to submit: (1) a
 concrete data-need spec that doubles as the record-definition/schema work
