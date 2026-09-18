@@ -1,12 +1,17 @@
 """
-FoodSafe India — Local Mumbai News Ingester (locality-level event text)
+FoodSafe India — Local News Ingester (locality-level event text)
 
 Hypothesis under test: national FSSAI press-clipping PDFs are narrative and
 yield ~zero structured fields (see docs/REACHABLE_TEXT_INVENTORY.md,
 docs/FSSAI_INGESTION.md — 277 empty-shell RawRecords, 0 real hits). *Local*
-Mumbai news, unlike national coverage, tends to actually name a neighbourhood
+news, unlike national coverage, tends to actually name a neighbourhood
 when it reports a food-safety incident ("FDA raids restaurant in Vile
-Parle"). The app's finest geography today is `districts` (e.g. "Mumbai") —
+Parle"). Validated first against Mumbai alone (1/28 listing items relevant,
+but that one article named 4 real neighbourhoods and yielded real NER
+signal); now extended to the four other metros `localities` already covers
+(Delhi, Bengaluru, Chennai, Pune — schema_migration_010.sql) via the same
+Hindustan Times city-feed pattern, verified live to return HTTP 200 for
+each. The app's finest geography today is `districts` (e.g. "Mumbai") —
 there is no locality/neighbourhood table yet; one is being added in a
 parallel migration (`localities`, pincode-linked, real Mumbai neighbourhoods)
 elsewhere in this work session. This module does NOT touch the schema. It
@@ -103,6 +108,7 @@ SOURCES = [
         "kind": "rss",
         "listing_url": "https://www.hindustantimes.com/feeds/rss/cities/mumbai-news/rssfeed.xml",
         "body_selector": ("p.content", None),   # (css selector, container selector)
+        "home_state": "Maharashtra",
     },
     {
         "name": "free_press_journal_mumbai",
@@ -110,13 +116,54 @@ SOURCES = [
         "listing_url": "https://www.freepressjournal.in/mumbai",
         "link_pattern": re.compile(r"^https://www\.freepressjournal\.in/mumbai/[a-z0-9-]+$"),
         "body_selector": ("article p", None),
+        "home_state": "Maharashtra",
+    },
+    # Same Hindustan Times city-feed pattern as Mumbai, verified live to
+    # return HTTP 200 for each of these four slugs. robots.txt is checked
+    # per-URL at fetch time by _robots_allows() regardless of city — the
+    # site's rule (`/feeds/*` allowed, only `/intfeeds/` disallowed) is
+    # domain-wide, not path-specific, so nothing city-specific needed
+    # re-verifying here. These are the same four metros
+    # schema_migration_010.sql already seeds real `localities` rows for,
+    # via schema_reference_districts.sql's reference district rows.
+    {
+        "name": "hindustan_times_delhi",
+        "kind": "rss",
+        "listing_url": "https://www.hindustantimes.com/feeds/rss/cities/delhi-news/rssfeed.xml",
+        "body_selector": ("p.content", None),
+        "home_state": "Delhi",
+    },
+    {
+        "name": "hindustan_times_bengaluru",
+        "kind": "rss",
+        "listing_url": "https://www.hindustantimes.com/feeds/rss/cities/bengaluru-news/rssfeed.xml",
+        "body_selector": ("p.content", None),
+        "home_state": "Karnataka",
+    },
+    {
+        "name": "hindustan_times_chennai",
+        "kind": "rss",
+        "listing_url": "https://www.hindustantimes.com/feeds/rss/cities/chennai-news/rssfeed.xml",
+        "body_selector": ("p.content", None),
+        "home_state": "Tamil Nadu",
+    },
+    {
+        "name": "hindustan_times_pune",
+        "kind": "rss",
+        "listing_url": "https://www.hindustantimes.com/feeds/rss/cities/pune-news/rssfeed.xml",
+        "body_selector": ("p.content", None),
+        "home_state": "Maharashtra",
     },
 ]
 
-# Real Mumbai-area neighbourhood names. This is a plain keyword list, NOT the
-# `localities` table (that migration is being done elsewhere in this work
-# session) — it exists here only so this module can flag which articles
-# would be locality-taggable once that table lands.
+# Real neighbourhood names for all five metros this module now covers. This
+# is a plain keyword list, NOT the `localities` table — it exists only so
+# _find_localities() can flag candidate neighbourhood mentions in article
+# text; resolve_locality_id() does the real resolution against whatever
+# `localities` rows actually exist in the DB. Every name below is copied
+# verbatim from schema_migration_009.sql (Mumbai) / schema_migration_010.sql
+# (Delhi, Bengaluru, Chennai, Pune) — not invented here, so a keyword hit is
+# guaranteed resolvable against a real seeded row.
 MUMBAI_LOCALITIES = [
     "Juhu", "Vile Parle", "Andheri", "Bandra", "Khar", "Santacruz",
     "Churchgate", "Colaba", "Fort", "Marine Lines", "Charni Road",
@@ -128,9 +175,35 @@ MUMBAI_LOCALITIES = [
     "Dahisar", "Mira Road", "Thane", "Vashi", "Navi Mumbai", "Panvel",
     "Kalyan", "Dombivli", "Bhayandar",
 ]
-LOCALITY_PATTERN = re.compile(
-    r"\b(" + "|".join(re.escape(n) for n in MUMBAI_LOCALITIES) + r")\b"
+DELHI_LOCALITIES = [
+    "Connaught Place", "Karol Bagh", "Chandni Chowk", "Hauz Khas", "Saket",
+    "Vasant Kunj", "Dwarka", "Rohini", "Lajpat Nagar", "Greater Kailash",
+    "Rajouri Garden", "Pitampura", "Janakpuri", "Mayur Vihar",
+]
+BENGALURU_LOCALITIES = [
+    "Koramangala", "Indiranagar", "Whitefield", "Jayanagar", "Malleshwaram",
+    "Rajajinagar", "HSR Layout", "Electronic City", "Marathahalli",
+    "Basavanagudi", "Yelahanka", "JP Nagar", "Banashankari",
+]
+CHENNAI_LOCALITIES = [
+    "T Nagar", "Anna Nagar", "Adyar", "Mylapore", "Velachery",
+    "Nungambakkam", "Besant Nagar", "Egmore", "Guindy", "Tambaram",
+    "Porur", "Kilpauk", "Perambur",
+]
+PUNE_LOCALITIES = [
+    "Koregaon Park", "Shivajinagar", "Kothrud", "Viman Nagar", "Aundh",
+    "Baner", "Hadapsar", "Deccan Gymkhana", "Wakad", "Katraj", "Kondhwa",
+    "Yerawada", "Sinhagad Road",
+]
+ALL_METRO_LOCALITIES = (
+    MUMBAI_LOCALITIES + DELHI_LOCALITIES + BENGALURU_LOCALITIES
+    + CHENNAI_LOCALITIES + PUNE_LOCALITIES
 )
+LOCALITY_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(n) for n in ALL_METRO_LOCALITIES) + r")\b"
+)
+
+_SOURCE_HOME_STATE = {cfg["name"]: cfg["home_state"] for cfg in SOURCES}
 
 # Keyword filter: article title/description must hit at least one of these
 # to be considered food-safety relevant.
@@ -299,6 +372,7 @@ class LocalNewsRecord:
     """
     raw: RawRecord
     title: str
+    source_name: str = ""
     locality_names: list[str] = field(default_factory=list)
 
 
@@ -360,7 +434,7 @@ def fetch_records(limit: int = 20) -> tuple[list[LocalNewsRecord], dict]:
 
             rec = RawRecord(
                 source_url=cand.link,
-                source_type="local_news_mumbai",
+                source_type="local_news",
                 date=fields["date"],
                 product_name=fields["product_name"],
                 brand=fields["brand"],
@@ -372,7 +446,9 @@ def fetch_records(limit: int = 20) -> tuple[list[LocalNewsRecord], dict]:
                 pass_fail=fields["pass_fail"],
                 page_ocr_confidence=1.0,
             )
-            records.append(LocalNewsRecord(raw=rec, title=cand.title, locality_names=localities))
+            records.append(LocalNewsRecord(
+                raw=rec, title=cand.title, source_name=source_cfg["name"], locality_names=localities,
+            ))
             stats["records_produced"] += 1
 
         if len(records) >= limit:
@@ -547,7 +623,8 @@ def ingest(conn, records: list[LocalNewsRecord]) -> dict:
             locality_id, district_id = loc_match
             summary["locality_resolved"] += 1
 
-        state_canonical = geo.standardise_state(raw.state.value if raw.state else None) or "Maharashtra"
+        home_state = _SOURCE_HOME_STATE.get(rec.source_name, "Maharashtra")
+        state_canonical = geo.standardise_state(raw.state.value if raw.state else None) or home_state
         if district_id is None:
             district_id, _ = geo.resolve_district(
                 raw.district.value if raw.district else None, state_canonical
@@ -570,8 +647,8 @@ def ingest(conn, records: list[LocalNewsRecord]) -> dict:
                             raw_value_ppb, legal_limit_ppb, pass_fail, state, district_id,
                             locality_id, confidence_score, dedup_hash, is_duplicate,
                             etl_version, parsed_at
-                        ) VALUES (%s,%s,'local_news_mumbai',%s,%s,%s,%s,%s,%s,%s,
-                                  %s,%s,%s,FALSE,'local-news-1.0',NOW())""",
+                        ) VALUES (%s,%s,'local_news',%s,%s,%s,%s,%s,%s,%s,
+                                  %s,%s,%s,FALSE,'local-news-1.1',NOW())""",
                     (
                         test_date, raw.source_url, commodity_id, contaminant_id,
                         value_ppb, legal_limit, pass_fail, state_canonical, district_id,

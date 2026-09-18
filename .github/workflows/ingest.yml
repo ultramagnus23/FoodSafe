@@ -119,13 +119,18 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         continue-on-error: true   # best-effort scrape of two news sites; 0 rows is expected, not a regression
-        # docs/LOCAL_NEWS_INGESTION.md: real test run found 1/28 listing items
-        # relevant. Running daily lets real signal accumulate over time
-        # instead of being a one-off manual pull. Idempotent (dedups on
-        # sha256(source_url|contaminant_id)) so re-running daily is safe.
+        # docs/LOCAL_NEWS_INGESTION.md: now covers 5 metros (Mumbai, Delhi,
+        # Bengaluru, Chennai, Pune), verified live 2026-09-18 to find real
+        # signal on the first multi-city pull. Running daily lets real
+        # signal accumulate over time instead of being a one-off manual
+        # pull. Idempotent (dedups on sha256(source_url|contaminant_id))
+        # so re-running daily is safe. limit=20 is a *global* cap on
+        # records_produced across all 6 sources (fetch_records() stops
+        # once it's hit, not per-source), so raised from the original
+        # single-city value to give every city a fair shot at the cap.
         run: |
           pip install --quiet beautifulsoup4 lxml
-          python -m pipeline.run_and_log local_news --limit 20
+          python -m pipeline.run_and_log local_news --limit 50
 
       - name: Ingest scientific evidence links (OpenAlex, real DOIs/abstracts)
         id: research_evidence

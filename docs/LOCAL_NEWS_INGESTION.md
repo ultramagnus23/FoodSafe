@@ -1,8 +1,41 @@
-# Local Mumbai news ingestion — investigation & status
+# Local news ingestion — investigation & status
 
 **Module:** `pipeline/sources/local_news.py`
 **Run (standalone):** `python -m pipeline.sources.local_news --limit 20`
 **Run (logged, matches other sources):** `python -m pipeline.run_and_log local_news --limit 20`
+**Scheduled:** daily in `.github/workflows/ingest.yml` since 2026-09-18
+(`continue-on-error`, in `EXPECTED_EMPTY_SOURCES`).
+
+## 2026-09-18 update — extended to five metros
+
+Originally Mumbai-only (see "Real test run" below). Extended to the four
+other metros `localities` already has real, seeded neighbourhoods for
+(Delhi, Bengaluru, Chennai, Pune — `schema_migration_010.sql`), via the
+same Hindustan Times city-feed URL pattern, verified live to return
+HTTP 200 for all four new slugs. `SOURCES` now has 6 entries (2 Mumbai +
+1 each for the other four cities); `MUMBAI_LOCALITIES` was joined with
+`DELHI_LOCALITIES`/`BENGALURU_LOCALITIES`/`CHENNAI_LOCALITIES`/
+`PUNE_LOCALITIES` into `ALL_METRO_LOCALITIES` — every name copied
+verbatim from `schema_migration_009.sql`/`010.sql`, not invented here, so
+a keyword hit is always resolvable against a real seeded row.
+
+**`source_type` changed from `'local_news_mumbai'` to a generic
+`'local_news'`** (`schema_migration_017.sql` widens the CHECK constraint
+to accept both — old Mumbai rows are left as `'local_news_mumbai'`, not
+backfilled). Rationale: a per-city value would need a new migration every
+time a city is added, and the geographic specificity already lives in
+`district_id`/`locality_id` on the same row. The Maharashtra-only state
+fallback (used only when NER extracts no state and no locality resolves)
+is now looked up per-source via `_SOURCE_HOME_STATE`, so a Delhi article
+with no NER state hit no longer silently gets tagged Maharashtra.
+
+**Live dry-run the same day** (`fetch_records(limit=50)`, no DB write):
+6/6 sources fetched successfully, 134 listing items seen across all five
+cities, 3 passed the food-safety filter (2 Mumbai, 1 Pune — "FDA raids 14
+establishments, suspends The New Poona Club's food licence"), 2 of those
+3 named a real neighbourhood. Confirms the expansion works end-to-end,
+not just in theory — real signal from a second city (Pune) on the first
+pull.
 
 ## Why this source
 
@@ -145,15 +178,12 @@ same pattern as `fssai_recall.py`) does, per `LocalNewsRecord`:
    than `fssai_recall.py`'s 0.80 since this is our own scrape/keyword/NER
    chain, not an official government portal listing).
 
-**Naming flag, not a change made here:** `source_type='local_news_mumbai'`
-is what `schema_migration_009.sql` already added to the CHECK constraint,
-so that's what this module writes. If more cities are added as local-news
-sources later, a more generic `source_type='local_news'` (with the city
-recoverable from `locality_id`/`district_id` instead of baked into the
-`source_type` string) would probably be the better long-term shape — but
-that's a schema change, intentionally left to whoever adds the next
-city-specific news source, not done here to avoid colliding with the
-parallel `schema_migration_010.sql` locality-seeding work.
+**Update 2026-09-18:** done — see "2026-09-18 update" above.
+`source_type='local_news'` (generic) is what new rows write now, via
+`schema_migration_017.sql`; the city is recoverable from
+`locality_id`/`district_id` on the same row rather than baked into the
+`source_type` string. Rows inserted before this migration keep their
+original `'local_news_mumbai'` value.
 
 ## Real test run (2026-07-11, `--limit 20`)
 
@@ -210,16 +240,13 @@ Milk Sales; Only Sealed, Labelled Milk Can Be Sold Across State"**
   that up beyond what `FSSAINERExtractor` already does — cleaning up the
   shared rule engine is out of scope here since it's shared with the PDF
   path.
-- **Database write now exists** (`ingest()`, see above) using
-  `source_type='local_news_mumbai'` (added to the CHECK constraint by
-  `schema_migration_009.sql`) and the new `locality_id` column. It is wired
+- **Database write path** (`ingest()`, see above) uses `source_type='local_news'`
+  (generic, `schema_migration_017.sql`) and the `locality_id` column. Wired
   into `pipeline/run_and_log.py` (`python -m pipeline.run_and_log
-  local_news --limit N`) and listed in `EXPECTED_EMPTY_SOURCES` there,
-  since a 0-row run is the documented, expected outcome at this sample
-  size (see the real test run above) — a genuine regression would need to
-  show up as an exception, not just a low row count. **Not yet wired into
-  `.github/workflows/ingest.yml`** — that's a deliberate follow-up
-  decision, not done as part of this change.
+  local_news --limit N`), listed in `EXPECTED_EMPTY_SOURCES` there since a
+  low row count is the documented, expected outcome at this sample size —
+  a genuine regression would need to show up as an exception, not just a
+  low row count — and now scheduled daily in `.github/workflows/ingest.yml`.
 - **`test_date` is an approximation** (parsed NER date field, or
   `date.today()` if that fails) — the article's actual publish date isn't
   currently threaded from `Candidate.pub_date` into the record written to
