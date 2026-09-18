@@ -142,10 +142,10 @@ writing.
 
 ## Relevance to the model and the paper
 
-* **Backtest:** a real state-year backtest (predict next year's non-conforming
-  rate from prior years) is now *possible in principle* — 12 fiscal years with
-  uneven coverage and the definition change above. It has **not** been run;
-  `docs/BACKTEST_REPORT.md` is unchanged in substance.
+* **Backtest:** run and written up in `docs/BACKTEST_SAMPLING.md` — state
+  identity carries stable information about the non-conforming rate (persistence
+  MAE 0.048 vs 0.132 for the national rate), but no model beat plain persistence
+  and the persistence may reflect enforcement practice rather than food risk.
 * **Paper B:** the barrier is FSSAI's own channels specifically; the same
   numbers are recoverable, painfully, from Parliament — and doing so required
   rejecting most of what the PDFs contain. That is a finding about the cost of
