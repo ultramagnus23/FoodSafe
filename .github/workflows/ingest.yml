@@ -105,6 +105,19 @@ jobs:
           pip install --quiet pdfplumber
           python -m pipeline.run_and_log loksabha_qa
 
+      - name: Refresh Lok Sabha State-wise sampling outcomes (samples analysed vs non-conforming)
+        id: loksabha_sampling
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # first run reads ~135 PDFs (several minutes); later runs skip everything already logged
+        # docs/LOKSABHA_SAMPLING.md. Strict by design: a table is accepted only
+        # if it passes every integrity check, otherwise rejected whole and
+        # logged to loksabha_question_log. Runs after loksabha_qa so the two
+        # Lok Sabha steps share one sansad.in politeness window.
+        run: |
+          pip install --quiet pdfplumber
+          python -m pipeline.run_and_log loksabha_sampling
+
       - name: Refresh FSSAI Annual Report national enforcement metrics
         id: fssai_annual_report
         env:

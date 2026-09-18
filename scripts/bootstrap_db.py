@@ -58,6 +58,8 @@ CORE_TABLES = [
     "labs",
     "state_enforcement_annual",
     "national_enforcement_annual",
+    "state_sampling_annual",
+    "loksabha_question_log",
 ]
 
 

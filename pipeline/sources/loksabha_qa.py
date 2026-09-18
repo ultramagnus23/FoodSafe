@@ -128,6 +128,24 @@ _STATE_CANON_RAW: dict[str, str] = {
     "uttarpradesh": "Uttar Pradesh",
     "uttarakhand": "Uttarakhand",
     "westbengal": "West Bengal",
+    # Variants measured in the 16th/17th Lok Sabha state tables
+    # (pipeline/sources/loksabha_sampling.py). Dadra & Nagar Haveli and Daman
+    # & Diu were SEPARATE UTs before 2020, so they stay separate here — mapping
+    # both to the merged UT would collide two distinct rows.
+    "andaman&nicobarislands": "Andaman and Nicobar Islands",
+    "andaman&nicobarisland": "Andaman and Nicobar Islands",
+    "jammuandkashmir": "Jammu and Kashmir",
+    "dadra&nagarhaveli": "Dadra and Nagar Haveli",
+    "dadara&nagarhaveli": "Dadra and Nagar Haveli",
+    "dadra&n.h": "Dadra and Nagar Haveli",
+    "daman&diu": "Daman and Diu",
+    "dadranagarhaveli&daman&diu": "Dadra and Nagar Haveli and Daman and Diu",
+    "dadara&nagarhavelianddaman&diu": "Dadra and Nagar Haveli and Daman and Diu",
+    "pondicherry": "Puducherry",
+    "uttrakhand": "Uttarakhand",
+    "lakshdweep": "Lakshadweep",
+    # "D&N H D&D" = Dadra & Nagar Haveli + Daman & Diu, the merged UT (2020+)
+    "d&nhd&d": "Dadra and Nagar Haveli and Daman and Diu",
 }
 
 # Keys above are written human-readably (some contain "&") but the lookup
