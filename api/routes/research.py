@@ -17,12 +17,17 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from api.db import get_pool
 
 research_router = APIRouter()
+
+# Postgres INTEGER ceiling. A larger id would make asyncpg raise (-> HTTP 500)
+# instead of matching nothing, so it is rejected at the boundary with a 422.
+_INT4_MAX = 2_147_483_647
+_MAX_OFFSET = 1_000_000
 
 RESEARCH_DISCLAIMER = (
     "These are peer-reviewed scientific sources associating a contaminant "
@@ -141,16 +146,18 @@ async def research_summary():
 
 @research_router.get("", response_model=ResearchListResponse)
 async def list_research(
-    contaminant_id: Optional[int] = None,
+    contaminant_id: Optional[int] = Query(None, ge=1, le=_INT4_MAX),
     q: Optional[str] = Query(None, max_length=100),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=_MAX_OFFSET),
 ):
     # $2 is a bound parameter, never interpolated into the SQL text. Escape
     # LIKE wildcards so a user typing '%' or '_' searches for the literal.
+    # NUL is stripped first: Postgres text cannot hold it and asyncpg raises.
     pattern = None
-    if q and q.strip():
-        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    term = (q or "").replace("\x00", "").strip()
+    if term:
+        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{escaped}%"
 
     pool = get_pool()
@@ -193,12 +200,23 @@ async def list_research(
 
 
 @research_router.get("/{source_id}", response_model=ResearchDetail)
-async def get_research(source_id: int):
+async def get_research(
+    source_id: int = Path(..., ge=1, le=_INT4_MAX),
+    contaminant_id: Optional[int] = Query(None, ge=1, le=_INT4_MAX),
+):
+    """A paper can be linked to several contaminants, so the row is one
+    (paper, contaminant) pair. Pass contaminant_id (the list endpoint returns
+    it per row) to get that pair; without it the lowest contaminant_id is
+    returned, so the answer is at least deterministic."""
     pool = get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            _DETAIL_SELECT + " WHERE rs.id = $1 LIMIT 1",
-            source_id,
+            _DETAIL_SELECT + """
+            WHERE rs.id = $1 AND ($2::int IS NULL OR crl.contaminant_id = $2)
+            ORDER BY crl.contaminant_id
+            LIMIT 1
+            """,
+            source_id, contaminant_id,
         )
     if not row:
         raise HTTPException(404, "Research source not found")

@@ -32,7 +32,7 @@ jobs:
       # add it here. Verified 2026-09-11 in a clean venv with exactly this list:
       # 62 passed.
       - name: Install test dependencies
-        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image beautifulsoup4 dateparser python-dotenv pdfplumber pydantic
+        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image beautifulsoup4 dateparser python-dotenv pdfplumber pydantic fastapi httpx asyncpg
 
       - name: Run tests
         run: python -m pytest tests/ -v
