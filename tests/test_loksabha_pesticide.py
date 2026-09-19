@@ -369,3 +369,11 @@ def test_discovery_keeps_only_relevant_ministries(monkeypatch):
     monkeypatch.setattr(P.LQ, "_search", lambda kw, term, page_size=200: results)
     found = P.discover((16,))
     assert sorted(int(q["quesNo"]) for q in found) == [1, 3]
+
+
+def test_discovery_raises_when_the_search_api_is_unreachable(monkeypatch):
+    def dead(kw, term, page_size=200):
+        raise OSError("timed out")
+    monkeypatch.setattr(P.LQ, "_search", dead)
+    with pytest.raises(P.LQ.SearchUnavailable):
+        P.discover((18, 17, 16))

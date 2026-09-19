@@ -63,3 +63,56 @@ def test_one_failing_search_does_not_abort_the_rest(monkeypatch):
     monkeypatch.setattr(L, "SEARCH_KEYWORDS", ["bad", "good"])
 
     assert len(L.discover_questions(terms=(17,))) == 1
+
+
+# ---- an unreachable source must fail the run, not look like "no questions" ----
+
+import pytest  # noqa: E402
+
+
+def test_every_search_failing_raises_instead_of_returning_nothing(monkeypatch):
+    calls = []
+
+    def dead(kw, term, page_size=200):
+        calls.append((kw, term))
+        raise OSError("timed out")
+    monkeypatch.setattr(L, "_search", dead)
+    monkeypatch.setattr(L, "SEARCH_KEYWORDS", ["a", "b", "c", "d", "e"])
+
+    with pytest.raises(L.SearchUnavailable):
+        L.discover_questions(terms=(18, 17))
+    # Three failures in a row abandon a term: 3 per term, not 5.
+    assert len(calls) == 6
+
+
+def test_a_dead_term_is_abandoned_but_the_next_term_is_still_tried(monkeypatch):
+    def flaky(kw, term, page_size=200):
+        if term == 18:
+            raise OSError("timed out")
+        return [_q(term, 9)]
+    monkeypatch.setattr(L, "_search", flaky)
+    monkeypatch.setattr(L, "SEARCH_KEYWORDS", ["a", "b", "c", "d"])
+
+    found = L.discover_questions(terms=(18, 17))
+
+    assert [int(q["lokNo"]) for q in found] == [17]
+
+
+def test_a_success_resets_the_failure_streak(monkeypatch):
+    seq = iter([OSError("x"), OSError("x"), None, OSError("x"), OSError("x"), None])
+
+    def spotty(kw, term, page_size=200):
+        r = next(seq)
+        if r:
+            raise r
+        return [_q(term, int(ord(kw)))]
+    monkeypatch.setattr(L, "_search", spotty)
+    monkeypatch.setattr(L, "SEARCH_KEYWORDS", ["a", "b", "c", "d", "e", "f"])
+
+    assert len(L.discover_questions(terms=(17,))) == 2   # never three failures in a row
+
+
+def test_a_search_that_succeeds_with_no_matches_is_not_an_outage(monkeypatch):
+    monkeypatch.setattr(L, "_search", lambda kw, term, page_size=200: [])
+    monkeypatch.setattr(L, "SEARCH_KEYWORDS", ["a", "b"])
+    assert L.discover_questions(terms=(17,)) == []

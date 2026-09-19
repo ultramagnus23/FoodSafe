@@ -390,17 +390,13 @@ def is_relevant(pages: list[dict]) -> bool:
 # ---------------------------------------------------------------- discovery
 
 def discover(terms: tuple[int, ...] | None = None) -> list[dict]:
-    seen: dict[tuple[int, str], dict] = {}
-    for term in (terms or PESTICIDE_TERMS):
-        for kw in PESTICIDE_KEYWORDS:
-            try:
-                for q in LQ._search(kw, term):
-                    if not (q.get("ministry") or "").strip().upper().startswith(_MINISTRY_PREFIXES):
-                        continue
-                    seen[LQ.question_key(q)] = q
-            except Exception as e:  # noqa: BLE001
-                logger.warning("search failed for keyword %r (LS%s): %s", kw, term, e)
-    return list(seen.values())
+    """Raises loksabha_qa.SearchUnavailable if every search failed."""
+    found, errors, attempts = LQ.discover(
+        tuple(terms or PESTICIDE_TERMS), PESTICIDE_KEYWORDS,
+        lambda q: (q.get("ministry") or "").strip().upper().startswith(_MINISTRY_PREFIXES),
+    )
+    LQ.raise_if_unavailable(errors, attempts)
+    return found
 
 
 # ---------------------------------------------------------------- database

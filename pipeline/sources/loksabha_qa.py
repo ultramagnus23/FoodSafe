@@ -190,21 +190,60 @@ def question_key(q: dict) -> tuple[int, str]:
     return int(q["lokNo"]), str(q["quesNo"]).strip()
 
 
+class SearchUnavailable(RuntimeError):
+    """Every search request failed: sansad.in is unreachable, which is not the
+    same as "no matching questions". Raised so the run is recorded as failed
+    (and alerted on) instead of quietly inserting zero rows — a scheduled run on
+    2026-09-19 timed out on all 78 searches and still finished 'success'."""
+
+
+# After this many failed searches in a row for one Lok Sabha term the rest of
+# its keywords are skipped: each failure costs a 30 s timeout, and 13 keywords x
+# 3 terms x 2 steps of that is most of an hour of doing nothing.
+MAX_CONSECUTIVE_SEARCH_FAILURES = 3
+
+
+def discover(terms: tuple[int, ...], keywords: list[str], accept) -> tuple[list[dict], int, int]:
+    """Search `keywords` across Lok Sabha `terms`, dedupe on (lokNo, quesNo) and
+    keep the questions `accept(q)` approves. Returns (questions, failed searches,
+    attempted searches)."""
+    seen: dict[tuple[int, str], dict] = {}
+    errors = attempts = 0
+    for term in terms:
+        streak = 0
+        for kw in keywords:
+            attempts += 1
+            try:
+                for q in _search(kw, term):
+                    if accept(q):
+                        seen[question_key(q)] = q
+                streak = 0
+            except Exception as e:  # noqa: BLE001
+                errors += 1
+                streak += 1
+                logger.warning("search failed for keyword %r (LS%s): %s", kw, term, e)
+                if streak >= MAX_CONSECUTIVE_SEARCH_FAILURES:
+                    logger.error("LS%s: %d searches in a row failed; skipping its remaining keywords", term, streak)
+                    break
+    return list(seen.values()), errors, attempts
+
+
+def raise_if_unavailable(errors: int, attempts: int) -> None:
+    if attempts and errors == attempts:
+        raise SearchUnavailable(f"all {attempts} Lok Sabha searches failed; sansad.in appears unreachable")
+
+
+def _is_health(q: dict) -> bool:
+    return (q.get("ministry") or "").strip().upper() == "HEALTH AND FAMILY WELFARE"
+
+
 def discover_questions(terms: tuple[int, ...] | None = None) -> list[dict]:
     """Search several keywords across Lok Sabha terms, dedupe on
     (lokNo, quesNo), keep only HEALTH AND FAMILY WELFARE questions
-    (FSSAI's parent ministry)."""
-    seen: dict[tuple[int, str], dict] = {}
-    for term in (terms or LOKSABHA_TERMS):
-        for kw in SEARCH_KEYWORDS:
-            try:
-                for q in _search(kw, term):
-                    if q.get("ministry", "").strip().upper() != "HEALTH AND FAMILY WELFARE":
-                        continue
-                    seen[question_key(q)] = q
-            except Exception as e:  # noqa: BLE001
-                logger.warning("search failed for keyword %r (LS%s): %s", kw, term, e)
-    return list(seen.values())
+    (FSSAI's parent ministry). Raises SearchUnavailable if every search failed."""
+    found, errors, attempts = discover(tuple(terms or LOKSABHA_TERMS), SEARCH_KEYWORDS, _is_health)
+    raise_if_unavailable(errors, attempts)
+    return found
 
 
 def _download(url: str) -> bytes:
