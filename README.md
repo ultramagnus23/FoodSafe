@@ -21,7 +21,7 @@ Each line says how it was verified. Where something is only reported, it says so
 - **Database:** Supabase, recreated 2026-09-11 and **real-only** — no synthetic
   rows (`seed_demo.sql` / `pipeline/seed_enforcement.py` are not loaded in
   production).
-- **Tests:** 273 passing (`pytest tests/`), CI green.
+- **Tests:** 275 passing (`pytest tests/`), CI green.
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
@@ -91,8 +91,9 @@ here; the file is left in place for whoever wants to decide otherwise.
 Failed steps (including `continue-on-error` ones whose green check hides a
 failure) are meant to be reported to one rolling GitHub issue by
 `scripts/ingest_alert.py`. The old alert steps never worked (their label didn't
-exist); the replacement is unit-tested with a fake `gh` but has **not yet fired
-in production**.
+exist); the replacement is unit-tested with a fake `gh` and **fired for real on
+2026-09-19** (issue #8: the FoSCoS scraper hit a page that never settled and
+was unclassifiable — see `docs/PAPER_SCOPING.md` §5b).
 
 ## Not done / open
 

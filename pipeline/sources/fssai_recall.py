@@ -80,15 +80,28 @@ def classify_portal_state(
     return "open"
 
 
-def read_body_text(page) -> str:
+def read_body_text(page, attempts: int = 2) -> str:
     """Body text WITHOUT a waiting locator: page.inner_text('body') blocks for
     30s and raises when the app crashes on init, which used to turn the
-    documented gate into a daily TimeoutError."""
-    try:
-        return page.evaluate("document.body ? document.body.innerText : ''") or ""
-    except Exception as e:  # noqa: BLE001
-        logger.warning("could not read page body: %s", e)
-        return ""
+    documented gate into a daily TimeoutError.
+
+    "Execution context was destroyed" means the page navigated while we were
+    reading (seen on the 2026-09-19 CI run, where the load never went idle and
+    the read hit a reload). That is transient, so after a failure we wait
+    briefly for the new document and read once more; only if that also fails
+    is the body reported empty.
+    """
+    for attempt in range(attempts):
+        try:
+            return page.evaluate("document.body ? document.body.innerText : ''") or ""
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not read page body (attempt %d/%d): %s", attempt + 1, attempts, e)
+            if attempt + 1 < attempts:
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:  # noqa: BLE001 — no settled document either; retry regardless
+                    pass
+    return ""
 
 
 # ------------------------------------------------------------
@@ -134,6 +147,10 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
         page.wait_for_timeout(3000)
 
         body_text = read_body_text(page)
+        try:
+            final_url = page.url
+        except Exception:  # noqa: BLE001
+            final_url = ""
         state = classify_portal_state(body_text, api_status["status"], csrf_status["status"], nav_error)
         if state == "maintenance":
             logger.warning("FoSCoS is in its daily maintenance window — try again "
@@ -163,7 +180,9 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
             browser.close()
             raise RuntimeError(
                 "FoSCoS rendered no text and no 401/maintenance response explains why — "
-                "investigate before assuming this is the documented gate."
+                "investigate before assuming this is the documented gate. "
+                f"Diagnostics: url={final_url!r}, recall_api_status={api_status['status']}, "
+                f"csrf_status={csrf_status['status']}, navigation_error={nav_error[:160]!r}"
             )
 
         # The page is a filter/search form, not an auto-loading list — the

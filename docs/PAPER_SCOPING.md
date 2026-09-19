@@ -117,7 +117,7 @@ FSSAI's *own* channels. It is not true of government as a whole: State/UT
 annual counts of samples analysed / found non-conforming (2013-14 → 2025-26)
 and enforcement counts are disclosed to Parliament and are reachable through
 sansad.in's unauthenticated JSON search API plus the answers' PDFs. Recovering
-them was costly: of 73 candidate tables in 124 answers, 57 were rejected for
+them was costly: of 70 candidate tables in 124 answers, 54 were rejected for
 extraction defects (rows fused, misaligned by one state, garbled names, merged
 headers), leaving 16 tables / 539 state-year rows with uneven coverage
 (`docs/LOKSABHA_SAMPLING.md`). Suggested framing: the regulator publishes
@@ -148,6 +148,15 @@ absolute "zero programmatically accessible" wording should go.
   non-connection from the runner**, not the app-level CSRF 401 seen locally. Two
   vantage points, two different behaviours: from a local network the page loads
   and its CSRF bootstrap is refused; from GitHub's runner nothing connects.
+* **A third behaviour, 2026-09-19 09:26 UTC (daily ingest, GitHub runner, outside
+  the maintenance window):** the page did **not** fail to connect. `networkidle`
+  never settled (60 s timeout), the document then navigated while it was being
+  read ("execution context was destroyed"), and neither the recall API nor the
+  CSRF endpoint had been seen. Nothing could be classified, so the scraper raised
+  and the new alerter opened a GitHub issue — its first production firing. One
+  reading, no cause established (a bot-defence reload loop is a hypothesis, not
+  a finding). The scraper now retries the body read once after the navigation and
+  records the URL and statuses in the error so the next occurrence is explainable.
 * What is still NOT established: *why* the runner cannot connect (an IP/geography
   block of GitHub's ranges, an outage, or something else) — it is **one** reading,
   and July's CI probes did connect. Do not assert a cause; repeat readings are

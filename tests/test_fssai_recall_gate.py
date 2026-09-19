@@ -73,11 +73,15 @@ def test_maintenance_wins_over_a_status_code():
 class _Page:
     def __init__(self, value=None, exc=None):
         self._value, self._exc = value, exc
+        self.waited = 0
 
     def evaluate(self, _js):
         if self._exc:
             raise self._exc
         return self._value
+
+    def wait_for_load_state(self, *_a, **_k):
+        self.waited += 1
 
 
 def test_read_body_text_returns_text():
@@ -91,3 +95,28 @@ def test_read_body_text_swallows_evaluation_errors_instead_of_blocking():
 @pytest.mark.parametrize("value", [None, ""])
 def test_read_body_text_normalises_empty_results(value):
     assert read_body_text(_Page(value)) == ""
+
+
+class _FlakyPage(_Page):
+    """First read hits a navigation (context destroyed), the second succeeds."""
+
+    def __init__(self, text):
+        super().__init__(text)
+        self.calls = 0
+
+    def evaluate(self, js):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("Execution context was destroyed, most likely because of a navigation")
+        return self._value
+
+
+def test_read_body_text_retries_once_after_a_navigation_destroys_the_context():
+    page = _FlakyPage("Food Recall")
+    assert read_body_text(page) == "Food Recall"
+    assert page.calls == 2 and page.waited == 1
+
+
+def test_read_body_text_gives_up_after_the_retry():
+    page = _Page(exc=RuntimeError("Execution context was destroyed"))
+    assert read_body_text(page) == "" and page.waited == 1
