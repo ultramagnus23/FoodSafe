@@ -21,7 +21,7 @@ Each line says how it was verified. Where something is only reported, it says so
 - **Database:** Supabase, recreated 2026-09-11 and **real-only** — no synthetic
   rows (`seed_demo.sql` / `pipeline/seed_enforcement.py` are not loaded in
   production).
-- **Tests:** 275 passing (`pytest tests/`), CI green.
+- **Tests:** 329 passing (`pytest tests/`), CI green.
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
@@ -39,6 +39,7 @@ Each line says how it was verified. Where something is only reported, it says so
 | openFDA food enforcement | US recalls (comparison baseline, ~119 rows on 2026-09-16, not re-counted) | real, converged |
 | Lok Sabha — state enforcement | State/UT × year samples analysed, cases, convictions, licences cancelled (350 rows, job log 2026-09-18) | real |
 | **Lok Sabha — state sampling outcomes** | State/UT × year samples analysed **vs found non-conforming**, 2013-14 → 2025-26 (539 rows from 16 strictly-validated tables, job log 2026-09-18) — [`docs/LOKSABHA_SAMPLING.md`](docs/LOKSABHA_SAMPLING.md) | real; the only source with a pass side |
+| **Lok Sabha — pesticide residues (MPRNL)** | National commodity × period counts of samples analysed **vs above the FSSAI residue limit**, 2012-13 → 2018-19 (73 rows from 6 answers; production run 2026-09-19 inserted the same 73 as the local check, job log) — [`docs/LOKSABHA_PESTICIDE.md`](docs/LOKSABHA_PESTICIDE.md) | real contamination test results with a pass side, national grain only; 8 of 16 multiply-reported cells disagree between an early and later vintage |
 | FSSAI Annual Report | national enforcement metrics, 3 fiscal years | real |
 | FSSAI labs / commissioners | testing-lab (255) and state-commissioner directories | real directories |
 | AGMARKNET | district/commodity reference geography | real but flaky: the API returned HTTP 400 in every run I checked (2026-09-16 → 09-18) |
@@ -92,8 +93,9 @@ Failed steps (including `continue-on-error` ones whose green check hides a
 failure) are meant to be reported to one rolling GitHub issue by
 `scripts/ingest_alert.py`. The old alert steps never worked (their label didn't
 exist); the replacement is unit-tested with a fake `gh` and **fired for real on
-2026-09-19** (issue #8: the FoSCoS scraper hit a page that never settled and
-was unclassifiable — see `docs/PAPER_SCOPING.md` §5b).
+2026-09-19** (issue #8: the FoSCoS scraper could not classify a failed page load,
+which turned out to be the runner's usual non-connection — see
+`docs/PAPER_SCOPING.md` §5b; issue #8 can be closed once the next run is clean).
 
 ## Not done / open
 

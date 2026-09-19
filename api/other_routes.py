@@ -113,6 +113,24 @@ class StateSamplingOut(BaseModel):
     answered_date: Optional[str]
     source_url: str
 
+class PesticideResidueOut(BaseModel):
+    commodity: str
+    commodity_label: str
+    period_label: str
+    fiscal_year: Optional[str]
+    period_kind: str
+    samples_analyzed: int
+    samples_above_mrl: int
+    above_mrl_pct: Optional[float]
+    verification: str
+    corroboration: str
+    n_sources: int
+    lok_sabha_no: int
+    source_question_no: int
+    source_question_subject: Optional[str]
+    answered_date: Optional[str]
+    source_url: str
+
 @meta_router.get("/districts", response_model=list[DistrictOut])
 async def list_districts():
     pool = get_pool()
@@ -258,6 +276,53 @@ async def list_state_sampling(
             state, fiscal_year, basis,
         )
     return [StateSamplingOut(**dict(r)) for r in rows]
+
+@meta_router.get("/pesticide-residues", response_model=list[PesticideResidueOut])
+async def list_pesticide_residues(
+    commodity: Optional[str] = Query(None, max_length=40),
+    period_kind: Optional[str] = Query(None, pattern="^(fiscal_year|partial_year|multi_year_pool)$"),
+):
+    """Real national pesticide-residue monitoring results (MPRNL): samples
+    analysed vs samples above the FSSAI Maximum Residue Limit, by commodity and
+    period, from Lok Sabha written answers. See schema_migration_020.sql and
+    pipeline/sources/loksabha_pesticide.py.
+
+    National grain only (no state/district/brand). One row per (commodity,
+    period, answer): the same figure is often disclosed in several answers at
+    different vintages and is never merged. `corroboration` says whether the
+    other answers for that (commodity, period) agree exactly ('corroborated'),
+    disagree ('conflicting' — usually an early figure later revised), or there
+    is only one ('single_source'). `period_kind` separates full fiscal years
+    from part-years and multi-year pools, which are not comparable. Above the
+    MRL is a regulatory-limit exceedance, not proof of harm."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """WITH agg AS (
+                   SELECT commodity, period_label,
+                          COUNT(*) AS n_sources,
+                          COUNT(DISTINCT (samples_analyzed, samples_above_mrl)) AS n_values
+                   FROM pesticide_residue_annual
+                   GROUP BY commodity, period_label
+               )
+               SELECT p.commodity, p.commodity_label, p.period_label, p.fiscal_year, p.period_kind,
+                      p.samples_analyzed, p.samples_above_mrl,
+                      ROUND(100.0 * p.samples_above_mrl / NULLIF(p.samples_analyzed, 0), 2)::float AS above_mrl_pct,
+                      p.verification,
+                      CASE WHEN a.n_sources = 1 THEN 'single_source'
+                           WHEN a.n_values = 1 THEN 'corroborated'
+                           ELSE 'conflicting' END AS corroboration,
+                      a.n_sources::int AS n_sources,
+                      p.lok_sabha_no, p.source_question_no, p.source_question_subject,
+                      p.answered_date::text, p.source_url
+               FROM pesticide_residue_annual p
+               JOIN agg a USING (commodity, period_label)
+               WHERE ($1::text IS NULL OR p.commodity = $1)
+                 AND ($2::text IS NULL OR p.period_kind = $2)
+               ORDER BY p.commodity, p.period_label DESC, p.lok_sabha_no DESC, p.source_question_no""",
+            commodity, period_kind,
+        )
+    return [PesticideResidueOut(**dict(r)) for r in rows]
 
 @meta_router.get("/national-enforcement", response_model=list[NationalEnforcementOut])
 async def list_national_enforcement():

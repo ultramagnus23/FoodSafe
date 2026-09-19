@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import type { CommissionerOut, LabOut, StateEnforcementOut, StateSamplingOut, NationalEnforcementOut } from "./types";
+import type {
+  CommissionerOut,
+  LabOut,
+  StateEnforcementOut,
+  StateSamplingOut,
+  NationalEnforcementOut,
+  PesticideResidueOut,
+} from "./types";
 
 // Both endpoints are public (no auth) — see api/other_routes.py.
 export function useCommissioners(state?: string) {
@@ -44,6 +51,18 @@ export function useStateSampling() {
   return useQuery({
     queryKey: ["meta-state-sampling"],
     queryFn: () => apiFetch<StateSamplingOut[]>("/v1/meta/state-sampling", { auth: false }),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+// Real national pesticide-residue monitoring results (MPRNL): samples analysed
+// vs above the FSSAI MRL, by commodity and period, from Lok Sabha written
+// answers — see api/other_routes.py's list_pesticide_residues. ~75 rows,
+// fetched once and filtered client-side.
+export function usePesticideResidues() {
+  return useQuery({
+    queryKey: ["meta-pesticide-residues"],
+    queryFn: () => apiFetch<PesticideResidueOut[]>("/v1/meta/pesticide-residues", { auth: false }),
     staleTime: 60 * 60 * 1000,
   });
 }

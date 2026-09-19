@@ -263,6 +263,25 @@ export interface StateSamplingOut {
   source_url: string;
 }
 
+export interface PesticideResidueOut {
+  commodity: string;
+  commodity_label: string;
+  period_label: string;
+  fiscal_year: string | null;
+  period_kind: "fiscal_year" | "partial_year" | "multi_year_pool";
+  samples_analyzed: number;
+  samples_above_mrl: number;
+  above_mrl_pct: number | null;
+  verification: "total_row_sum" | "pct_consistent";
+  corroboration: "single_source" | "corroborated" | "conflicting";
+  n_sources: number;
+  lok_sabha_no: number;
+  source_question_no: number;
+  source_question_subject: string | null;
+  answered_date: string | null;
+  source_url: string;
+}
+
 export interface LabOut {
   id: number;
   name: string;

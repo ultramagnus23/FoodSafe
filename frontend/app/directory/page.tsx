@@ -6,6 +6,7 @@ import {
   useLabs,
   useStateEnforcement,
   useStateSampling,
+  usePesticideResidues,
   useNationalEnforcement,
 } from "@/lib/api/directory";
 import type {
@@ -13,6 +14,7 @@ import type {
   LabOut,
   StateEnforcementOut,
   StateSamplingOut,
+  PesticideResidueOut,
   NationalEnforcementOut,
 } from "@/lib/api/types";
 
@@ -30,6 +32,24 @@ const CORROBORATION_LABEL: Record<StateSamplingOut["corroboration"], string> = {
   corroborated: "Agrees with another answer",
   conflicting: "Conflicts with another answer",
 };
+
+const PESTICIDE_VERIFICATION_LABEL: Record<PesticideResidueOut["verification"], string> = {
+  total_row_sum: "Rows add up to the printed total",
+  pct_consistent: "Quoted in a sentence; the printed % matches",
+};
+const PERIOD_KIND_LABEL: Record<PesticideResidueOut["period_kind"], string> = {
+  fiscal_year: "Full year",
+  partial_year: "Part of a year",
+  multi_year_pool: "Pooled over several years",
+};
+const COMMODITY_NAME: Record<string, string> = {
+  all_commodities: "All commodities combined",
+  fish_marine: "Fish / marine",
+  meat_egg: "Meat / egg",
+};
+function commodityName(key: string): string {
+  return COMMODITY_NAME[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 function fmtNum(n: number | null): string {
   return n == null ? "—" : n.toLocaleString("en-IN");
@@ -197,8 +217,43 @@ function SamplingRow({ r }: { r: StateSamplingOut }) {
   );
 }
 
+function PesticideRow({ r }: { r: PesticideResidueOut }) {
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="whitespace-nowrap py-2 pr-3 text-sm font-medium text-ink">{commodityName(r.commodity)}</td>
+      <td className="whitespace-nowrap py-2 pr-3 text-sm text-provenance">
+        {r.period_label}
+        <div className="text-xs">{PERIOD_KIND_LABEL[r.period_kind]}</div>
+      </td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtNum(r.samples_analyzed)}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">{fmtNum(r.samples_above_mrl)}</td>
+      <td className="py-2 pr-3 text-right font-mono text-sm">
+        {r.above_mrl_pct == null ? "—" : `${r.above_mrl_pct.toFixed(1)}%`}
+      </td>
+      <td className="py-2 pr-3 text-xs text-provenance">
+        <div>{PESTICIDE_VERIFICATION_LABEL[r.verification]}</div>
+        <div className={r.corroboration === "conflicting" ? "text-amber-800" : undefined}>
+          {CORROBORATION_LABEL[r.corroboration]}
+        </div>
+      </td>
+      <td className="whitespace-nowrap py-2 text-right">
+        <a
+          className="text-xs text-provenance underline"
+          href={r.source_url}
+          target="_blank"
+          rel="noreferrer"
+          title={r.source_question_subject ?? undefined}
+        >
+          LS{r.lok_sabha_no} Q{r.source_question_no}
+        </a>
+      </td>
+    </tr>
+  );
+}
+
 export default function DirectoryPage() {
   const [sampState, setSampState] = useState("");
+  const [pestCommodity, setPestCommodity] = useState("");
   const [commissionerState, setCommissionerState] = useState("");
   const [labState, setLabState] = useState("");
   const [labTier, setLabTier] = useState<number | undefined>(undefined);
@@ -213,6 +268,7 @@ export default function DirectoryPage() {
   const enforcementAll = useStateEnforcement();
   const sampling = useStateSampling();
   const national = useNationalEnforcement();
+  const pesticides = usePesticideResidues();
 
   const commissioners = useMemo(
     () => ({
@@ -246,6 +302,15 @@ export default function DirectoryPage() {
   const sampRows = useMemo(
     () => (sampling.data ?? []).filter((r) => !sampState || r.state === sampState),
     [sampling.data, sampState]
+  );
+
+  const pestCommodities = useMemo(
+    () => Array.from(new Set((pesticides.data ?? []).map((r) => r.commodity))).sort(),
+    [pesticides.data]
+  );
+  const pestRows = useMemo(
+    () => (pesticides.data ?? []).filter((r) => !pestCommodity || r.commodity === pestCommodity),
+    [pesticides.data, pestCommodity]
   );
 
   const commissionerStates = useMemo(
@@ -401,6 +466,76 @@ export default function DirectoryPage() {
                 {sampRows.map((r) => (
                   <SamplingRow
                     key={`${r.state}-${r.fiscal_year}-${r.non_conforming_basis}-${r.lok_sabha_no}-${r.source_question_no}`}
+                    r={r}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-12">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-2xl font-normal">Pesticide Residues Above the Legal Limit (National)</h2>
+          {pestCommodities.length > 0 && (
+            <select
+              className="rounded-lg border border-line bg-slab px-3 py-2 text-sm outline-none focus:border-ink"
+              value={pestCommodity}
+              onChange={(e) => setPestCommodity(e.target.value)}
+            >
+              <option value="">All commodities</option>
+              {pestCommodities.map((c) => (
+                <option key={c} value={c}>
+                  {commodityName(c)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <p className="mb-2 text-sm text-provenance">
+          How many food samples the Agriculture Ministry&apos;s national pesticide-residue monitoring scheme (MPRNL)
+          analysed, and how many had a residue above the FSSAI Maximum Residue Limit, by commodity — as disclosed to
+          Parliament (2012-13 to 2018-19). Actual contamination test results with a pass and a fail side, but only at
+          national level: no state, district, brand or product.
+        </p>
+        <ul className="mb-4 list-disc space-y-1 pl-5 text-xs text-provenance">
+          <li>Above the limit is a regulatory exceedance, not proof that a food was harmful.</li>
+          <li>
+            The samples are collected under a monitoring scheme, not drawn at random from what people eat, so these
+            rates are not a national prevalence estimate.
+          </li>
+          <li>
+            The same commodity and period can appear in several answers with different figures (an early figure later
+            revised); each is shown separately and marked as agreeing or conflicting. Part-year and multi-year rows are
+            labelled and are not comparable to a full year.
+          </li>
+          <li>Only blocks whose rows add up to the printed total, or whose printed percentage matches, are included.</li>
+        </ul>
+        {pesticides.isLoading ? (
+          <p className="text-provenance">Loading…</p>
+        ) : pesticides.error ? (
+          <p className="text-provenance">Could not load pesticide-residue data.</p>
+        ) : pestRows.length === 0 ? (
+          <p className="text-provenance">No records.</p>
+        ) : (
+          <div className="max-h-[32rem] overflow-auto rounded-lg border border-line bg-slab px-4">
+            <table className="w-full min-w-[760px]">
+              <thead className="sticky top-0 bg-slab">
+                <tr className="border-b border-line text-left text-xs uppercase text-provenance">
+                  <th className="py-2 pr-3 font-medium">Commodity</th>
+                  <th className="py-2 pr-3 font-medium">Period</th>
+                  <th className="py-2 pr-3 text-right font-medium">Analysed</th>
+                  <th className="py-2 pr-3 text-right font-medium">Above MRL</th>
+                  <th className="py-2 pr-3 text-right font-medium">%</th>
+                  <th className="py-2 pr-3 font-medium">Checks</th>
+                  <th className="py-2 text-right font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pestRows.map((r) => (
+                  <PesticideRow
+                    key={`${r.commodity}-${r.period_label}-${r.lok_sabha_no}-${r.source_question_no}`}
                     r={r}
                   />
                 ))}
