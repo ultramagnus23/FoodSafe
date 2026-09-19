@@ -34,6 +34,7 @@ SOURCES = {
     "fssai_labs":           ("pipeline.sources.fssai_labs",           "run",                  None,             True),
     "loksabha_qa":          ("pipeline.sources.loksabha_qa",          "run",                  None,             True),
     "loksabha_sampling":    ("pipeline.sources.loksabha_sampling",    "run",                  None,             True),
+    "loksabha_pesticide":   ("pipeline.sources.loksabha_pesticide",   "run",                  None,             True),
     "fssai_annual_report":  ("pipeline.sources.fssai_annual_report",  "run",                  None,             True),
     "research_evidence":    ("pipeline.sources.research_evidence",    "run",                  "limit",          True),
     "europepmc_evidence":   ("pipeline.sources.europepmc_evidence",   "run",                  "limit",          True),
@@ -47,8 +48,9 @@ SOURCES = {
 # of 28 listing items in a single pull — a 0-row run is expected, not a
 # regression, until this runs on a schedule and accumulates over days.
 # loksabha_sampling skips questions already logged at the current parser
-# version, so every run after the first legitimately inserts 0 rows.
-EXPECTED_EMPTY_SOURCES = {"agmarknet", "fssai_recall", "local_news", "loksabha_sampling"}
+# version, so every run after the first legitimately inserts 0 rows; so does
+# loksabha_pesticide, which works the same way.
+EXPECTED_EMPTY_SOURCES = {"agmarknet", "fssai_recall", "local_news", "loksabha_sampling", "loksabha_pesticide"}
 
 
 def _rows_ingested(summary: dict) -> int:

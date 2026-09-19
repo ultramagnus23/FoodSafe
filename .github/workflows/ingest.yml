@@ -123,6 +123,17 @@ jobs:
           pip install --quiet pdfplumber
           python -m pipeline.run_and_log loksabha_sampling
 
+      - name: Refresh Lok Sabha pesticide-residue (MPRNL) results (samples analysed vs above MRL)
+        id: loksabha_pesticide
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # a handful of answers; later runs skip everything already logged
+        # docs/LOKSABHA_PESTICIDE.md. Same strict accept-or-reject-whole rule as
+        # the sampling step; shares its question log (parser_version keeps them apart).
+        run: |
+          pip install --quiet pdfplumber
+          python -m pipeline.run_and_log loksabha_pesticide
+
       - name: Refresh FSSAI Annual Report national enforcement metrics
         id: fssai_annual_report
         env:
