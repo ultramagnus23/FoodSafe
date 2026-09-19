@@ -37,6 +37,31 @@ def test_blank_page_with_no_explaining_status_is_unrendered_not_gate():
     assert classify_portal_state("   \n ", 200, 200) == "unrendered"
 
 
+def test_connection_timeout_from_the_runner_is_unreachable_not_unrendered():
+    # 2026-09-18 21:40 UTC, GitHub runner: net::ERR_CONNECTION_TIMED_OUT, no page, no API calls.
+    err = "Page.goto: net::ERR_CONNECTION_TIMED_OUT at https://foscos.fssai.gov.in/food-recall"
+    assert classify_portal_state("", None, None, err) == "unreachable"
+
+
+@pytest.mark.parametrize("err", [
+    "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://foscos.fssai.gov.in/food-recall",
+    "Page.goto: net::ERR_CONNECTION_RESET at https://foscos.fssai.gov.in/food-recall",
+])
+def test_other_network_errors_are_unreachable(err):
+    assert classify_portal_state("", None, None, err) == "unreachable"
+
+
+def test_a_non_network_navigation_timeout_is_not_called_unreachable():
+    # networkidle never settling is not proof the network is down: with a blank
+    # page and no status it must stay 'unrendered' (loud).
+    assert classify_portal_state("", None, None, "Page.goto: Timeout 60000ms exceeded.") == "unrendered"
+
+
+def test_a_network_error_does_not_mask_an_explained_401_gate():
+    # If something did render/answer, trust the status rather than the error text.
+    assert classify_portal_state("Loading", 401, None, "net::ERR_ABORTED") == "auth_gate"
+
+
 def test_healthy_page_is_open():
     assert classify_portal_state("Food Recall  Search  Filter", 200, 200) == "open"
 

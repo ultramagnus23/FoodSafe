@@ -41,10 +41,21 @@ API_MARKER = "getFoodRecallProductHomepage"
 CSRF_MARKER = "auth/csrf-token"
 
 
-def classify_portal_state(body_text: str, recall_status: Optional[int], csrf_status: Optional[int]) -> str:
+def classify_portal_state(
+    body_text: str,
+    recall_status: Optional[int],
+    csrf_status: Optional[int],
+    nav_error: str = "",
+) -> str:
     """What is FoSCoS doing right now? One of:
 
       'maintenance' — the daily maintenance window page
+      'unreachable' — the page request itself failed at the network layer
+                      (e.g. net::ERR_CONNECTION_TIMED_OUT) and nothing rendered.
+                      Observed from a GitHub Actions runner on 2026-09-18
+                      (21:40 UTC, outside the maintenance window) while the
+                      same page loaded from another network — so from CI this
+                      is "cannot connect", not the app-level gate below.
       'auth_gate'   — an anonymous request was refused (401) by the recall API
                       or by the CSRF-token bootstrap the app calls first
       'unrendered'  — the page rendered no text and no status explains why
@@ -60,6 +71,8 @@ def classify_portal_state(body_text: str, recall_status: Optional[int], csrf_sta
     """
     if "Maintenance" in body_text and "unavailable" in body_text:
         return "maintenance"
+    if "net::ERR_" in nav_error and not body_text.strip():
+        return "unreachable"
     if recall_status == 401 or csrf_status == 401:
         return "auth_gate"
     if not body_text.strip():
@@ -112,17 +125,27 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
                 csrf_status["status"] = r.status
         page.on("response", _on_resp)
 
+        nav_error = ""
         try:
             page.goto(RECALL_URL, wait_until="networkidle", timeout=timeout_ms)
         except Exception as e:  # noqa: BLE001
+            nav_error = str(e)
             logger.warning("page load warning: %s", e)
         page.wait_for_timeout(3000)
 
         body_text = read_body_text(page)
-        state = classify_portal_state(body_text, api_status["status"], csrf_status["status"])
+        state = classify_portal_state(body_text, api_status["status"], csrf_status["status"], nav_error)
         if state == "maintenance":
             logger.warning("FoSCoS is in its daily maintenance window — try again "
                            "outside ~23:30–03:00 IST.")
+            browser.close()
+            return []
+        if state == "unreachable":
+            logger.warning(
+                "Could not connect to FoSCoS from this network (%s). Recorded as an expected outcome: "
+                "an explained network-level non-connection, not a scraper regression. The weekly CI "
+                "probe logs the same condition; see docs/PAPER_SCOPING.md §5b.", nav_error[:120],
+            )
             browser.close()
             return []
         if state == "auth_gate":

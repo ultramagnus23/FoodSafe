@@ -52,10 +52,12 @@ empty on purpose rather than filled with invented numbers.
 ### The access gate
 
 `foscos.fssai.gov.in` refuses anonymous API access (401). The weekly CI probe
-has failed to read the page every week since 2026-08-10, and a local check on
-2026-09-18 saw it render empty after its CSRF bootstrap returned 401 — but the
-cause of the CI failures is **not established**, and the portal also varies with
-its daily maintenance window. See the dated evidence and its limits in
+has failed every week since 2026-08-10; on 2026-09-18 the GitHub runner could
+not connect at all (`ERR_CONNECTION_TIMED_OUT`, one reading), while a local check
+the same day loaded the page but saw it render empty after its CSRF bootstrap
+returned 401. So the page behaves differently by network, the cause of the CI
+non-connection is **not established**, and the portal also varies with its daily
+maintenance window. See the dated evidence and its limits in
 [`docs/PAPER_SCOPING.md`](docs/PAPER_SCOPING.md) §5b and
 [`docs/FSSAI_INGESTION.md`](docs/FSSAI_INGESTION.md). The RTI filed 2026-07-11
 (FSSAI/R/E/26/00836) was answered as unable to provide the data directly.

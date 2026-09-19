@@ -140,11 +140,20 @@ absolute "zero programmatically accessible" wording should go.
   handler then threw (`TypeError: Cannot read properties of undefined (reading
   'filter')`), and the body rendered empty. A later local run **inside** the
   daily 23:30–03:00 IST maintenance window saw 503s and CSRF 200.
-* What is NOT established: the cause of the CI failures since 08-10 (redesign vs
-  auth tightening vs network-edge/bot defence), because no CI-side endpoint data
-  exists for those weeks. Do not assert a cause until the improved probe has
-  accumulated readings from the runner; report the local CSRF 200 → 401 change
-  as a single dated observation from one vantage point.
+* **First CI-side reading with the improved probe** (2026-09-18 21:40 UTC, GitHub
+  Actions runner, outside the maintenance window): the page request itself failed
+  with `net::ERR_CONNECTION_TIMED_OUT` — no document, no API calls, no console
+  errors. That matches the six failed weekly probes (which timed out reading a
+  body that never arrived) and means the CI failures are a **network-level
+  non-connection from the runner**, not the app-level CSRF 401 seen locally. Two
+  vantage points, two different behaviours: from a local network the page loads
+  and its CSRF bootstrap is refused; from GitHub's runner nothing connects.
+* What is still NOT established: *why* the runner cannot connect (an IP/geography
+  block of GitHub's ranges, an outage, or something else) — it is **one** reading,
+  and July's CI probes did connect. Do not assert a cause; repeat readings are
+  needed. The observation that matters for the paper is that the same public page
+  behaves differently by network, and that from July to September CI went from
+  "connects, refused (401)" to "cannot connect".
 
 **Other dated observations (2026-09-18, one reading each):** the State Food
 Safety Index page moved from `/cms/foodsafetyindex.php` to `/food-safety-index`
