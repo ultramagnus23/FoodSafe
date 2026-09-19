@@ -14,10 +14,12 @@ Behaviour:
     though its conclusion is success — that is the point);
   * no failures -> does nothing;
   * ensures the label exists (idempotent);
-  * if an open issue with the fixed title already exists, adds a comment (so a
-    step failing for a week is one issue, not seven);
+  * if an open issue with the fixed title already exists (looked up by label,
+    title matched exactly, retried on error), adds a comment (so a step
+    failing for a week is one issue, not seven);
   * otherwise opens one.
-Never raises: alerting must not turn a green run red.
+Never raises. Exits 1 only when there were failures and the issue could not be
+delivered (so a broken alerter is visible, not silent); exits 0 otherwise.
 
 Env: GH_TOKEN, STEPS_JSON, RUN_URL, GITHUB_REPOSITORY.
 """
@@ -47,6 +49,9 @@ FRIENDLY = {
     "local_news": "Local news (5 metros)",
     "research_evidence": "OpenAlex evidence",
     "europepmc_evidence": "Europe PMC evidence",
+    "aggregation": "Risk-score aggregation",
+    "disease_burden": "Disease-burden estimates",
+    "notifications": "Alert-subscription notifications",
 }
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
@@ -64,12 +69,49 @@ def _gh(runner: Runner, args: list[str]) -> "subprocess.CompletedProcess[str]":
     return runner(["gh", *args], capture_output=True, text=True, check=False)
 
 
+def _find_open_issue(runner: Runner, repo_args: list[str], attempts: int = 3) -> Optional[str]:
+    """Number of the open issue carrying our exact title, "" if there is none,
+    None if the lookup itself kept failing.
+
+    Lists by label (a plain filter) and matches the title here rather than using
+    `--search`, whose index lags: an issue opened by yesterday's run may not be
+    searchable yet, which would open a duplicate every day. A failed lookup is
+    retried, and reported as None rather than "none found" so the caller can
+    tell a transient error from an empty result.
+    """
+    for _ in range(attempts):
+        res = _gh(runner, ["issue", "list", *repo_args, "--state", "open", "--label", LABEL,
+                           "--limit", "100", "--json", "number,title"])
+        if res.returncode != 0:
+            continue
+        try:
+            issues = json.loads(res.stdout or "[]")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(issues, list):
+            continue
+        for issue in issues:
+            if isinstance(issue, dict) and issue.get("title") == TITLE and str(issue.get("number", "")).isdigit():
+                return str(issue["number"])
+        return ""
+    return None
+
+
 def main(env: Optional[dict] = None, runner: Runner = subprocess.run) -> int:
+    """0 = nothing to report or the report was delivered (or could not be
+    attempted for a reason that is not a delivery failure); 1 = there were
+    failed steps and the issue could not be created or commented on. Any
+    exception is caught, so alerting can never crash the workflow -- but an
+    undelivered alert IS surfaced as a red step, because a silent alerter is
+    the failure this script exists to replace."""
     env = os.environ if env is None else env
     try:
         steps = json.loads(env.get("STEPS_JSON") or "{}")
     except json.JSONDecodeError as e:
         print(f"could not parse STEPS_JSON ({e}); not alerting")
+        return 0
+    if not isinstance(steps, dict):
+        print(f"STEPS_JSON is a {type(steps).__name__}, not an object; not alerting")
         return 0
 
     failing = failed_steps(steps)
@@ -94,17 +136,24 @@ def main(env: Optional[dict] = None, runner: Runner = subprocess.run) -> int:
         _gh(runner, ["label", "create", LABEL, *repo_args, "--color", "B60205",
                      "--description", "A scheduled ingest step failed unexpectedly"])
 
-        found = _gh(runner, ["issue", "list", *repo_args, "--state", "open", "--label", LABEL,
-                             "--search", f'"{TITLE}" in:title', "--json", "number", "--jq", ".[0].number // empty"])
-        existing = (found.stdout or "").strip()
-        if found.returncode == 0 and existing.isdigit():
+        existing = _find_open_issue(runner, repo_args)
+        if existing:
             res = _gh(runner, ["issue", "comment", existing, *repo_args, "--body", body])
-            print(f"commented on open issue #{existing} (rc={res.returncode})")
+            what = f"comment on open issue #{existing}"
         else:
+            # existing is "" (none open) or None (lookup kept failing). In the
+            # second case a possible duplicate issue is the lesser evil: the
+            # alternative is no alert at all.
             res = _gh(runner, ["issue", "create", *repo_args, "--title", TITLE, "--body", body, "--label", LABEL])
-            print(f"opened new issue (rc={res.returncode}): {(res.stdout or res.stderr or '').strip()[:200]}")
-    except Exception as e:  # noqa: BLE001 — alerting must never fail the run
-        print(f"alerting failed: {e}")
+            what = "new issue" if existing == "" else "new issue (open-issue lookup failed, may duplicate)"
+        if res.returncode != 0:
+            print(f"::error::could not deliver alert ({what}), rc={res.returncode}: "
+                  f"{(res.stderr or res.stdout or '').strip()[:300]}")
+            return 1
+        print(f"delivered alert as {what}: {(res.stdout or '').strip()[:200]}")
+    except Exception as e:  # noqa: BLE001 — alerting must never crash the run
+        print(f"::error::alerting failed: {e}")
+        return 1
     return 0
 
 

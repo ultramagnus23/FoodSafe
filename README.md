@@ -21,7 +21,7 @@ Each line says how it was verified. Where something is only reported, it says so
 - **Database:** Supabase, recreated 2026-09-11 and **real-only** — no synthetic
   rows (`seed_demo.sql` / `pipeline/seed_enforcement.py` are not loaded in
   production).
-- **Tests:** 192 passing (`pytest tests/`), CI green.
+- **Tests:** 273 passing (`pytest tests/`), CI green.
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
@@ -70,7 +70,7 @@ maintenance window. See the dated evidence and its limits in
 - **Backtest on state sampling outcomes**
   ([`docs/BACKTEST_SAMPLING.md`](docs/BACKTEST_SAMPLING.md)): a state's
   non-conforming rate one year predicts the next far better than the national
-  rate (average error 4.8 vs 13.2 percentage points), but **no model beat simply
+  rate (average error 4.8 vs 13.1 percentage points), but **no model beat simply
   reusing last year's rate**, and the persistence may reflect where inspectors
   sample rather than food risk. It measures a testing rate, not food safety.
 - **Disease-burden estimates**: a dose-response calculation

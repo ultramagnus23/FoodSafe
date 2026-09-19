@@ -16,9 +16,16 @@ import ingest_alert as A  # noqa: E402
 
 
 class FakeGh:
-    def __init__(self, existing_issue="", label_rc=0, list_rc=0, raise_on=None):
+    """Recording stand-in for `gh`. `existing_issue` is the number of an open
+    issue carrying our title ("" = none). `list_fail_times` makes that many
+    `issue list` calls fail before one succeeds. `write_rc` is the exit code of
+    issue create/comment."""
+
+    def __init__(self, existing_issue="", label_rc=0, list_fail_times=0, write_rc=0, raise_on=None,
+                 list_stdout=None):
         self.calls = []
-        self.existing, self.label_rc, self.list_rc, self.raise_on = existing_issue, label_rc, list_rc, raise_on
+        self.existing, self.label_rc, self.raise_on = existing_issue, label_rc, raise_on
+        self.list_fail_times, self.write_rc, self.list_stdout = list_fail_times, write_rc, list_stdout
 
     def __call__(self, cmd, **kw):
         self.calls.append(cmd)
@@ -28,8 +35,15 @@ class FakeGh:
         if cmd[1:3] == ["label", "create"]:
             return subprocess.CompletedProcess(cmd, self.label_rc, "", "already exists" if self.label_rc else "")
         if cmd[1:3] == ["issue", "list"]:
-            return subprocess.CompletedProcess(cmd, self.list_rc, self.existing, "")
-        return subprocess.CompletedProcess(cmd, 0, "https://github.com/o/r/issues/1", "")
+            if self.list_fail_times > 0:
+                self.list_fail_times -= 1
+                return subprocess.CompletedProcess(cmd, 1, "", "HTTP 502")
+            if self.list_stdout is not None:
+                return subprocess.CompletedProcess(cmd, 0, self.list_stdout, "")
+            issues = [{"number": int(self.existing), "title": A.TITLE}] if self.existing else []
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(issues), "")
+        return subprocess.CompletedProcess(cmd, self.write_rc, "https://github.com/o/r/issues/1" if not self.write_rc else "",
+                                           "HTTP 403" if self.write_rc else "")
 
     def verbs(self):
         return [" ".join(c[1:3]) for c in self.calls]
@@ -89,14 +103,65 @@ def test_label_already_existing_does_not_stop_the_alert():
     assert "issue create" in gh.verbs()
 
 
-def test_gh_failing_to_run_never_fails_the_workflow():
+def test_gh_failing_to_run_never_raises():
+    # No exception may escape; an undelivered alert is a non-zero exit (below).
     for raise_on in ("label create", "issue list", "issue create"):
-        assert A.main(env({"local_news": {"outcome": "failure"}}), FakeGh(raise_on=raise_on)) == 0
+        A.main(env({"local_news": {"outcome": "failure"}}), FakeGh(raise_on=raise_on))
+
+
+def test_failure_to_deliver_the_issue_is_visible_not_swallowed():
+    # The original alerter died silently (`|| true`). A create or comment that
+    # fails must turn the step red.
+    assert A.main(env({"local_news": {"outcome": "failure"}}), FakeGh(write_rc=1)) == 1
+    assert A.main(env({"local_news": {"outcome": "failure"}}), FakeGh(existing_issue="42", write_rc=1)) == 1
+    assert A.main(env({"local_news": {"outcome": "failure"}}), FakeGh(raise_on="issue create")) == 1
+
+
+def test_no_failures_exit_zero_even_if_gh_is_broken():
+    assert A.main(env({"openfda": {"outcome": "success"}}), FakeGh(raise_on="label create", write_rc=1)) == 0
+
+
+def test_a_transient_list_failure_is_retried_so_no_duplicate_is_opened():
+    gh = FakeGh(existing_issue="42", list_fail_times=2)
+    assert A.main(env({"local_news": {"outcome": "failure"}}), gh) == 0
+    assert gh.verbs().count("issue list") == 3
+    assert "issue create" not in gh.verbs()
+    assert next(c for c in gh.calls if c[1:3] == ["issue", "comment"])[3] == "42"
+
+
+def test_a_persistently_failing_lookup_still_alerts_rather_than_stay_silent():
+    gh = FakeGh(existing_issue="42", list_fail_times=99)
+    assert A.main(env({"local_news": {"outcome": "failure"}}), gh) == 0
+    assert gh.verbs().count("issue list") == 3 and "issue create" in gh.verbs()
+
+
+def test_lookup_matches_the_exact_title_and_does_not_use_search():
+    # A different open issue with the label must not be commented on, and
+    # `--search` (whose index lags) must not be used.
+    other = json.dumps([{"number": 7, "title": "Something else"}])
+    gh = FakeGh(list_stdout=other)
+    A.main(env({"local_news": {"outcome": "failure"}}), gh)
+    assert "issue create" in gh.verbs() and "issue comment" not in gh.verbs()
+    listing = next(c for c in gh.calls if c[1:3] == ["issue", "list"])
+    assert "--search" not in listing and "--label" in listing
+
+
+def test_unparseable_or_oddly_shaped_list_output_is_handled():
+    for out in ("not json", "{}", "null", '[{"title": 5}, 3, null]'):
+        gh = FakeGh(list_stdout=out)
+        assert A.main(env({"local_news": {"outcome": "failure"}}), gh) == 0
+        assert "issue create" in gh.verbs()
 
 
 def test_garbled_steps_json_is_ignored():
     gh = FakeGh()
     assert A.main({"STEPS_JSON": "{not json"}, gh) == 0 and gh.calls == []
+
+
+def test_non_object_steps_json_is_ignored():
+    for raw in ("[]", "null", "3", '"x"'):
+        gh = FakeGh()
+        assert A.main({"STEPS_JSON": raw}, gh) == 0 and gh.calls == []
 
 
 def test_missing_steps_json_is_ignored():
