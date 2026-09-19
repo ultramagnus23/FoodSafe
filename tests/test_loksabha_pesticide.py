@@ -377,3 +377,16 @@ def test_discovery_raises_when_the_search_api_is_unreachable(monkeypatch):
     monkeypatch.setattr(P.LQ, "_search", dead)
     with pytest.raises(P.LQ.SearchUnavailable):
         P.discover((18, 17, 16))
+
+
+def test_a_sentence_about_something_other_than_the_residue_limit_is_not_taken():
+    text = ("During 2019-20, a total of 6,432 samples have been collected and analysed, out of which "
+            "368 (5.7 %) samples were found exceeding the permitted level of Aflatoxin M1.")
+    assert P.parse_sentences(text) == ([], [])
+
+
+def test_the_limit_reference_may_be_split_by_a_page_footer():
+    # As in LS16 Q1312: "... Maximum Contd…2/- -2- Residue Level (MRL)".
+    text = ("During 2012-18, a total of 1,21,944 samples have been collected and analyzed, out of which 2,878 (2.4 %) "
+            "samples were found exceeding Food Safety and Standards Authority of India ( FSSAI) Maximum\nContd…2/-\n-2-\nResidue Level (MRL).")
+    assert len(P.parse_sentences(text)[0]) == 1

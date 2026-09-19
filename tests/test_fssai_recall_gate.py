@@ -120,3 +120,20 @@ def test_read_body_text_retries_once_after_a_navigation_destroys_the_context():
 def test_read_body_text_gives_up_after_the_retry():
     page = _Page(exc=RuntimeError("Execution context was destroyed"))
     assert read_body_text(page) == "" and page.waited == 1
+
+
+def test_ending_on_the_browsers_own_error_page_is_unreachable_even_after_a_goto_timeout():
+    # 2026-09-19 CI: goto 'timed out' (not net::ERR_*), then the tab sat on chrome-error://chromewebdata/.
+    err = "Page.goto: Timeout 60000ms exceeded."
+    assert classify_portal_state("", None, None, err, "chrome-error://chromewebdata/") == "unreachable"
+    # ...even if the error page has text (the read succeeded on it) — it is still not the portal.
+    assert classify_portal_state("This site can't be reached", None, None, err, "chrome-error://chromewebdata/") == "unreachable"
+
+
+def test_a_real_401_still_beats_the_error_page_heuristic():
+    assert classify_portal_state("", 401, None, "", "chrome-error://chromewebdata/") == "auth_gate"
+
+
+def test_a_blank_page_on_the_portals_own_url_stays_unrendered():
+    assert classify_portal_state("", None, None, "Page.goto: Timeout 60000ms exceeded.",
+                                 "https://foscos.fssai.gov.in/food-recall") == "unrendered"

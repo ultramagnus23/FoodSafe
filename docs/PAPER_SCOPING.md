@@ -148,15 +148,19 @@ absolute "zero programmatically accessible" wording should go.
   non-connection from the runner**, not the app-level CSRF 401 seen locally. Two
   vantage points, two different behaviours: from a local network the page loads
   and its CSRF bootstrap is refused; from GitHub's runner nothing connects.
-* **A third behaviour, 2026-09-19 09:26 UTC (daily ingest, GitHub runner, outside
-  the maintenance window):** the page did **not** fail to connect. `networkidle`
-  never settled (60 s timeout), the document then navigated while it was being
-  read ("execution context was destroyed"), and neither the recall API nor the
-  CSRF endpoint had been seen. Nothing could be classified, so the scraper raised
-  and the new alerter opened a GitHub issue — its first production firing. One
-  reading, no cause established (a bot-defence reload loop is a hypothesis, not
-  a finding). The scraper now retries the body read once after the navigation and
-  records the URL and statuses in the error so the next occurrence is explainable.
+* **Same symptom, different error text, 2026-09-19 (three GitHub runner readings:
+  09:26, 10:26 and 11:40 UTC, all outside the maintenance window):** `page.goto`
+  did not raise `net::ERR_*` but hit its 60 s timeout, and the document then
+  navigated while being read ("execution context was destroyed"). The 11:40 run,
+  with added diagnostics, recorded the tab's final URL: **`chrome-error://chromewebdata/`**
+  — Chromium's own connection-error page — with no recall-API or CSRF response
+  seen. So this is the same network-level non-connection as 2026-09-18, reported
+  through a timeout instead of `ERR_CONNECTION_TIMED_OUT`, not a third portal
+  behaviour. Until that was known the scraper (correctly) treated it as
+  unclassifiable, raised, and the alerter opened its first production issue
+  (#8); it is now classified `unreachable` (an expected outcome, with the URL kept
+  in the log). Still one vantage point — the runner — and still no cause
+  established for why it cannot connect.
 * What is still NOT established: *why* the runner cannot connect (an IP/geography
   block of GitHub's ranges, an outage, or something else) — it is **one** reading,
   and July's CI probes did connect. Do not assert a cause; repeat readings are

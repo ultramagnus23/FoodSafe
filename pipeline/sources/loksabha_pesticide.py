@@ -304,7 +304,8 @@ def parse_text_blocks(text: str, page: int = 0) -> tuple[list[Block], list[Rejec
 
 _SENTENCE_RE = re.compile(
     r"During\s+(\d{4})\s*-\s*(\d{2,4})\s*[;,:]?\s*(?:a\s+total\s+of\s+)?([\d,]+)\s+samples\b[^.]{0,120}?"
-    r"analy[sz]ed[^.]{0,80}?\b([\d,]+)\s*\(\s*([\d.]+)\s*%\s*\)\s*samples\b[^.]{0,60}?(?:above|exceeding)",
+    r"analy[sz]ed[^.]{0,80}?\b([\d,]+)\s*\(\s*([\d.]+)\s*%\s*\)\s*samples\b[^.]{0,120}?(?:above|exceeding)"
+    r"[^.]{0,160}?(?:\bMRL\b|Maximum\s+Residue|residue\s+limit)",
     re.I,
 )
 

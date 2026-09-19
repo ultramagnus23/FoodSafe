@@ -46,12 +46,16 @@ def classify_portal_state(
     recall_status: Optional[int],
     csrf_status: Optional[int],
     nav_error: str = "",
+    final_url: str = "",
 ) -> str:
     """What is FoSCoS doing right now? One of:
 
       'maintenance' — the daily maintenance window page
       'unreachable' — the page request itself failed at the network layer
-                      (e.g. net::ERR_CONNECTION_TIMED_OUT) and nothing rendered.
+                      (e.g. net::ERR_CONNECTION_TIMED_OUT) and nothing rendered,
+                      or the browser ended on its own error page
+                      (chrome-error://chromewebdata/, seen 2026-09-19 when the
+                      load "timed out" instead of reporting net::ERR_*).
                       Observed from a GitHub Actions runner on 2026-09-18
                       (21:40 UTC, outside the maintenance window) while the
                       same page loaded from another network — so from CI this
@@ -72,6 +76,8 @@ def classify_portal_state(
     if "Maintenance" in body_text and "unavailable" in body_text:
         return "maintenance"
     if "net::ERR_" in nav_error and not body_text.strip():
+        return "unreachable"
+    if final_url.startswith("chrome-error://") and recall_status != 401 and csrf_status != 401:
         return "unreachable"
     if recall_status == 401 or csrf_status == 401:
         return "auth_gate"
@@ -151,7 +157,7 @@ def fetch_recalls(limit: int = 100, timeout_ms: int = 60000) -> list[dict]:
             final_url = page.url
         except Exception:  # noqa: BLE001
             final_url = ""
-        state = classify_portal_state(body_text, api_status["status"], csrf_status["status"], nav_error)
+        state = classify_portal_state(body_text, api_status["status"], csrf_status["status"], nav_error, final_url)
         if state == "maintenance":
             logger.warning("FoSCoS is in its daily maintenance window — try again "
                            "outside ~23:30–03:00 IST.")
