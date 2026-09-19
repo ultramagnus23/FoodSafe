@@ -26,31 +26,43 @@ testing rate**, not about food risk (see "What this does not show").
   ≥ 100 samples in both. 2017-18 and 2019-20 are absent from the data, so nothing pairs
   across them. Result: 196 pairs, 7 target years.
 * Models, each using year *t−1* data only:
-  `national` (no state signal) · `persistence` (the state's own *t−1* rate) ·
+  `national` (no state signal: the national rate in *t−1* over **every** state cell of that
+  year with ≥ 100 samples) · `persistence` (the state's own *t−1* rate) ·
   `shrink` `p = (k₀ + m·national₀)/(n₀ + m)` — m = 0 is persistence, m = ∞ is national.
 * `m` is chosen from a fixed grid using **only earlier target years** (expanding window).
   The first target year is used for fitting only, so 173 pairs across 6 target years
-  (2016-17, 2021-22 … 2025-26) are evaluated. A leakage test confirms altering the
-  target year's outcomes, or any later year's, changes neither the fitted `m` nor the
-  national rate used for that year.
+  (2016-17, 2021-22 … 2025-26) are evaluated. Leakage tests confirm that altering the
+  target year's outcomes **or its sample sizes**, removing its cells, or altering any later
+  year changes neither the fitted `m` nor the national rate used for that year.
+  *(Correction, 2026-09-19: an independent review found the first version summed the national
+  baseline over the forecast pairs, which are filtered on year-t data, so the year being
+  predicted could nudge its own baseline; the earlier leakage test only tampered with
+  outcome counts and could not see it. Fixed by computing the baseline from the year-t−1
+  panel. The effect on the results was in the third decimal — the numbers below are the
+  corrected ones — but the original "no leakage" claim was stronger than the code.)*
 * Primary metric: pooled binomial log-loss. Secondary: unweighted MAE of the rate, and
   within-year Spearman correlation of predicted vs realised state rates (does the
   *ordering* of states persist, independent of national level shifts?).
-* Uncertainty: 2,000-draw bootstrap over **states** (the dependent unit), fixed seed.
+* Uncertainty: 2,000-draw bootstrap over **states** (the dependent unit), fixed seed. It holds
+  the six evaluated years, the fitted `m` and the national baselines fixed, so the interval
+  reflects **between-state variability only** — it does not cover uncertainty about other
+  years.
+* Every number below is reproducible: `python -m models.backtest_sampling` (primary) and
+  `python -m models.backtest_sampling --sensitivity` (variants and placebo; add `--json`).
 
 ## Results
 
 | | national | persistence | shrink |
 |---|---|---|---|
 | pooled log-loss | 0.515 | **0.440** | **0.440** |
-| MAE of the rate | 0.132 | **0.048** | 0.050 |
+| MAE of the rate | 0.131 | **0.048** | 0.050 |
 
 Paired pooled log-loss differences (negative = first model better), 95% CI:
 
 | comparison | estimate | 95% CI |
 |---|---|---|
 | persistence − national | −0.075 | [−0.139, −0.024] |
-| shrink − national | −0.076 | [−0.139, −0.024] |
+| shrink − national | −0.075 | [−0.139, −0.024] |
 | shrink − persistence | −0.0003 | [−0.0012, +0.0003] |
 
 Mean within-year Spearman (persistence): **0.85** (range 0.69–0.95 across the six years).
@@ -61,17 +73,23 @@ Sensitivity (explicitly *not* used to choose anything):
 
 | variant | persistence − national [95% CI] | MAE nat / pers |
 |---|---|---|
-| primary | −0.075 [−0.139, −0.024] | 0.132 / 0.048 |
+| primary | −0.075 [−0.139, −0.024] | 0.131 / 0.048 |
 | ≥ 500 samples | −0.076 [−0.141, −0.026] | 0.120 / 0.039 |
-| ≥ 1,000 samples | −0.076 [−0.140, −0.025] | 0.118 / 0.039 |
-| 2020-21 onward only | −0.077 [−0.146, −0.024] | 0.133 / 0.046 |
+| ≥ 1,000 samples | −0.076 [−0.140, −0.025] | 0.117 / 0.039 |
+| 2020-21 onward only | −0.077 [−0.147, −0.023] | 0.132 / 0.046 |
 | large states only | −0.076 [−0.138, −0.025] | 0.121 / 0.049 |
-| **placebo:** state labels shuffled within year | **+0.104** [−0.003, +0.260] | 0.126 / 0.129 |
+| **placebo:** state labels shuffled within year | **+0.054** [+0.012, +0.102] | 0.136 / 0.125 |
 
-The placebo is the control: with state identity destroyed, persistence loses its edge
-(rank correlation −0.07), so the advantage is not an artefact of the machinery. The
-same run on synthetic worlds with known answers (tests) behaves correctly —
-persistence wins where state effects are real, loses where they are pure noise.
+The placebo is the control: with state identity destroyed (each year's cells are kept but
+reassigned to shuffled states), persistence goes from significantly *better* than the
+national rate to significantly *worse* on log-loss, and the rank correlation falls from
+0.85 to 0.11. Do not read the placebo's MAE column as evidence either way: MAE is minimised
+by the median, and the national *mean* sits above the typical state's rate in this
+right-skewed distribution, so persistence's MAE can come out slightly lower than
+national's even when its forecasts carry no information — log-loss and rank correlation are
+the meaningful placebo readings. The same machinery on synthetic worlds with known answers
+(tests) behaves correctly: persistence wins where state effects are real, loses where they
+are pure noise.
 
 ## What this shows
 

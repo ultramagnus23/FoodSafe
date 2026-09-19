@@ -38,6 +38,20 @@ def test_prev_fy_rejects_garbage():
         B.prev_fy("2020-21")
 
 
+@pytest.mark.parametrize("bad", ["2016-2018", "0000-0001x", "2020-2020"])
+def test_prev_fy_rejects_non_consecutive_years(bad):
+    # Reviewer finding: '2016-2018' -> '2015-2017' and '0000-0001' -> '-1-0'.
+    with pytest.raises(ValueError):
+        B.prev_fy(bad)
+
+
+def test_min_n_below_one_is_refused():
+    # Reviewer finding: min_n=0 with an n0=0 cell divided by zero.
+    rows = [row("A", "2016-2017", 0, 0), row("A", "2017-2018", 500, 50)]
+    with pytest.raises(ValueError):
+        B.run(rows, min_n=0)
+
+
 def test_only_the_requested_definition_is_used():
     rows = [row("A", "2016-2017", 100, 10), row("A", "2015-2016", 100, 50, basis="adulterated_misbranded")]
     panel, _ = B.build_panel(rows)
@@ -119,19 +133,23 @@ def test_shrink_is_never_much_worse_than_the_better_endpoint():
 
 # ---------------------------------------------------------------- no leakage
 
-def _pairs_for(rows):
+def _panel(rows):
     panel, _ = B.build_panel(rows)
-    return B.make_pairs(panel)
+    return panel
+
+
+def _pairs_for(rows):
+    return B.make_pairs(_panel(rows))
 
 
 def test_forecast_for_year_t_ignores_year_t_outcomes():
     rng = np.random.default_rng(2)
     true = {s: float(r) for s, r in zip(STATES, rng.uniform(0.1, 0.6, len(STATES)))}
     rows = world(true)
-    base = B.evaluate(_pairs_for(rows))
+    base = B.evaluate(_panel(rows))
     target = "2020-2021"
     tampered = [dict(r, samples_non_conforming=r["samples_analyzed"] // 2) if r["fiscal_year"] == target else r for r in rows]
-    alt = B.evaluate(_pairs_for(tampered))
+    alt = B.evaluate(_panel(tampered))
     b = {y["fy"]: y for y in base["per_year"]}
     a = {y["fy"]: y for y in alt["per_year"]}
     # The year-t outcomes changed, so its losses differ ...
@@ -141,14 +159,38 @@ def test_forecast_for_year_t_ignores_year_t_outcomes():
     assert a[target]["national_rate_prev"] == b[target]["national_rate_prev"]
 
 
+def test_national_baseline_ignores_year_t_sample_sizes_and_which_states_have_a_year_t_cell():
+    # Reviewer finding (reproduced): the baseline was summed over the forecast pairs,
+    # which are filtered on year-t data, so changing one state's year-t sample count
+    # or removing year-t cells moved 'last year's national rate'. It must not.
+    rng = np.random.default_rng(12)
+    true = {s: float(r) for s, r in zip(STATES, rng.uniform(0.1, 0.6, len(STATES)))}
+    rows = world(true)
+    target = "2020-2021"
+    base = {y["fy"]: y for y in B.evaluate(_panel(rows))["per_year"]}[target]
+
+    shrunk = [dict(r, samples_analyzed=50, samples_non_conforming=5) if r["fiscal_year"] == target and r["state"] == STATES[0] else r
+              for r in rows]                                                          # year-t n below MIN_N
+    removed = [r for r in rows if not (r["fiscal_year"] == target and r["state"] in STATES[:4])]   # cells gone
+    for variant in (shrunk, removed):
+        alt = {y["fy"]: y for y in B.evaluate(_panel(variant))["per_year"]}[target]
+        assert alt["national_rate_prev"] == base["national_rate_prev"]      # exact, unrounded
+
+
+def test_national_baseline_uses_every_prior_year_cell_with_enough_samples():
+    panel = {("A", "2016-2017"): (1000, 100), ("B", "2016-2017"): (1000, 300), ("C", "2016-2017"): (50, 50),
+             ("A", "2017-2018"): (1000, 100)}               # B and C have no year-t cell; C is below MIN_N
+    assert B.national_rate_prev(panel, "2017-2018") == pytest.approx(400 / 2000)
+
+
 def test_chosen_m_for_year_t_ignores_later_years():
     rng = np.random.default_rng(4)
     true = {s: float(r) for s, r in zip(STATES, rng.uniform(0.1, 0.6, len(STATES)))}
     rows = world(true)
-    base = B.evaluate(_pairs_for(rows))
+    base = B.evaluate(_panel(rows))
     target = "2020-2021"
     later = [dict(r, samples_non_conforming=r["samples_analyzed"] // 3) if r["fiscal_year"] > "2021-2022" else r for r in rows]
-    alt = B.evaluate(_pairs_for(later))
+    alt = B.evaluate(_panel(later))
     b = {y["fy"]: y for y in base["per_year"]}
     a = {y["fy"]: y for y in alt["per_year"]}
     assert a[target]["m_selected"] == b[target]["m_selected"]
@@ -184,3 +226,41 @@ def test_spearman_handles_ties_and_constants():
     assert B.spearman([1, 1, 1], [1, 2, 3]) is None
     assert B.spearman([1, 2], [1, 2]) is None
     assert B.spearman([1, 1, 2, 3], [1, 1, 2, 3]) == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------- JSON, placebo, sensitivity
+
+def test_json_safe_turns_infinity_and_nan_into_valid_json():
+    # Reviewer finding: m=inf (the national-only model won) was emitted as the
+    # non-standard token Infinity, which strict parsers reject.
+    import json
+    text = json.dumps(B._json_safe({"m": math.inf, "lo": -math.inf, "bad": float("nan"), "nest": [math.inf, {"x": 1.5}]}),
+                      allow_nan=False)                                # raises on Infinity/NaN
+    assert json.loads(text) == {"m": "inf", "lo": "-inf", "bad": None, "nest": ["inf", {"x": 1.5}]}
+
+
+def test_a_real_result_serialises_as_strict_json():
+    import json
+    rng = np.random.default_rng(5)
+    true = {s: float(r) for s, r in zip(STATES, rng.uniform(0.1, 0.6, len(STATES)))}
+    res = B.run(world(true))
+    assert json.loads(json.dumps(B._json_safe(res), allow_nan=False))["evaluated_pairs"] == res["evaluated_pairs"]
+
+
+def test_placebo_keeps_each_years_cells_but_moves_them_between_states():
+    panel = _panel(world({s: 0.1 + 0.01 * i for i, s in enumerate(STATES)}, n=500))
+    shuffled = B.placebo_panel(panel)
+    for fy in {k[1] for k in panel}:
+        assert sorted(v for k, v in panel.items() if k[1] == fy) == sorted(v for k, v in shuffled.items() if k[1] == fy)
+    assert any(panel[k] != shuffled[k] for k in panel)
+    assert shuffled == B.placebo_panel(panel)                       # deterministic
+
+
+def test_sensitivity_reports_every_documented_variant_and_the_placebo_kills_the_effect():
+    rng = np.random.default_rng(7)
+    true = {s: float(r) for s, r in zip(STATES, rng.uniform(0.10, 0.60, len(STATES)))}
+    out = B.sensitivity(world(true, n=2000))
+    assert set(out) == {"primary", "min_n_500", "min_n_1000", "from_2020_21", "large_states_only",
+                        "placebo_shuffled_state_labels"}
+    assert out["primary"]["ci95"][1] < 0                            # real state effects: persistence wins
+    assert out["placebo_shuffled_state_labels"]["persistence_minus_national_logloss"] > 0   # ...and loses when labels are shuffled

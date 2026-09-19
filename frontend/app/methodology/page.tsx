@@ -44,7 +44,7 @@ const MODEL_CARD_SECTIONS = [
   },
   {
     title: "Backtest on real state sampling outcomes",
-    body: "A pre-specified temporal backtest was later run on real State/UT counts of food samples analysed and found non-conforming (Lok Sabha answers, 2013–14 to 2025–26; 173 one-year-ahead forecasts across six years). A state's rate in one year predicts its rate the next year far better than the national rate does (average error 4.8 vs 13.2 percentage points, and the ordering of states is highly stable); a control with shuffled state labels removes the effect. But no model beat simply reusing last year's rate, and that stability may reflect where and how inspectors sample rather than how contaminated food is. This is a statement about a testing rate, not a food-risk score.",
+    body: "A pre-specified temporal backtest was later run on real State/UT counts of food samples analysed and found non-conforming (Lok Sabha answers, 2013–14 to 2025–26; 173 one-year-ahead forecasts across six years). A state's rate in one year predicts its rate the next year far better than the national rate does (average error 4.8 vs 13.1 percentage points, and the ordering of states is highly stable); a control with shuffled state labels removes the effect. But no model beat simply reusing last year's rate, and that stability may reflect where and how inspectors sample rather than how contaminated food is. This is a statement about a testing rate, not a food-risk score.",
   },
 ];
 

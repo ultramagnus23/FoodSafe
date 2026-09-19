@@ -16,7 +16,10 @@ The protocol is fixed in advance and does not depend on the results:
     fiscal years only (2017-18 and 2019-20 are missing, so those never pair),
     with at least `MIN_N` samples in both years.
   * Models (all predict the year-t rate p from year t-1 data only):
-      national     p = national rate in t-1 (no state signal)
+      national     p = national rate in t-1 = every state cell of year t-1 with
+                   at least MIN_N samples (no state signal; computed from the
+                   panel, NOT from the forecast pairs, because the pair set is
+                   filtered on year-t data and would leak it into the baseline)
       persistence  p = the state's own rate in t-1
       shrink       p = (k0 + m * national0) / (n0 + m)   [m = prior strength]
     m = 0 is persistence and m = infinity is national, so shrink spans both.
@@ -43,6 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import random
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -76,6 +80,8 @@ def prev_fy(fy: str) -> str:
     if not m:
         raise ValueError(f"bad fiscal year {fy!r}")
     a, b = int(m.group(1)), int(m.group(2))
+    if b != a + 1:
+        raise ValueError(f"not a consecutive fiscal year: {fy!r}")
     return f"{a - 1}-{b - 1}"
 
 
@@ -95,7 +101,13 @@ def build_panel(rows: Iterable[dict], basis: str = "non_conforming") -> tuple[di
     return panel, sorted(conflicts)
 
 
+def _check_min_n(min_n: int) -> None:
+    if min_n < 1:
+        raise ValueError("min_n must be at least 1 (a state with no samples has no rate)")
+
+
 def make_pairs(panel: dict, min_n: int = MIN_N) -> list[Pair]:
+    _check_min_n(min_n)
     out = []
     for (state, fy), (n1, k1) in panel.items():
         prev = panel.get((state, prev_fy(fy)))
@@ -109,11 +121,18 @@ def make_pairs(panel: dict, min_n: int = MIN_N) -> list[Pair]:
 
 # ---------------------------------------------------------------- forecasts and losses
 
-def national_rate_prev(pairs_in_year: list[Pair]) -> float:
-    """National rate in year t-1 over the states forecast in year t. Uses only
-    year t-1 counts."""
-    n = sum(p.n0 for p in pairs_in_year)
-    return sum(p.k0 for p in pairs_in_year) / n
+def national_rate_prev(panel: dict, target_fy: str, min_n: int = MIN_N) -> Optional[float]:
+    """National rate in year t-1: every state cell of the PREVIOUS year with at
+    least `min_n` samples. It is deliberately computed from the panel, not from
+    the forecast pairs — the pair set is filtered on year-t data (does the state
+    also have a year-t cell with enough samples?), so a rate summed over it would
+    let the year being predicted change its own baseline. An independent review
+    reproduced that leak (changing one state's year-t sample count moved the
+    baseline); this version reads nothing from year t."""
+    prev = prev_fy(target_fy)
+    cells = [(n, k) for (_, fy), (n, k) in panel.items() if fy == prev and n >= min_n]
+    total = sum(n for n, _ in cells)
+    return sum(k for _, k in cells) / total if total else None
 
 
 def forecast(pair: Pair, national0: float, m: float) -> float:
@@ -178,10 +197,14 @@ def spearman(a: list[float], b: list[float]) -> Optional[float]:
 
 # ---------------------------------------------------------------- the backtest
 
-def evaluate(pairs: list[Pair]) -> dict:
+def evaluate(panel: dict, min_n: int = MIN_N) -> dict:
+    """Backtest a panel {(state, fy): (n, k)}. Takes the PANEL, not pre-built
+    pairs, so the national baseline can be computed from year t-1 alone."""
+    _check_min_n(min_n)
+    pairs = make_pairs(panel, min_n)
     by_year = _by_year(pairs)
     years = list(by_year)
-    national0 = {fy: national_rate_prev(ps) for fy, ps in by_year.items()}
+    national0 = {fy: national_rate_prev(panel, fy, min_n) for fy in years}
 
     evaluated: list[dict] = []           # one record per evaluated pair
     per_year: list[dict] = []
@@ -194,7 +217,7 @@ def evaluate(pairs: list[Pair]) -> dict:
         models = {"national": math.inf, "persistence": 0.0, "shrink": m}
         preds = {name: [forecast(p, national0[fy], mm) for p in ps] for name, mm in models.items()}
         actual = [p.k1 / p.n1 for p in ps]
-        yr = {"fy": fy, "n_pairs": len(ps), "m_selected": m, "national_rate_prev": round(national0[fy], 4)}
+        yr = {"fy": fy, "n_pairs": len(ps), "m_selected": m, "national_rate_prev": national0[fy]}
         for name in models:
             yr[f"logloss_{name}"] = sum(deviance(p.k1, p.n1, q) for p, q in zip(ps, preds[name])) / sum(p.n1 for p in ps)
             yr[f"mae_{name}"] = float(np.mean([abs(a - q) for a, q in zip(actual, preds[name])]))
@@ -206,15 +229,20 @@ def evaluate(pairs: list[Pair]) -> dict:
                               **{f"dev_{name}": deviance(p.k1, p.n1, preds[name][j]) for name in models},
                               **{f"abs_{name}": abs(actual[j] - preds[name][j]) for name in models}})
 
+    base = {"panel_cells": len(panel), "pairs_total": len(pairs), "min_n": min_n}
     if not evaluated:
-        return {"evaluated_pairs": 0, "per_year": [], "note": "no target year has an earlier target year to fit on"}
+        return {**base, "evaluated_pairs": 0, "per_year": [],
+                "note": "no target year has an earlier target year to fit on"}
 
     names = ("national", "persistence", "shrink")
     total_n = sum(r["n1"] for r in evaluated)
     pooled = {f"logloss_{nm}": sum(r[f"dev_{nm}"] for r in evaluated) / total_n for nm in names}
     pooled.update({f"mae_{nm}": float(np.mean([r[f"abs_{nm}"] for r in evaluated])) for nm in names})
 
-    # Bootstrap over states: paired differences in pooled log-loss.
+    # Bootstrap over STATES: paired differences in pooled log-loss. The evaluated
+    # years, the fitted m and the national baselines are held fixed, so this
+    # interval reflects between-state variability only — not uncertainty about
+    # other years (only a handful are evaluated).
     states = sorted({r["state"] for r in evaluated})
     idx = {s: i for i, s in enumerate(states)}
     dev = {nm: np.zeros(len(states)) for nm in names}
@@ -240,6 +268,7 @@ def evaluate(pairs: list[Pair]) -> dict:
     sp_p = [y["spearman_persistence"] for y in per_year if y["spearman_persistence"] is not None]
     sp_s = [y["spearman_shrink"] for y in per_year if y["spearman_shrink"] is not None]
     return {
+        **base,
         "evaluated_pairs": len(evaluated),
         "evaluated_target_years": [y["fy"] for y in per_year],
         "states_in_bootstrap": len(states),
@@ -253,16 +282,87 @@ def evaluate(pairs: list[Pair]) -> dict:
 
 def run(rows: Iterable[dict], min_n: int = MIN_N) -> dict:
     panel, conflicts = build_panel(rows)
-    pairs = make_pairs(panel, min_n)
-    res = evaluate(pairs)
-    res["panel_cells"] = len(panel)
+    res = evaluate(panel, min_n)
     res["conflicting_cells_dropped"] = len(conflicts)
-    res["pairs_total"] = len(pairs)
-    res["min_n"] = min_n
     return res
 
 
+# ---------------------------------------------------------------- sensitivity and placebo
+
+# States/UTs with small or irregular sample volumes (small UTs, the north-east,
+# Goa, Sikkim ...). The "large states only" variant drops them.
+SMALL_UNITS = frozenset({
+    "Lakshadweep", "Dadra and Nagar Haveli", "Daman and Diu", "Dadra and Nagar Haveli and Daman and Diu",
+    "Andaman and Nicobar Islands", "Sikkim", "Mizoram", "Chandigarh", "Puducherry", "Ladakh", "Nagaland",
+    "Arunachal Pradesh", "Manipur", "Meghalaya", "Tripura", "Goa",
+})
+
+
+def placebo_panel(panel: dict, seed: int = BOOTSTRAP_SEED) -> dict:
+    """Control: within each fiscal year, shuffle which state each (n, k) cell is
+    attached to. State identity is destroyed while every year's cells and totals
+    are kept, so if last year's state rate genuinely predicts this year's,
+    persistence should LOSE its edge here."""
+    rng = random.Random(seed)
+    by_year: dict[str, list] = defaultdict(list)
+    for (state, fy), cell in sorted(panel.items()):
+        by_year[fy].append((state, cell))
+    out = {}
+    for fy, items in sorted(by_year.items()):
+        states = [s for s, _ in items]
+        rng.shuffle(states)
+        for new_state, (_, cell) in zip(states, items):
+            out[(new_state, fy)] = cell
+    return out
+
+
+def _summary(res: dict) -> dict:
+    if not res.get("evaluated_pairs"):
+        return {"evaluated_pairs": 0}
+    d = res["paired_logloss_differences_(negative=first_is_better)"]["persistence_minus_national"]
+    return {
+        "evaluated_pairs": res["evaluated_pairs"],
+        "evaluated_target_years": len(res["evaluated_target_years"]),
+        "persistence_minus_national_logloss": d["estimate"],
+        "ci95": d["ci95"],
+        "mae_national": res["pooled"]["mae_national"],
+        "mae_persistence": res["pooled"]["mae_persistence"],
+        "mean_spearman_persistence": res["mean_spearman_persistence"],
+    }
+
+
+def sensitivity(rows: Iterable[dict]) -> dict:
+    """The variants reported in docs/BACKTEST_SAMPLING.md. They are checks on
+    the primary result, never used to choose anything."""
+    panel, _ = build_panel(rows)
+    variants = {
+        "primary": evaluate(panel, MIN_N),
+        "min_n_500": evaluate(panel, 500),
+        "min_n_1000": evaluate(panel, 1000),
+        "from_2020_21": evaluate({k: v for k, v in panel.items() if k[1] >= "2020-2021"}, MIN_N),
+        "large_states_only": evaluate({k: v for k, v in panel.items() if k[0] not in SMALL_UNITS}, MIN_N),
+        "placebo_shuffled_state_labels": evaluate(placebo_panel(panel), MIN_N),
+    }
+    return {name: _summary(res) for name, res in variants.items()}
+
+
 # ---------------------------------------------------------------- CLI
+
+def _json_safe(obj):
+    """m = infinity is a legitimate result (the national-only model won) but is
+    not valid JSON; emit the string "inf" so the output parses everywhere."""
+    if isinstance(obj, float):
+        if math.isinf(obj):
+            return "inf" if obj > 0 else "-inf"
+        if math.isnan(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
 
 def _load_rows() -> list[dict]:
     import psycopg2.extras
@@ -282,11 +382,24 @@ def _load_rows() -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--json", action="store_true", help="print the full result as JSON")
+    ap.add_argument("--json", action="store_true", help="print the full result as valid JSON")
+    ap.add_argument("--sensitivity", action="store_true",
+                    help="run the documented sensitivity variants and the shuffled-label placebo")
     args = ap.parse_args()
-    res = run(_load_rows())
+    rows = _load_rows()
+    res = sensitivity(rows) if args.sensitivity else run(rows)
     if args.json:
-        print(json.dumps(res, indent=2, default=str))
+        print(json.dumps(_json_safe(res), indent=2, allow_nan=False))
+        return
+    if args.sensitivity:
+        for name, s in res.items():
+            if not s.get("evaluated_pairs"):
+                print(f"  {name:32s} nothing evaluable")
+                continue
+            lo, hi = s["ci95"]
+            print(f"  {name:32s} pairs={s['evaluated_pairs']:3d} pers-nat={s['persistence_minus_national_logloss']:+.4f} "
+                  f"[{lo:+.4f},{hi:+.4f}]  MAE nat/pers={s['mae_national']:.3f}/{s['mae_persistence']:.3f}  "
+                  f"rho={s['mean_spearman_persistence']:.2f}")
         return
     print(f"panel cells: {res['panel_cells']}  pairs: {res['pairs_total']}  evaluated: {res['evaluated_pairs']}")
     for y in res.get("per_year", []):

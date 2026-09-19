@@ -36,7 +36,7 @@ side (`analysed - non-conforming`) exists for the first time (539 rows, 2013-14 
 
 A pre-specified temporal backtest on it is in `docs/BACKTEST_SAMPLING.md`. In short:
 last year's state rate predicts this year's far better than the national rate does
-(MAE 0.048 vs 0.132; state ordering rank correlation 0.85; robust to thresholds and a
+(MAE 0.048 vs 0.131; state ordering rank correlation 0.85; robust to thresholds and a
 shuffled-label placebo), but **no model beat simple persistence**, and the persistence
 may reflect enforcement and sampling practice rather than food risk. The verdict
 above about the openFDA recall log is unchanged: that dataset still cannot support a
