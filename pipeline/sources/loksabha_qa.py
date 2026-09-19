@@ -141,6 +141,7 @@ _STATE_CANON_RAW: dict[str, str] = {
     "daman&diu": "Daman and Diu",
     "dadranagarhaveli&daman&diu": "Dadra and Nagar Haveli and Daman and Diu",
     "dadara&nagarhavelianddaman&diu": "Dadra and Nagar Haveli and Daman and Diu",
+    "dadra&nagarhavelianddaman&diu": "Dadra and Nagar Haveli and Daman and Diu",
     "pondicherry": "Puducherry",
     "uttrakhand": "Uttarakhand",
     "lakshdweep": "Lakshadweep",
@@ -213,10 +214,11 @@ def _download(url: str) -> bytes:
 
 
 def _parse_date(d: str) -> str | None:
-    # source format: "13.03.2026"
+    # source format: "13.03.2026". Validated: an impossible date such as
+    # "31.02.2026" used to become '2026-02-31' and fail at INSERT time, aborting
+    # the whole run; it is now None (stored as NULL).
     try:
-        dd, mm, yyyy = d.split(".")
-        return f"{yyyy}-{mm}-{dd}"
+        return datetime.strptime((d or "").strip(), "%d.%m.%Y").date().isoformat()
     except Exception:  # noqa: BLE001
         return None
 

@@ -55,7 +55,7 @@ logger = logging.getLogger("foodsafe.loksabha_sampling")
 
 # Bump when parsing rules change: questions logged under an older version are
 # re-processed, questions already handled at this version are skipped.
-PARSER_VERSION = "sampling-1"
+PARSER_VERSION = "sampling-2"
 
 # Lok Sabha terms searched (newest first). Earlier terms use different
 # formats (Prevention of Food Adulteration Act era) and were not examined.
@@ -63,22 +63,43 @@ SAMPLING_TERMS: tuple[int, ...] = (18, 17, 16)
 
 _FY_RE = re.compile(r"(?<!\d)(20\d\d)\s*[-–—]\s*(?:20)?(\d\d)(?!\d)")
 
+# These run on SQUASHED header text (letters and digits only, so no spaces).
+# A 'found' column must name the finding itself; a column such as 'cases launched
+# for samples found non-conforming' also matches, and two matches is an
+# ambiguity that rejects the table (never silently picking one).
 _ANALYSED_RE = re.compile(r"samples?analy[sz]")
-_FOUND_NONCONF_RE = re.compile(r"samples?found(?:to be)?(?:non(?:conform|confirm))|foundnonconform|foundnonconfirm")
-_FOUND_ADULT_RE = re.compile(r"samples?found(?:to be)?adult")
+_FOUND_NONCONF_RE = re.compile(r"found(?:tobe)?non(?:conform|confirm)")
+_FOUND_ADULT_RE = re.compile(r"found(?:tobe)?adulter")
+_MISBRANDED_RE = re.compile(r"misbrand")
 
 # Whole-table skips. Commodity words are matched with word boundaries on the raw
-# text (squashed matching would hit 'tea' in 'instead', 'rice' in 'price');
-# part-year words are distinctive enough to match squashed.
+# text (squashed matching would hit 'tea' in 'instead', 'rice' in 'price').
 _COMMODITY_RE = re.compile(
-    r"\b(?:milk|dairy|water|oils?|ghee|spices?|mango(?:es)?|fruits?|honey|salt|sweets?|paneer|khoa|mawa"
-    r"|vanaspati|tea|atta|rice|meat|fish|eggs?|ripen\w*|beverages?|juices?)\b",
+    r"\b(?:milk|dairy|water|oils?|ghee|spices?|chilli|khoya|khoa|mawa|mango(?:es)?|fruits?|honey|salt|sugar"
+    r"|sweets?|sweetmeats?|mithai|paneer|vanaspati|tea|atta|flour|rice|pulses?|jaggery|meat|fish|eggs?"
+    r"|ripen\w*|beverages?|juices?|ice[\s-]?cream|bakery|biscuits?|bread|chocolates?|supplements?"
+    r"|nutraceuticals?|infant|tobacco)\b",
     re.IGNORECASE,
 )
-_PARTIAL_PERIOD_WORDS = ("halfyear", "quarter", "tillsep", "tilldec", "tillmar", "tilljun", "uptosep", "uptodec")
 
-_NIL = {"nil", "0"}
+# Part-year / provisional tables must never be stored as a full year. Two
+# passes because the PDFs glue words together ('uptoNovember'): a boundary-aware
+# regex on the raw text, plus a few distinctive tokens on squashed text.
+_PARTIAL_PERIOD_RE = re.compile(
+    r"\b(?:half[\s-]*year(?:ly)?|quarter(?:ly)?|provisional|up\s*to|upto|till|until"
+    r"|(?:first|last)\s+\w+\s+months?|\d+\s+months?"
+    r"|(?:april|apr)\s*(?:to|[-–—])\s*(?:jun|sep|oct|nov|dec|jan|feb)\w*)\b",
+    re.IGNORECASE,
+)
+_PARTIAL_PERIOD_SQUASHED = ("halfyear", "quarter", "provisional", "upto", "sixmonths", "threemonths", "ninemonths")
+
 _NA = {"", "-", "–", "—", "na", "n/a", "nr"}
+
+# A "state-wise" table has many states; the smallest real one accepted so far
+# has 15. Fewer than this is a fragment, not a table.
+MIN_STATES = 10
+# Counts above this cannot be sample counts (and would overflow INTEGER).
+MAX_COUNT = 1_000_000_000
 
 
 @dataclass
@@ -111,6 +132,9 @@ class Reject:
 
 # ---------------------------------------------------------------- small helpers
 
+_GROUPED_INT_RE = re.compile(r"\d{1,3}(?:,\s?\d{2,3})+|\d+")
+
+
 def _squash(s: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
@@ -122,9 +146,12 @@ def _flat(s: Optional[str]) -> str:
 def parse_int_cell(cell: Optional[str]) -> tuple[Optional[int], str]:
     """(value, status): status in ok | empty | na | malformed.
 
-    A cell holding two numbers ('2837/1784', '99,353\\n1228'), a currency
-    amount, or any stray text is 'malformed' — the caller rejects the table
-    rather than picking one of the values.
+    A cell holding two numbers ('2837/1784', '99,353\\n1228', '5461 609'), a
+    currency amount, or any stray text is 'malformed' — the caller rejects the
+    table rather than picking one of the values. Digits may be grouped with
+    commas (Western '1,708' or Indian '2,23,808', with an optional space or
+    line break after a comma, as the PDFs render it) but never with a bare
+    space: '5461 609' must not become 5,461,609.
     """
     if cell is None:
         return None, "empty"
@@ -134,12 +161,12 @@ def parse_int_cell(cell: Optional[str]) -> tuple[Optional[int], str]:
         return None, ("empty" if low == "" else "na")
     if low == "nil":
         return 0, "ok"
-    if "\n" in raw and len(re.findall(r"\d[\d,]*", raw)) != 1:
+    if not _GROUPED_INT_RE.fullmatch(raw):
         return None, "malformed"
-    compact = re.sub(r"[\s,]", "", raw)
-    if not re.fullmatch(r"\d+", compact):
+    value = int(re.sub(r"[\s,]", "", raw))
+    if value > MAX_COUNT:
         return None, "malformed"
-    return int(compact), "ok"
+    return value, "ok"
 
 
 def normalise_fy(a: str, b: str) -> Optional[str]:
@@ -180,6 +207,9 @@ def _is_total_label(cell: Optional[str]) -> bool:
 
 
 _SERIAL_CELL_RE = re.compile(r"^\d+\.?$")
+_AND_CONTINUATION_RE = re.compile(r"\s*(?:and\b|&)", re.IGNORECASE)
+# Section headings that legitimately sit between rows of a State table.
+_SECTION_HEADING_RE = re.compile(r"^\s*(?:states?|union\s+territor(?:y|ies)|u\.?\s?ts?\.?)(?:\s*/\s*\w+\.?)*\s*:?\s*$", re.IGNORECASE)
 
 
 def _looks_like_data_row(row: list) -> bool:
@@ -215,8 +245,12 @@ def resolve_columns(rows: list[list]) -> tuple[Optional[dict], Optional[str]]:
         return None, None
     header = rows[:h]
     ncols = max(len(r) for r in rows)
+    # Column labels come from rows that have at least two cells: a one-cell title
+    # row ("... samples analysed and found non-conforming during 2018-19") is not
+    # a column and would otherwise create a phantom match in column 0.
+    label_rows = [r for r in header if sum(1 for c in r if _flat(c)) >= 2] or header
     col_text = [
-        " ".join(_flat(r[j]) for r in header if j < len(r) and r[j])
+        " ".join(_flat(r[j]) for r in label_rows if j < len(r) and r[j])
         for j in range(ncols)
     ]
     sq = [_squash(t) for t in col_text]
@@ -227,6 +261,14 @@ def resolve_columns(rows: list[list]) -> tuple[Optional[dict], Optional[str]]:
     if not analysed or not (nonconf or adult):
         return None, None
     if len(analysed) != 1 or len(nonconf) + len(adult) != 1:
+        return None, "ambiguous_columns"
+    # One header cell naming both ("samples analysed and found non-conforming")
+    # would make found == analysed for every state.
+    if analysed[0] == (nonconf or adult)[0]:
+        return None, "ambiguous_columns"
+    # 'found adulterated' beside a separate 'found misbranded' column: the total
+    # is the sum of two columns and we would read only one.
+    if adult and any(j != adult[0] and _MISBRANDED_RE.search(sq[j]) for j in range(ncols)):
         return None, "ambiguous_columns"
 
     # A merged header cell spanning several sub-columns (e.g. "samples found"
@@ -255,6 +297,8 @@ def resolve_columns(rows: list[list]) -> tuple[Optional[dict], Optional[str]]:
     if state_col < 0 or scores[state_col] < 1:
         return None, "no_state_column"
     sno_col = 0 if state_col == 1 else None
+    if sno_col in (analysed[0], found_col):
+        sno_col = None
 
     title_text = " ".join(_flat(c) for r in header for c in r if c)
     return {
@@ -277,7 +321,8 @@ def _merge_split_rows(rows: list[list], state_col: int) -> tuple[list[list], Opt
         row = list(rows[i])
         name = _flat(row[state_col]) if state_col < len(row) else ""
         joined_len = 0
-        if name and not LQ._canon_state(name) and not _is_total_label(name):
+        if name and not _is_total_label(name):
+            first_recognised = bool(LQ._canon_state(name))
             parts = [name]
             for k in (1, 2):
                 if i + k >= len(rows):
@@ -288,6 +333,11 @@ def _merge_split_rows(rows: list[list], state_col: int) -> tuple[list[list], Opt
                 tail = _flat(nxt[state_col])
                 sno_next = _flat(nxt[0]) if state_col != 0 and len(nxt) > 0 else ""
                 if not tail or sno_next:
+                    break
+                # A name that is already a State is only extended by an
+                # "and ..."/"& ..." continuation ('Dadra & Nagar Haveli' + 'and
+                # Daman & Diu' is the merged UT, not the pre-2020 one).
+                if first_recognised and not (k == 1 and _AND_CONTINUATION_RE.match(tail)):
                     break
                 parts.append(tail)
                 if LQ._canon_state(" ".join(parts)):
@@ -332,6 +382,7 @@ def _read_rows(rows: list[list], info: dict, prev_sno: Optional[int] = None) -> 
     total: Optional[dict] = None
     seen: set[str] = set()
     last_sno: Optional[int] = prev_sno
+    after_state = False
     for row in merged:
         if max(sc, ac, fc) >= len(row):
             if re.search(r"\d", " ".join(c for c in row if c)):
@@ -349,6 +400,11 @@ def _read_rows(rows: list[list], info: dict, prev_sno: Optional[int] = None) -> 
                 return [], None, f"malformed_total:{name or _flat(sno_cell)!r}", None
             if a_st == "ok" and f_st == "ok":
                 total = {"analysed": a_val, "found": f_val}
+            else:
+                # A printed Total we cannot read is not "no Total": the table
+                # can no longer be reconciled, so it must not pass as row-checked.
+                total = {"unusable": True}
+            after_state = False
             continue
 
         if sno_col is not None:
@@ -370,7 +426,14 @@ def _read_rows(rows: list[list], info: dict, prev_sno: Optional[int] = None) -> 
         if state is None:
             if numeric_present:
                 return [], None, f"unrecognised_state:{name[:40]!r}", None
+            if after_state and total is None and not _SECTION_HEADING_RE.match(name):
+                # Text with no serial and no figures straight after a State row
+                # is most likely the rest of that State's name (or a name row
+                # detached from its figures): the row above may carry the wrong
+                # State. Reject rather than store it under a partial name.
+                return [], None, f"orphan_text_line:{name[:40]!r}", None
             continue
+        after_state = True
         if a_st == "malformed" or f_st == "malformed":
             return [], None, f"malformed_number:{state}", None
         if a_st != "ok" or f_st != "ok":
@@ -384,18 +447,25 @@ def _read_rows(rows: list[list], info: dict, prev_sno: Optional[int] = None) -> 
 
 # ---------------------------------------------------------------- document-level parse
 
-_CLOSE_TOLERANCE = 0.001    # 0.1% — a source typo, not a missing row
+# "Close" exists for source typos (the 2014-15 table's printed Total is 2 above
+# its rows' sum, 0.003%). It must be small in ABSOLUTE terms too: 0.1% of a
+# national total is ~170 samples, enough to hide a whole small State or UT that
+# was dropped, so a relative tolerance alone is not safe.
+_CLOSE_TOLERANCE = 0.001
+_CLOSE_ABS_TOLERANCE = 10
 
 
 def _totals_agree(rows: list[dict], total: dict) -> Optional[str]:
     """None if the printed Total does not match; else 'total_row_sum' (exact)
-    or 'total_row_close' (each column within 0.1%)."""
+    or 'total_row_close' (each column within 0.1% AND within 10 samples)."""
+    if total.get("unusable"):
+        return None
     sa = sum(r["analysed"] for r in rows)
     sf = sum(r["found"] for r in rows)
     if (sa, sf) == (total["analysed"], total["found"]):
         return "total_row_sum"
     def close(a: int, b: int) -> bool:
-        return b > 0 and abs(a - b) / b <= _CLOSE_TOLERANCE
+        return b > 0 and abs(a - b) <= _CLOSE_ABS_TOLERANCE and abs(a - b) / b <= _CLOSE_TOLERANCE
     if close(sa, total["analysed"]) and close(sf, total["found"]):
         return "total_row_close"
     return None
@@ -404,6 +474,12 @@ def _totals_agree(rows: list[dict], total: dict) -> Optional[str]:
 def _finalise(group: Group, total: Optional[dict], groups: list[Group], rejects: list[Reject]) -> None:
     if not group.rows:
         rejects.append(Reject(group.page, "no_rows"))
+        return
+    if len(group.rows) < MIN_STATES:
+        rejects.append(Reject(group.page, "too_few_states", f"{len(group.rows)} rows"))
+        return
+    if total is not None and total.get("unusable"):
+        rejects.append(Reject(group.page, "total_unusable", "a printed Total row exists but cannot be read"))
         return
     if total is not None:
         level = _totals_agree(group.rows, total)
@@ -430,8 +506,27 @@ def _finalise(group: Group, total: Optional[dict], groups: list[Group], rejects:
     groups.append(group)
 
 
-def parse_sampling_tables(tables: list[PageTable]) -> tuple[list[Group], list[Reject]]:
-    """Pure function over already-extracted tables (see extract_tables())."""
+def _has_partial_period(text: str) -> bool:
+    return bool(_PARTIAL_PERIOD_RE.search(text)) or any(w in _squash(text) for w in _PARTIAL_PERIOD_SQUASHED)
+
+
+def _first_serial(rows: list[list], sno_col: Optional[int]) -> Optional[int]:
+    """First clean serial number among `rows`, or None."""
+    if sno_col is None:
+        return None
+    for r in rows:
+        if sno_col < len(r):
+            sno, bad = _serial(r[sno_col])
+            if sno is not None and not bad:
+                return sno
+    return None
+
+
+def parse_sampling_tables(tables: list[PageTable], subject: str = "") -> tuple[list[Group], list[Reject]]:
+    """Pure function over already-extracted tables (see extract_tables()).
+
+    `subject` is the question's subject line: scope (a milk-only or packaged-water
+    answer) is sometimes stated only there, not in the table."""
     groups: list[Group] = []
     rejects: list[Reject] = []
     current: Optional[Group] = None
@@ -449,8 +544,9 @@ def parse_sampling_tables(tables: list[PageTable]) -> tuple[list[Group], list[Re
         repeats a header), and either its serial numbers continue exactly
         where the group left off or it is just the closing Total row.
         Returns True if the table was consumed. A continuation that fails on
-        its own content discards the open group (reject whole); a bare-Total
-        tail that doesn't reconcile is treated as unrelated and ignored."""
+        its own content discards the open group (reject whole). A bare closing
+        Total row that does not reconcile also rejects the group: ignoring it
+        would let a group missing its tail rows pass as merely row-checked."""
         nonlocal current, current_total
         if current is None or current_total is not None:
             return False
@@ -485,9 +581,21 @@ def parse_sampling_tables(tables: list[PageTable]) -> tuple[list[Group], list[Re
             current, current_total = None, None
             return True
         if first_sno is None:
-            # Bare-Total tail: only attach if it reconciles.
-            if total is None or _totals_agree(current.rows + state_rows, total) is None:
+            # Bare closing Total row on the next page: it must reconcile with
+            # every row read so far, or the group is missing rows.
+            if total is None:
                 return False
+            if total.get("unusable"):
+                rejects.append(Reject(tb.page, "total_unusable", "closing Total row cannot be read"))
+                current, current_total = None, None
+                return True
+            if _totals_agree(current.rows + state_rows, total) is None:
+                sa = sum(r["analysed"] for r in current.rows)
+                sf = sum(r["found"] for r in current.rows)
+                rejects.append(Reject(tb.page, "total_mismatch",
+                                      f"sum=({sa},{sf}) printed=({total['analysed']},{total['found']})"))
+                current, current_total = None, None
+                return True
         current.rows.extend(state_rows)
         if last is not None:
             current._last_sno = last
@@ -503,21 +611,41 @@ def parse_sampling_tables(tables: list[PageTable]) -> tuple[list[Group], list[Re
         info, why = resolve_columns(rows)
 
         if info is None:
-            # Header-less, or a header this parser can't resolve: it can only
-            # ever be the continuation of an open group.
-            if try_continue(tb, rows[_header_rows(rows) if _header_rows(rows) < len(rows) else 0:], ncols, None):
-                continue
+            h = _header_rows(rows)
+            if h == 0:
+                # No header of its own: only ever the continuation of an open group.
+                if try_continue(tb, rows, ncols, None):
+                    continue
+            elif (
+                current is not None and current._cols[3] is not None
+                and tb.page == current._pages[-1] + 1 and ncols == current._ncols
+            ):
+                tail = rows[h:]
+                if tail and any(_is_total_label(c) for c in tail[0][:3]):
+                    # Repeated header + only the closing Total row. The header is
+                    # unresolved, but a Total that reconciles EXACTLY with every row
+                    # read so far (both counts, at the group's column positions) is
+                    # verification in itself; try_continue rejects the group if not.
+                    if try_continue(tb, tail, ncols, None):
+                        continue
+                elif _first_serial(tail, current._cols[3]) == (current._last_sno or 0) + 1:
+                    # A header we cannot resolve (an abbreviated repeat, say) sits on
+                    # the page that should continue the open table. Its columns could
+                    # differ from the group's, so joining by position would be a
+                    # guess and dropping it would lose the tail: reject the table.
+                    rejects.append(Reject(tb.page, "continuation_header_unresolved"))
+                    current, current_total = None, None
+                    continue
             if why is not None:
                 close()
                 rejects.append(Reject(tb.page, why))
             continue
 
-        head_squash = _squash(info["title_text"])
         above_tail = tb.above_text[-400:] if tb.above_text else ""
-        above_squash = _squash(above_tail[-200:])
-        if any(w in head_squash or w in above_squash for w in _PARTIAL_PERIOD_WORDS):
+        if _has_partial_period(info["title_text"]) or _has_partial_period(above_tail):
             close(); rejects.append(Reject(tb.page, "partial_period")); continue
-        if _COMMODITY_RE.search(info["title_text"]) or _COMMODITY_RE.search(above_tail[-200:]):
+        if (_COMMODITY_RE.search(info["title_text"]) or _COMMODITY_RE.search(above_tail[-200:])
+                or (subject and _COMMODITY_RE.search(subject))):
             close(); rejects.append(Reject(tb.page, "commodity_specific")); continue
 
         title_fys = find_fiscal_years(info["title_text"])
@@ -537,6 +665,12 @@ def parse_sampling_tables(tables: list[PageTable]) -> tuple[list[Group], list[Re
             close(); rejects.append(Reject(tb.page, "fy_ambiguous", f"title={sorted(title_fys)}")); continue
 
         close()
+        first = _first_serial(rows[info["h"]:], info["sno"])
+        if first is not None and first != 1:
+            # Contiguity is checked from the first serial on; anchoring it at 1
+            # catches a table whose leading rows were lost.
+            rejects.append(Reject(tb.page, "serial_start", f"first serial is {first}"))
+            continue
         state_rows, total, err, last = _read_rows(rows[info["h"]:], info)
         if err:
             rejects.append(Reject(tb.page, err.split(":")[0], err))
@@ -570,15 +704,20 @@ def extract_tables(pdf_bytes: bytes) -> list[PageTable]:
     out: list[PageTable] = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for pi, page in enumerate(pdf.pages, start=1):
-            for tbl in page.find_tables():
+            prev_bottom = 0.0
+            for tbl in sorted(page.find_tables(), key=lambda t: t.bbox[1]):
                 rows = tbl.extract()
                 above = ""
                 top = tbl.bbox[1]
-                if top > 5:
+                # Only the text BETWEEN the previous table and this one: the
+                # whole page above would let a title-less second table inherit
+                # the first table's year.
+                if top - prev_bottom > 5:
                     try:
-                        above = page.crop((0, 0, page.width, top)).extract_text() or ""
+                        above = page.crop((0, prev_bottom, page.width, top)).extract_text() or ""
                     except Exception:  # noqa: BLE001
                         above = ""
+                prev_bottom = max(prev_bottom, tbl.bbox[3])
                 out.append(PageTable(page=pi, rows=rows, above_text=above))
     return out
 
@@ -613,11 +752,33 @@ def record_question(conn, question: dict, status: str, groups: list[Group], reje
     conn.commit()
 
 
+def processed_keys(conn) -> set[tuple[int, int]]:
+    """(lok_sabha_no, question_no) already handled at the current parser version
+    — one query instead of one per question."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT lok_sabha_no, source_question_no FROM loksabha_question_log "
+            "WHERE parser_version = %s AND status <> 'fetch_error'",
+            (PARSER_VERSION,),
+        )
+        return {(r[0], r[1]) for r in cur.fetchall()}
+
+
 def ingest_groups(conn, question: dict, groups: list[Group]) -> int:
+    """Replace this question's rows with what the current parse accepted.
+
+    Re-processing a question (after a parser-version bump, or a retried fetch)
+    is authoritative: rows an older parser accepted and this one no longer does
+    must go, or a stricter parser would leave its predecessor's mistakes in the
+    table. Delete and insert share one transaction."""
     n = 0
     answered = LQ._parse_date(question.get("date", ""))
     subject = (question.get("subjects") or "").strip()
     with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM state_sampling_annual WHERE lok_sabha_no = %s AND source_question_no = %s",
+            (int(question["lokNo"]), int(question["quesNo"])),
+        )
         for g in groups:
             for r in g.rows:
                 cur.execute(
@@ -648,25 +809,37 @@ def run(terms: tuple[int, ...] | None = None) -> dict:
     summary["questions_found"] = len(questions)
     conn = pg_connect()
     try:
+        done = processed_keys(conn)
         for q in questions:
-            url = q.get("questionsFilePath")
-            lok, qno = int(q["lokNo"]), int(q["quesNo"])
-            if not url:
-                continue
-            if already_processed(conn, lok, qno):
-                summary["questions_skipped_already_done"] += 1
-                continue
+            # One bad question must never abort the rest of the run (and, run after
+            # run, block everything queued behind it): everything per-question,
+            # including the DB writes, sits inside this try.
             try:
-                pdf = LQ._download(url)
-                groups, rejects = parse_sampling_tables(extract_tables(pdf))
+                lok, qno = int(q["lokNo"]), int(q["quesNo"])
+                if (lok, qno) in done:
+                    summary["questions_skipped_already_done"] += 1
+                    continue
+                url = q.get("questionsFilePath")
+                if not url:
+                    record_question(conn, q, "fetch_error", [], [Reject(0, "fetch_error", "no PDF URL in the search result")])
+                    summary["fetch_errors"] += 1
+                    continue
+                try:
+                    pdf = LQ._download(url)
+                    groups, rejects = parse_sampling_tables(extract_tables(pdf), subject=q.get("subjects") or "")
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("LS%s Q%s fetch/parse failed: %s", lok, qno, e)
+                    record_question(conn, q, "fetch_error", [], [Reject(0, "fetch_error", str(e)[:120])])
+                    summary["fetch_errors"] += 1
+                    continue
+                status = "parsed" if groups else ("rejected_only" if rejects else "no_sampling_table")
+                n = ingest_groups(conn, q, groups)
+                record_question(conn, q, status, groups, rejects)
             except Exception as e:  # noqa: BLE001
-                logger.warning("LS%s Q%s fetch/parse failed: %s", lok, qno, e)
-                record_question(conn, q, "fetch_error", [], [Reject(0, "fetch_error", str(e)[:120])])
+                conn.rollback()
+                logger.error("LS%s Q%s skipped after an unexpected error: %s", q.get("lokNo"), q.get("quesNo"), e)
                 summary["fetch_errors"] += 1
                 continue
-            status = "parsed" if groups else ("rejected_only" if rejects else "no_sampling_table")
-            n = ingest_groups(conn, q, groups)
-            record_question(conn, q, status, groups, rejects)
             summary["questions_processed"] += 1
             summary["tables_accepted"] += len(groups)
             # Dropped single rows are informational, not rejected tables.

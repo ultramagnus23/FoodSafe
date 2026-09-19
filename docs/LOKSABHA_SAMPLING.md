@@ -4,7 +4,7 @@
 **Table:** `state_sampling_annual` (+ audit log `loksabha_question_log`), `schema_migration_019.sql`
 **API:** `GET /v1/meta/state-sampling` · **UI:** Directory → "Samples Tested & Found Non-Conforming"
 **Run:** `python -m pipeline.run_and_log loksabha_sampling` (daily in `ingest.yml`)
-**Tests:** `tests/test_loksabha_sampling.py` (65 cases; each rejection rule is pinned to the real PDF failure that motivated it)
+**Tests:** `tests/test_loksabha_sampling.py` (109 cases; each rejection rule is pinned to the real PDF failure that motivated it)
 
 ## What this is, and why it matters
 
@@ -51,21 +51,33 @@ check passes and otherwise rejected whole, with a logged reason**:
 | Every numeric row has a recognised State/UT | interleaved-character garbage |
 | Name row without a serial, or any serial gap → reject | LS17 Q2901: all 15 states shifted by one |
 | found ≤ analysed (offending row dropped, still counted in the total) | LS18 Q3270 Mizoram |
-| Printed Total must equal column sums (0.1% tolerance is flagged `total_row_close`) | missing/misread rows |
+| Printed Total must equal column sums (a near-match is flagged `total_row_close`, see below) | missing/misread rows |
 | No printed Total **and** no serials → reject | nothing supports the figures |
 | Fiscal year from the table's own title (strong) or the text directly above (weaker, marked †); exactly one year or reject | wrong-year attribution |
 | Milk/other commodity-specific and part-year tables skipped | mixing scopes |
 | Multi-page tables joined only when serials continue exactly | attaching an unrelated table |
 | Two tables for the same year+basis in one answer → both rejected | ambiguity |
+| *(sampling-2, from an independent code review; each reproduced before fixing)* | |
+| "Found" column must be non-conforming **or** adulterated, never both; `analysed ≠ found`; "found to be" spelled with or without spaces | column mixups; `found == analysed` when one header matched twice |
+| Number cells parsed with a strict grouped-integer grammar; `5461 609` is rejected, not read as 5,461,609 | two fused cells silently concatenated |
+| An unusable printed Total (present but unparseable) rejects the table instead of being treated as absent | verification silently downgraded |
+| `total_row_close` requires each column within 0.1% **and** within 10 samples (0.1% alone could hide a missing small state on a large national sum); ≥ 10 states required | a dropped state passing as "close" |
+| Part-year ("April–September …") detected even when the PDF squashes the words | half-year table read as a full year |
+| Serial column must start at 1 and continue exactly; a stray text line inside a table rejects it | orphan/misattached rows |
+| Multi-page tables: a bare "Total" tail must agree with the joined rows; header-less continuation only when serials continue | continuation attached to the wrong table |
+| One question failing (bad PDF, parser exception) rolls back only that question; rows are replaced (delete then insert, one commit) when a question is reprocessed under a new parser version | one bad answer aborting the run; stale rows after a rule change |
 
 `verification` on each row records what supports it: `total_row_sum`,
 `total_row_close`, or `row_invariants` (serials + row checks only, no printed
 total — the weakest tier, shown as such in the UI).
 
-## Validation (2026-09-19, against the 124 unparsed answers)
+## Validation (2026-09-19, against the 124 unparsed answers; re-run at `sampling-2`)
 
 * 16 tables accepted → **539 state-year rows**; 9 tables exactly match their
-  printed Total, 2 within 0.1%, 5 by row checks only.
+  printed Total, 2 within 0.1%, 5 by row checks only. (Those tier counts are from the
+  first, `sampling-1`, run; the `sampling-2` re-run accepts the same 16 tables and 539
+  rows with **zero differing values** — the added rules rejected nothing that was
+  previously good, and they are pinned by tests against constructed failures.)
 * **Cross-answer agreement: 105 of 105** (state, year) cells reported by two or
   more independent answers are identical. Before the alignment and split-header
   guards this was 97 of 141 — 44 conflicts, which is how the LS17 Q2901 shift and
@@ -82,22 +94,25 @@ total — the weakest tier, shown as such in the UI).
 
 ## What was rejected (and why that is fine)
 
-Across the 124 answers the parser looked at 73 tables whose headers matched a
-samples-analysed/found layout: **16 accepted, 57 rejected** (and 1 single row
-dropped for found > analysed). Rejections, exactly as counted in the run:
+The latest run (`sampling-2`, same 124 answers) accepted 16 tables and rejected
+54, plus 1 single row dropped for found > analysed. Rejection reasons, exactly as
+counted in that run:
 
 | Reason | Tables |
 |---|---|
 | no recognisable state column | 15 |
-| unrecognised / garbled state name | 9 |
-| commodity-specific (milk) | 9 |
+| unrecognised / garbled state name | 8 |
+| commodity-specific (milk etc.) | 7 |
 | malformed number cell | 6 |
-| malformed serial cell | 4 |
+| ambiguous column headers | 4 |
 | found-column split across sub-headers | 3 |
-| ambiguous column headers | 3 |
+| malformed serial cell | 3 |
 | split-name row conflict | 2 |
-| printed total does not match | 2 |
-| part-year, ambiguous year, no total *and* no serials, state row without serial | 1 each |
+| part-year, printed total mismatch, no total *and* no serials, state row without serial, malformed continuation number, serial does not start at 1 | 1 each |
+
+(The `sampling-1` write-up counted 57 rejections; the reason taxonomy was tightened
+and more commodity words are now recognised, so per-reason counts are not directly
+comparable — the accepted set is identical.)
 
 The 15 "no state column" tables were not individually audited; many appear to be
 national year-by-year tables (a different grain, see below). Every rejection is
@@ -149,7 +164,7 @@ writing.
     Report figure) later — so every answer must be kept and marked, never merged.
 * The 15th Lok Sabha and earlier (Prevention of Food Adulteration Act era) were
   not examined. Only Health & Family Welfare questions are searched.
-* Parser version is `sampling-1`. Bump `PARSER_VERSION` when rules change: the
+* Parser version is `sampling-2`. Bump `PARSER_VERSION` when rules change: the
   runner re-processes questions logged under an older version and skips the rest,
   so daily runs after the first insert nothing (`loksabha_sampling` is in
   `EXPECTED_EMPTY_SOURCES`).
@@ -158,7 +173,7 @@ writing.
 
 * **Backtest:** run and written up in `docs/BACKTEST_SAMPLING.md` — state
   identity carries stable information about the non-conforming rate (persistence
-  MAE 0.048 vs 0.132 for the national rate), but no model beat plain persistence
+  MAE 0.048 vs 0.131 for the national rate), but no model beat plain persistence
   and the persistence may reflect enforcement practice rather than food risk.
 * **Paper B:** the barrier is FSSAI's own channels specifically; the same
   numbers are recoverable, painfully, from Parliament — and doing so required
