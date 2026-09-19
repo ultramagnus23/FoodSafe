@@ -678,6 +678,14 @@ def run(terms: tuple[int, ...] | None = None) -> dict:
             time.sleep(0.6)
     finally:
         conn.close()
+    if summary["inserted"] == 0 and summary["questions_skipped_already_done"] > 0 and summary["fetch_errors"] == 0:
+        # run_and_log records zero rows as 'expected_failure' with this text as
+        # the reason; say what actually happened so /admin doesn't show a healthy
+        # skip as an unexplained failure.
+        summary["note"] = (
+            f"nothing new: all {summary['questions_skipped_already_done']} questions already processed "
+            f"at parser {PARSER_VERSION}"
+        )
     return summary
 
 
