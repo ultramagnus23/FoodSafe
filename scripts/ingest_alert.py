@@ -46,6 +46,7 @@ FRIENDLY = {
     "loksabha_qa": "Lok Sabha state enforcement",
     "loksabha_sampling": "Lok Sabha state sampling outcomes",
     "loksabha_pesticide": "Lok Sabha pesticide-residue (MPRNL) results",
+    "rasff": "EU RASFF notifications (India-origin food)",
     "fssai_annual_report": "FSSAI Annual Report metrics",
     "local_news": "Local news (5 metros)",
     "research_evidence": "OpenAlex evidence",

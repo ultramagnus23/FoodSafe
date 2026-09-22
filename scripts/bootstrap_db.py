@@ -60,6 +60,8 @@ CORE_TABLES = [
     "national_enforcement_annual",
     "state_sampling_annual",
     "pesticide_residue_annual",
+    "rasff_notifications",
+    "rasff_hazards",
     "loksabha_question_log",
 ]
 
