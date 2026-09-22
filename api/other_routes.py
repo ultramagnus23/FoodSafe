@@ -8,12 +8,28 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from api.auth_utils import get_current_user, require_tier, CurrentUser
 from api.db import get_pool
+from api.source_registry import SOURCES, describe as describe_source, row_confidence
 from api.provenance import (
     ProvenanceSummary,
     EMPTY_PROVENANCE,
     fetch_provenance_by_commodity,
     fetch_provenance_by_brand,
 )
+
+class ConfidenceFields(BaseModel):
+    """Attached to every row served from a registered source (api/source_registry.py).
+    `confidence_level` is high | medium | low | demo; `confidence_reasons` says why, in
+    the order the rubric applied them. It is confidence in the RECORD (does it state what
+    the publisher disclosed?), not a claim that the data is representative."""
+    source_id: str = ""
+    confidence_level: str = ""
+    confidence_reasons: list[str] = []
+
+
+def _conf(row: dict, source_id: str, **kw) -> dict:
+    c = row_confidence(source_id, **kw)
+    return {**row, "source_id": source_id, "confidence_level": c.level, "confidence_reasons": c.reasons}
+
 
 search_router = APIRouter()
 fmcg_router = APIRouter()
@@ -46,7 +62,7 @@ class LocalityOut(BaseModel):
     latitude: Optional[float]
     longitude: Optional[float]
 
-class CommissionerOut(BaseModel):
+class CommissionerOut(ConfidenceFields):
     state: str
     commissioner_name: Optional[str]
     address: Optional[str]
@@ -55,7 +71,7 @@ class CommissionerOut(BaseModel):
     nodal_officer: Optional[str]
     source_url: str
 
-class LabOut(BaseModel):
+class LabOut(ConfidenceFields):
     id: int
     name: str
     tier: int
@@ -64,7 +80,7 @@ class LabOut(BaseModel):
     accreditation_ref: Optional[str]
     source_url: Optional[str]
 
-class NationalEnforcementOut(BaseModel):
+class NationalEnforcementOut(ConfidenceFields):
     fiscal_year: str
     samples_analyzed: Optional[int]
     samples_non_conforming: Optional[int]
@@ -83,7 +99,7 @@ class NationalEnforcementOut(BaseModel):
     total_penalty_amount: Optional[int]
     source_url: str
 
-class StateEnforcementOut(BaseModel):
+class StateEnforcementOut(ConfidenceFields):
     state: str
     fiscal_year: str
     samples_analyzed: Optional[int]
@@ -96,7 +112,7 @@ class StateEnforcementOut(BaseModel):
     answered_date: Optional[str]
     source_url: str
 
-class StateSamplingOut(BaseModel):
+class StateSamplingOut(ConfidenceFields):
     state: str
     fiscal_year: str
     samples_analyzed: int
@@ -113,7 +129,7 @@ class StateSamplingOut(BaseModel):
     answered_date: Optional[str]
     source_url: str
 
-class PesticideResidueOut(BaseModel):
+class PesticideResidueOut(ConfidenceFields):
     commodity: str
     commodity_label: str
     period_label: str
@@ -186,7 +202,7 @@ async def list_commissioners(state: Optional[str] = None):
                ORDER BY state""",
             state,
         )
-    return [CommissionerOut(**dict(r)) for r in rows]
+    return [CommissionerOut(**_conf(dict(r), "fssai_directory")) for r in rows]
 
 @meta_router.get("/labs", response_model=list[LabOut])
 async def list_labs(state: Optional[str] = None, tier: Optional[int] = None):
@@ -205,7 +221,7 @@ async def list_labs(state: Optional[str] = None, tier: Optional[int] = None):
                ORDER BY state NULLS LAST, name""",
             state, tier,
         )
-    return [LabOut(**dict(r)) for r in rows]
+    return [LabOut(**_conf(dict(r), "fssai_directory")) for r in rows]
 
 @meta_router.get("/state-enforcement", response_model=list[StateEnforcementOut])
 async def list_state_enforcement(state: Optional[str] = None, fiscal_year: Optional[str] = None):
@@ -229,7 +245,7 @@ async def list_state_enforcement(state: Optional[str] = None, fiscal_year: Optio
                ORDER BY state, fiscal_year DESC, lok_sabha_no DESC, source_question_no""",
             state, fiscal_year,
         )
-    return [StateEnforcementOut(**dict(r)) for r in rows]
+    return [StateEnforcementOut(**_conf(dict(r), "loksabha_qa")) for r in rows]
 
 @meta_router.get("/state-sampling", response_model=list[StateSamplingOut])
 async def list_state_sampling(
@@ -275,7 +291,11 @@ async def list_state_sampling(
                ORDER BY s.state, s.fiscal_year DESC, s.lok_sabha_no DESC, s.source_question_no""",
             state, fiscal_year, basis,
         )
-    return [StateSamplingOut(**dict(r)) for r in rows]
+    return [
+        StateSamplingOut(**_conf(dict(r), "loksabha_sampling", verification=r["verification"],
+                                 corroboration=r["corroboration"]))
+        for r in rows
+    ]
 
 @meta_router.get("/pesticide-residues", response_model=list[PesticideResidueOut])
 async def list_pesticide_residues(
@@ -322,7 +342,66 @@ async def list_pesticide_residues(
                ORDER BY p.commodity, p.period_label DESC, p.lok_sabha_no DESC, p.source_question_no""",
             commodity, period_kind,
         )
-    return [PesticideResidueOut(**dict(r)) for r in rows]
+    return [
+        PesticideResidueOut(**_conf(dict(r), "loksabha_pesticide", verification=r["verification"],
+                                    corroboration=r["corroboration"]))
+        for r in rows
+    ]
+
+class SourceOut(BaseModel):
+    id: str
+    name: str
+    publisher: str
+    publisher_type: str
+    access: str
+    content_kind: str
+    grain: str
+    coverage: str
+    tables: list[str]
+    scope: list[str]
+    caveats: list[str]
+    doc: str
+    base_confidence: str
+    rows: Optional[int]
+
+
+class SourcesResponse(BaseModel):
+    rubric: str
+    sources: list[SourceOut]
+
+
+SOURCE_ROW_COUNTS = {   # a fixed, code-owned list: table names are never taken from input
+    "rasff": "SELECT COUNT(*) FROM rasff_notifications",
+    "openfda": "SELECT COUNT(*) FROM enforcement_records WHERE source_type = 'usfda'",
+    "fssai_annual_report": "SELECT COUNT(*) FROM national_enforcement_annual",
+    "loksabha_sampling": "SELECT COUNT(*) FROM state_sampling_annual",
+    "loksabha_qa": "SELECT COUNT(*) FROM state_enforcement_annual",
+    "loksabha_pesticide": "SELECT COUNT(*) FROM pesticide_residue_annual",
+    "research_evidence": "SELECT COUNT(*) FROM research_sources",
+    "fssai_directory": "SELECT (SELECT COUNT(*) FROM labs) + (SELECT COUNT(*) FROM state_commissioners)",
+    "local_news": "SELECT COUNT(*) FROM enforcement_records WHERE source_type LIKE 'local_news%'",
+}
+
+
+@meta_router.get("/sources", response_model=SourcesResponse)
+async def list_sources():
+    """Every data source, how it is classified, the confidence level that
+    classification gives its records, what it cannot be used for, and how many
+    rows it holds. The rubric is in api/source_registry.py and tested."""
+    counts: dict[str, Optional[int]] = {}
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        for sid, sql in SOURCE_ROW_COUNTS.items():
+            try:
+                counts[sid] = int(await conn.fetchval(sql) or 0)
+            except Exception:  # noqa: BLE001 — a table not migrated yet must not break the listing
+                counts[sid] = None
+    from api import source_registry
+    return SourcesResponse(
+        rubric=(source_registry.__doc__ or "").strip(),
+        sources=[SourceOut(**describe_source(sid), rows=counts.get(sid)) for sid in SOURCES],
+    )
+
 
 @meta_router.get("/national-enforcement", response_model=list[NationalEnforcementOut])
 async def list_national_enforcement():
@@ -344,7 +423,7 @@ async def list_national_enforcement():
                FROM national_enforcement_annual
                ORDER BY fiscal_year"""
         )
-    return [NationalEnforcementOut(**dict(r)) for r in rows]
+    return [NationalEnforcementOut(**_conf(dict(r), "fssai_annual_report")) for r in rows]
 
 @meta_router.get("/commodities", response_model=list[CommodityOut])
 async def list_commodities():
