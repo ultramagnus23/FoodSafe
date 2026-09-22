@@ -134,6 +134,17 @@ jobs:
           pip install --quiet pdfplumber
           python -m pipeline.run_and_log loksabha_pesticide
 
+      - name: Refresh EU RASFF notifications (India-origin food)
+        id: rasff
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # ~2,220 notifications; detail pages backfill ~400/run via detail_checked_at
+        # docs/RASFF_INGESTION.md. The one source with real measured hazard
+        # values against a legal limit for Indian-origin food, from the EU
+        # Commission's own public API. Raises (fails the step) if the list
+        # endpoint can't be reached at all, rather than looking like "no news".
+        run: python -m pipeline.run_and_log rasff --limit 400
+
       - name: Refresh FSSAI Annual Report national enforcement metrics
         id: fssai_annual_report
         env:
