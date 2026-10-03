@@ -55,22 +55,3 @@ export function useBestDistricts(commodityId: number, enabled = true) {
     enabled: enabled && !!commodityId,
   });
 }
-
-export interface StandardsRow {
-  contaminant_id: number;
-  contaminant_name: string;
-  fssai_limit_ppb: number | null;
-  codex_limit_ppb: number | null;
-  eu_limit_ppb: number | null;
-  fssai_vs_codex_ratio: number | null;
-  codex_doc_reference: string | null;
-}
-
-export function useStandardsTable(enabled = true) {
-  return useQuery({
-    queryKey: ["standards-table"],
-    queryFn: () => apiFetch<StandardsRow[]>("/v1/compare/standards"),
-    enabled,
-    staleTime: 24 * 60 * 60 * 1000,
-  });
-}

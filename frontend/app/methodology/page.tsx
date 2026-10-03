@@ -65,9 +65,9 @@ export default function MethodologyPage() {
         <p className="text-sm text-ink">
           See the full{" "}
           <a href="/methodology/standards" className="underline">
-            FSSAI vs. Codex Alimentarius benchmark table
+            comparison of India&apos;s legal limits with the EU, Codex and the US
           </a>{" "}
-          for every tracked contaminant.
+          for every pesticide and contaminant FSSAI regulates.
         </p>
       </div>
 
