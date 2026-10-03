@@ -54,6 +54,11 @@ def test_the_classification_of_each_current_source_is_pinned():
         "research_evidence": "medium",
         "fssai_directory": "high",
         "local_news": "low",
+        "standards_fssai": "medium",       # regulator's PDF, serial-sequence integrity check
+        "standards_eu": "high",
+        "standards_codex": "high",         # pesticide JSON feed; CXS 193 PDF rows are capped at LOW per row
+        "standards_us": "high",
+        "hazard_kb": "medium",             # hand-curated from cited sources
     }
 
 

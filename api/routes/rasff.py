@@ -1,7 +1,12 @@
 """
-FoodSafe India — EU RASFF routes (India-origin food notifications)
-GET /v1/rasff/summary   counts by year, hazard category, product category, top hazards
-GET /v1/rasff           notifications (with their hazards), filterable and paginated
+FoodSafe India — EU RASFF routes
+GET /v1/rasff/summary    counts by year, hazard category, product category, top hazards
+GET /v1/rasff            notifications (with their hazards), filterable and paginated
+GET /v1/rasff/countries  every origin country side by side (notifications, serious share, hazard mix)
+
+`origin` (ISO-2, default IN; 'ALL' for every origin) filters by country of
+origin. The tables hold every origin since schema_migration_023; every query
+here filters explicitly, so the default view is still India's record.
 
 Public reference data (no auth), backed by pipeline/sources/rasff.py — the
 European Commission's own public RASFF Window feed, filtered to origin = India.
@@ -96,28 +101,36 @@ class RasffSummary(BaseModel):
     caveats: list[str]
 
 
+_ORIGIN = r"^([A-Z]{2}|ALL)$"
+_N_FILTER = "($1 = 'ALL' OR $1 = ANY(n.origin_countries))"
+
+
 @rasff_router.get("/summary", response_model=RasffSummary)
-async def rasff_summary():
+async def rasff_summary(origin: str = Query("IN", pattern=_ORIGIN)):
     pool = get_pool()
     async with pool.acquire() as conn:
         head = await conn.fetchrow(
-            """SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE has_detail) AS d,
+            f"""SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE has_detail) AS d,
                       MIN(validation_date)::text AS first, MAX(validation_date)::text AS last
-               FROM rasff_notifications""")
-        hazards = await conn.fetchval("SELECT COUNT(*) FROM rasff_hazards")
+               FROM rasff_notifications n WHERE {_N_FILTER}""", origin)
+        hazards = await conn.fetchval(
+            f"""SELECT COUNT(*) FROM rasff_hazards h JOIN rasff_notifications n USING (notif_id)
+                WHERE {_N_FILTER}""", origin)
         by_year = await conn.fetch(
-            """SELECT EXTRACT(YEAR FROM validation_date)::int::text AS k, COUNT(*) AS n
-               FROM rasff_notifications GROUP BY 1 ORDER BY 1""")
+            f"""SELECT EXTRACT(YEAR FROM validation_date)::int::text AS k, COUNT(*) AS n
+               FROM rasff_notifications n WHERE {_N_FILTER} GROUP BY 1 ORDER BY 1""", origin)
         by_cat = await conn.fetch(
-            """SELECT COALESCE(hazard_category, 'unclassified') AS c, COUNT(*) AS n,
-                      COUNT(*) FILTER (WHERE exceedance_ratio IS NOT NULL OR exceeds_limit IS NOT NULL) AS m,
-                      COUNT(*) FILTER (WHERE exceeds_limit) AS x
-               FROM rasff_hazards GROUP BY 1 ORDER BY n DESC""")
+            f"""SELECT COALESCE(h.hazard_category, 'unclassified') AS c, COUNT(*) AS n,
+                      COUNT(*) FILTER (WHERE h.exceedance_ratio IS NOT NULL OR h.exceeds_limit IS NOT NULL) AS m,
+                      COUNT(*) FILTER (WHERE h.exceeds_limit) AS x
+               FROM rasff_hazards h JOIN rasff_notifications n USING (notif_id)
+               WHERE {_N_FILTER} GROUP BY 1 ORDER BY n DESC""", origin)
         by_product = await conn.fetch(
-            """SELECT COALESCE(product_category, 'unclassified') AS k, COUNT(*) AS n
-               FROM rasff_notifications GROUP BY 1 ORDER BY n DESC LIMIT 12""")
+            f"""SELECT COALESCE(product_category, 'unclassified') AS k, COUNT(*) AS n
+               FROM rasff_notifications n WHERE {_N_FILTER} GROUP BY 1 ORDER BY n DESC LIMIT 12""", origin)
         top = await conn.fetch(
-            """SELECT LOWER(hazard) AS k, COUNT(*) AS n FROM rasff_hazards GROUP BY 1 ORDER BY n DESC, k LIMIT 15""")
+            f"""SELECT LOWER(h.hazard) AS k, COUNT(*) AS n FROM rasff_hazards h JOIN rasff_notifications n USING (notif_id)
+                WHERE {_N_FILTER} GROUP BY 1 ORDER BY n DESC, k LIMIT 15""", origin)
     src = SOURCES["rasff"]
     conf = row_confidence("rasff")
     return RasffSummary(
@@ -138,6 +151,7 @@ async def list_rasff(
     product_category: Optional[str] = Query(None, max_length=80),
     year: Optional[int] = Query(None, ge=2000, le=2100),
     exceeds_only: bool = False,
+    origin: str = Query("IN", pattern=_ORIGIN),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0, le=_MAX_OFFSET),
 ):
@@ -148,10 +162,12 @@ async def list_rasff(
           AND ($2::text IS NULL OR n.product_category = $2)
           AND ($3::int  IS NULL OR EXTRACT(YEAR FROM n.validation_date) = $3)
           AND (NOT $4 OR EXISTS (SELECT 1 FROM rasff_hazards h WHERE h.notif_id = n.notif_id AND h.exceeds_limit))
+          AND ($7 = 'ALL' OR $7 = ANY(n.origin_countries))
     """
     pool = get_pool()
     async with pool.acquire() as conn:
-        total = await conn.fetchval(f"SELECT COUNT(*) FROM rasff_notifications n {where}", hc, pc, year, exceeds_only)
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM rasff_notifications n {where.replace('$7', '$5')}", hc, pc, year, exceeds_only, origin)
         rows = await conn.fetch(
             f"""SELECT n.notif_id, n.reference, n.validation_date::text AS validation_date, n.subject,
                        n.notifying_country, n.classification, n.risk_decision, n.product_category,
@@ -159,7 +175,7 @@ async def list_rasff(
                 FROM rasff_notifications n {where}
                 ORDER BY n.validation_date DESC, n.notif_id DESC
                 LIMIT $5 OFFSET $6""",
-            hc, pc, year, exceeds_only, limit, offset,
+            hc, pc, year, exceeds_only, limit, offset, origin,
         )
         ids = [r["notif_id"] for r in rows]
         hz = await conn.fetch(
@@ -183,3 +199,76 @@ async def list_rasff(
         total=total or 0,
         scope=list(SOURCES["rasff"].scope),
     )
+
+
+class CountryRow(BaseModel):
+    origin: str
+    notifications: int
+    serious: int
+    serious_share: Optional[float]
+    border_rejections: int
+    first_year: Optional[int]
+    last_year: Optional[int]
+    top_hazard_categories: list[CountBy]
+    top_hazards: list[CountBy]
+
+
+class CountriesResponse(BaseModel):
+    countries: list[CountryRow]
+    total_notifications: int
+    scope: list[str]
+
+
+@rasff_router.get("/countries", response_model=CountriesResponse)
+async def rasff_countries(min_notifications: int = Query(20, ge=1, le=10000), year: Optional[int] = Query(None, ge=2000,
+                                                                                                           le=2100)):
+    """Every origin country side by side: how many EU notifications its food drew,
+    how many were classed 'serious', and its hazard mix. A notification counts for
+    each origin it lists. Counts reflect EU import volumes and targeting as much as
+    food safety in the origin country — they are not prevalence and not a ranking of
+    whose food is safer."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        heads = await conn.fetch(
+            """SELECT o AS origin, COUNT(*) AS n,
+                      COUNT(*) FILTER (WHERE risk_decision = 'serious') AS serious,
+                      COUNT(*) FILTER (WHERE risk_decision IS NOT NULL) AS decided,
+                      COUNT(*) FILTER (WHERE classification ILIKE 'border rejection%') AS rejections,
+                      MIN(EXTRACT(YEAR FROM validation_date))::int AS fy, MAX(EXTRACT(YEAR FROM validation_date))::int AS ly
+               FROM rasff_notifications, unnest(origin_countries) AS o
+               WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM validation_date) = $1)
+               GROUP BY o HAVING COUNT(*) >= $2 ORDER BY n DESC""", year, min_notifications)
+        cats = await conn.fetch(
+            """SELECT o AS origin, COALESCE(h.hazard_category, 'unclassified') AS k, COUNT(DISTINCT n.notif_id) AS c
+               FROM rasff_notifications n CROSS JOIN LATERAL unnest(n.origin_countries) AS o
+               JOIN rasff_hazards h ON h.notif_id = n.notif_id
+               WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM n.validation_date) = $1)
+               GROUP BY 1, 2""", year)
+        hz = await conn.fetch(
+            """SELECT o AS origin, LOWER(h.hazard) AS k, COUNT(DISTINCT n.notif_id) AS c
+               FROM rasff_notifications n CROSS JOIN LATERAL unnest(n.origin_countries) AS o
+               JOIN rasff_hazards h ON h.notif_id = n.notif_id
+               WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM n.validation_date) = $1)
+               GROUP BY 1, 2""", year)
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM rasff_notifications WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM validation_date) = $1)",
+            year)
+    by_cat: dict[str, list] = {}
+    for r in cats:
+        by_cat.setdefault(r["origin"], []).append(CountBy(key=r["k"], notifications=r["c"]))
+    by_hz: dict[str, list] = {}
+    for r in hz:
+        by_hz.setdefault(r["origin"], []).append(CountBy(key=r["k"], notifications=r["c"]))
+    out = []
+    for h in heads:
+        o = h["origin"]
+        out.append(CountryRow(
+            origin=o, notifications=h["n"], serious=h["serious"],
+            serious_share=round(h["serious"] / h["decided"], 4) if h["decided"] else None,
+            border_rejections=h["rejections"], first_year=h["fy"], last_year=h["ly"],
+            top_hazard_categories=sorted(by_cat.get(o, []), key=lambda c: (-c.notifications, c.key))[:6],
+            top_hazards=sorted(by_hz.get(o, []), key=lambda c: (-c.notifications, c.key))[:6]))
+    return CountriesResponse(countries=out, total_notifications=total or 0,
+                             scope=["EU/EEA border and market checks, risk-targeted: counts reflect trade volume and "
+                                    "targeting, not the safety of food eaten in the origin country.",
+                                    *SOURCES["rasff"].scope[1:]])

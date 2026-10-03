@@ -247,7 +247,7 @@ def test_an_unreachable_api_raises_instead_of_reporting_nothing_new(monkeypatch)
 
 
 def test_fetch_all_listed_turns_an_http_error_into_rasff_unavailable(monkeypatch):
-    def boom(page):
+    def boom(page, origin=None):
         raise urllib.error.URLError("timed out")
     monkeypatch.setattr(R, "fetch_list_page", boom)
     with pytest.raises(R.RasffUnavailable):
@@ -257,9 +257,33 @@ def test_fetch_all_listed_turns_an_http_error_into_rasff_unavailable(monkeypatch
 def test_fetch_all_listed_reads_every_page(monkeypatch):
     pages = {1: {"notifications": [1, 2], "totalPages": 3}, 2: {"notifications": [3], "totalPages": 3},
              3: {"notifications": [4], "totalPages": 3}}
-    monkeypatch.setattr(R, "fetch_list_page", lambda p: pages[p])
+    monkeypatch.setattr(R, "fetch_list_page", lambda p, origin=None: pages[p])
     monkeypatch.setattr(R.time, "sleep", lambda s: None)
     assert R.fetch_all_listed() == [1, 2, 3, 4]
+
+
+def test_global_listing_stops_after_two_fully_known_pages(monkeypatch):
+    def page(n, origin=None):
+        assert origin is None                                   # all origins: no country filter sent
+        return {"notifications": [{"notifId": 10 * n + i} for i in range(2)], "totalPages": 50}
+    monkeypatch.setattr(R, "fetch_list_page", page)
+    monkeypatch.setattr(R.time, "sleep", lambda s: None)
+    known = {20, 21, 30, 31, 50, 51}                            # pages 2 and 3 are fully known
+    got = R.fetch_all_listed(origin=None, known_ids=known)
+    assert [n["notifId"] for n in got] == [10, 11, 20, 21, 30, 31]
+
+
+def test_global_scope_keeps_other_origins_india_scope_does_not():
+    other = dict(LISTED, originCountries=[{"organizationName": "Thailand", "isoCode": "TH"}])
+    assert R.parse_notification(other, None) is None
+    row = R.parse_notification(other, None, require_india=False)
+    assert row["origin_countries"] == ["TH"]
+
+
+def test_stored_hazards_are_classified(monkeypatch):
+    summary, conn = _run(monkeypatch, [LISTED], lambda nid: dict(DETAIL))
+    params = [e[1] for e in conn.log if e[0].startswith("INSERT INTO rasff_hazards")][0]
+    assert params[-3:] == ("ethylene_oxide", "pesticide", "kb_alias")
 
 
 def test_a_detail_error_is_counted_not_fatal(monkeypatch):

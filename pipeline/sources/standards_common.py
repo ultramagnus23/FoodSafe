@@ -48,6 +48,8 @@ HAZARD_CLASSES = {
 HAZARD_ALIASES = {
     "chlorpyriphos": "chlorpyrifos",
     "chlorpyriphosmethyl": "chlorpyrifosmethyl",
+    "chlorpyriphosethyl": "chlorpyrifos",     # RASFF 'chlorpyriphos-ethyl' = chlorpyrifos
+    "chlorpyrifosethyl": "chlorpyrifos",
     "profenophos": "profenofos",
     "ethofenprox": "etofenprox",
     "decamethrin": "deltamethrin",

@@ -26,6 +26,8 @@ from api.routes.reports import reports_router, admin_reports_router
 from api.routes.widget import widget_router
 from api.routes.research import research_router
 from api.routes.rasff import rasff_router
+from api.routes.standards import standards_router, hazards_router
+from api.routes.classify import classify_router
 from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -172,6 +174,9 @@ app.include_router(admin_reports_router, prefix="/v1/admin", tags=["admin"])
 app.include_router(widget_router,    prefix="/v1/widget",    tags=["widget"])
 app.include_router(research_router,  prefix="/v1/research",  tags=["research"])
 app.include_router(rasff_router,     prefix="/v1/rasff",     tags=["rasff"])
+app.include_router(standards_router, prefix="/v1/standards", tags=["standards"])
+app.include_router(hazards_router,   prefix="/v1/hazards",   tags=["hazards"])
+app.include_router(classify_router,  prefix="/v1/classify",  tags=["classify"])
 
 @app.get("/", include_in_schema=False)
 async def root():

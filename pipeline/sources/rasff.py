@@ -37,6 +37,15 @@ Correct-by-construction rules, like the Parliament parsers:
 Bounded per run (`limit` = max detail fetches) so the first backfill spreads
 over a few daily runs instead of one long one; the list (23 requests) is fetched
 every run and only new notifications are fetched in detail.
+
+Two scopes share the tables (schema_migration_023 dropped the India-only CHECK):
+  run()         India-origin notifications (source 'rasff'), as before;
+  run_global()  every origin country (source 'rasff_global'): the comparison
+                between origins and the hazard classifier's training text. Its
+                list is read newest-first and stops after two consecutive pages
+                that are entirely known, so a daily run reads a few pages, not 330.
+Every stored hazard is classified (models/health_classifier.classify_hazard):
+hazard_key, hazard_class and classified_by, so health outcomes can be joined.
 """
 
 from __future__ import annotations
@@ -66,6 +75,8 @@ INDIA_ISO = "IN"
 PAGE_SIZE = 100
 DETAIL_WORKERS = 4
 DEFAULT_DETAIL_LIMIT = 400
+GLOBAL_DETAIL_LIMIT = 1500
+KNOWN_PAGES_TO_STOP = 2
 RECENT_DAYS = 60      # notifications this recent are re-tried for a missing detail
 
 _REPLACEMENT = "\ufffd"   # the API returns U+FFFD where '±' / 'µ' should be
@@ -184,15 +195,16 @@ def _hazard_row(h: dict) -> Optional[dict]:
     }
 
 
-def parse_notification(listed: dict, detail: Optional[dict]) -> Optional[dict]:
-    """One row for rasff_notifications (+ hazards). None if the record is not
-    India-origin or is malformed — the caller counts these, never inserts them."""
+def parse_notification(listed: dict, detail: Optional[dict], require_india: bool = True) -> Optional[dict]:
+    """One row for rasff_notifications (+ hazards). None if the record is
+    malformed, or (require_india) not India-origin — the caller counts these,
+    never inserts them."""
     try:
         nid = int(listed["notifId"])
     except (KeyError, TypeError, ValueError):
         return None
     origins = sorted({(o or {}).get("isoCode") for o in listed.get("originCountries") or [] if (o or {}).get("isoCode")})
-    if INDIA_ISO not in origins:
+    if require_india and INDIA_ISO not in origins:
         return None
     validated = parse_date(listed.get("ecValidationDate"))
     if validated is None:
@@ -246,11 +258,12 @@ def _request(req: urllib.request.Request, attempts: int = 3):
     raise last  # type: ignore[misc]
 
 
-def fetch_list_page(page: int) -> dict:
+def fetch_list_page(page: int, origin: Optional[int] = INDIA_NETWORK_ID) -> dict:
     body = {
         "parameters": {"pageNumber": page, "itemsPerPage": PAGE_SIZE},
         "notificationReference": None, "subjectSearch": None, "notifyingCountry": None,
-        "originCountry": [INDIA_NETWORK_ID], "distributionCountry": None, "notificationType": None,
+        "originCountry": [origin] if origin is not None else None, "distributionCountry": None,
+        "notificationType": None,
         "notificationStatus": None, "notificationClassification": None, "notificationBasis": None,
         "actionTaken": None, "hazardCategory": None, "productCategory": None, "riskDecision": None,
     }
@@ -259,18 +272,25 @@ def fetch_list_page(page: int) -> dict:
     return _request(req)
 
 
-def fetch_all_listed() -> list[dict]:
-    """Every India-origin notification (list level). Raises RasffUnavailable if the
-    first page cannot be read; a later failing page is an error too, since silently
-    returning half the list would look like 'nothing new'."""
+def fetch_all_listed(origin: Optional[int] = INDIA_NETWORK_ID, known_ids: Optional[set[int]] = None) -> list[dict]:
+    """Every notification for `origin` (None = all origins), list level. Raises
+    RasffUnavailable if a page cannot be read: silently returning half the list
+    would look like 'nothing new'. With `known_ids` the list (newest first) stops
+    after KNOWN_PAGES_TO_STOP consecutive pages holding only known notifications."""
     out: list[dict] = []
-    page = 1
+    page, known_run = 1, 0
     while True:
         try:
-            d = fetch_list_page(page)
+            d = fetch_list_page(page, origin)
         except Exception as e:  # noqa: BLE001
             raise RasffUnavailable(f"RASFF list page {page} failed: {e}") from e
-        out += d.get("notifications") or []
+        items = d.get("notifications") or []
+        out += items
+        if known_ids is not None:
+            ids = {int(n.get("notifId") or 0) for n in items}
+            known_run = known_run + 1 if ids and ids <= known_ids else 0
+            if known_run >= KNOWN_PAGES_TO_STOP:
+                return out
         if page >= int(d.get("totalPages") or 0):
             return out
         page += 1
@@ -329,16 +349,20 @@ def upsert_notification(conn, row: dict) -> None:
         # Replace the hazards only when we hold the detail: a list-only refresh
         # must not wipe hazards stored earlier.
         if row["has_detail"]:
+            from models.health_classifier import classify_hazard
             cur.execute("DELETE FROM rasff_hazards WHERE notif_id = %s", (row["notif_id"],))
             for h in row["hazards"]:
+                c = classify_hazard(h["hazard"], h["hazard_category"])
                 cur.execute(
                     """INSERT INTO rasff_hazards
                          (notif_id, hazard, hazard_category, result_raw, result_value, result_qualifier, result_unit,
-                          limit_value, limit_unit, exceedance_ratio, exceeds_limit, sampling_date)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                          limit_value, limit_unit, exceedance_ratio, exceeds_limit, sampling_date,
+                          hazard_key, hazard_class, classified_by)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (row["notif_id"], h["hazard"], h["hazard_category"], h["result_raw"], h["result_value"],
                      h["result_qualifier"], h["result_unit"], h["limit_value"], h["limit_unit"],
-                     h["exceedance_ratio"], h["exceeds_limit"], h["sampling_date"]),
+                     h["exceedance_ratio"], h["exceeds_limit"], h["sampling_date"],
+                     c.kb_key or c.hazard_key, c.hazard_class, c.classified_by),
                 )
     conn.commit()
 
@@ -365,15 +389,23 @@ def plan_detail_fetches(listed: list[dict], known: dict[int, tuple[bool, bool]],
     return [nid for _, nid in todo]
 
 
-def run(limit: int = DEFAULT_DETAIL_LIMIT) -> dict:
-    summary = {"listed": 0, "not_india_or_malformed": 0, "new_notifications": 0, "detail_fetched": 0,
-               "detail_unavailable": 0, "detail_errors": 0, "hazards_stored": 0, "backlog_remaining": 0,
-               "inserted": 0}
-    listed = fetch_all_listed()
-    summary["listed"] = len(listed)
+def run_global(limit: int = GLOBAL_DETAIL_LIMIT) -> dict:
+    """Every origin country (source 'rasff_global')."""
+    return run(limit, scope="global")
+
+
+def run(limit: int = DEFAULT_DETAIL_LIMIT, scope: str = "india") -> dict:
+    assert scope in ("india", "global"), scope
+    require_india = scope == "india"
+    summary = {"scope": scope, "listed": 0, "not_india_or_malformed": 0, "new_notifications": 0,
+               "detail_fetched": 0, "detail_unavailable": 0, "detail_errors": 0, "hazards_stored": 0,
+               "backlog_remaining": 0, "inserted": 0}
     conn = pg_connect()
     try:
         known = known_state(conn)
+        listed = (fetch_all_listed() if require_india
+                  else fetch_all_listed(origin=None, known_ids={k for k, (d, a) in known.items() if a}))
+        summary["listed"] = len(listed)
         # Rows inserted below at list level are 'detail never attempted', so the
         # plan (made after) picks them up newest-first, a capped batch per run.
         by_id: dict[int, dict] = {}
@@ -386,7 +418,7 @@ def run(limit: int = DEFAULT_DETAIL_LIMIT) -> dict:
         for nid, n in by_id.items():
             if nid in known:
                 continue
-            row = parse_notification(n, None)
+            row = parse_notification(n, None, require_india)
             if row is None:
                 summary["not_india_or_malformed"] += 1
                 continue
@@ -407,7 +439,7 @@ def run(limit: int = DEFAULT_DETAIL_LIMIT) -> dict:
                 mark_detail_unavailable(conn, nid)
                 summary["detail_unavailable"] += 1
                 continue
-            row = parse_notification(by_id[nid], detail)
+            row = parse_notification(by_id[nid], detail, require_india)
             if row is None:
                 summary["not_india_or_malformed"] += 1
                 continue
@@ -417,7 +449,8 @@ def run(limit: int = DEFAULT_DETAIL_LIMIT) -> dict:
     finally:
         conn.close()
     if summary["inserted"] == 0 and summary["detail_fetched"] == 0 and summary["backlog_remaining"] == 0:
-        summary["note"] = "nothing new: no India-origin RASFF notification the database does not already hold"
+        summary["note"] = ("nothing new: no India-origin RASFF notification the database does not already hold"
+                           if require_india else "nothing new in the RASFF feed")
     return summary
 
 
@@ -433,10 +466,11 @@ def _safe_detail(nid: int) -> tuple[str, Optional[dict]]:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
-    ap = argparse.ArgumentParser(description="Ingest India-origin EU RASFF notifications")
-    ap.add_argument("--limit", type=int, default=DEFAULT_DETAIL_LIMIT, help="max detail fetches this run")
+    ap = argparse.ArgumentParser(description="Ingest EU RASFF notifications (India-origin, or all origins)")
+    ap.add_argument("--limit", type=int, default=None, help="max detail fetches this run")
+    ap.add_argument("--scope", choices=["india", "global"], default="india")
     args = ap.parse_args()
-    summary = run(args.limit)
+    summary = run(args.limit or (DEFAULT_DETAIL_LIMIT if args.scope == "india" else GLOBAL_DETAIL_LIMIT), args.scope)
     print("\n=== RASFF INGEST SUMMARY ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")

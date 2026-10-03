@@ -380,6 +380,11 @@ SOURCE_ROW_COUNTS = {   # a fixed, code-owned list: table names are never taken 
     "research_evidence": "SELECT COUNT(*) FROM research_sources",
     "fssai_directory": "SELECT (SELECT COUNT(*) FROM labs) + (SELECT COUNT(*) FROM state_commissioners)",
     "local_news": "SELECT COUNT(*) FROM enforcement_records WHERE source_type LIKE 'local_news%'",
+    "standards_fssai": "SELECT COUNT(*) FROM food_standards WHERE jurisdiction = 'IN'",
+    "standards_eu": "SELECT COUNT(*) FROM food_standards WHERE jurisdiction = 'EU'",
+    "standards_codex": "SELECT COUNT(*) FROM food_standards WHERE jurisdiction = 'CODEX'",
+    "standards_us": "SELECT COUNT(*) FROM food_standards WHERE jurisdiction = 'US'",
+    "hazard_kb": "SELECT COUNT(*) FROM hazard_health_effects",
 }
 
 
