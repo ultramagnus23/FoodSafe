@@ -30,9 +30,10 @@ jobs:
       #
       # If you add an import to a pipeline/ or api/ module that the tests reach,
       # add it here. Verified 2026-09-11 in a clean venv with exactly this list:
-      # 62 passed.
+      # 62 passed. PyJWT, bcrypt and email-validator added 2026-10-03:
+      # tests/test_public_routes.py imports api.main (clean venv: 25 passed).
       - name: Install test dependencies
-        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image beautifulsoup4 dateparser python-dotenv pdfplumber pydantic fastapi httpx asyncpg
+        run: pip install --quiet pytest rapidfuzz psycopg2-binary numpy scipy networkx boto3 pytesseract spacy click Pillow pdf2image beautifulsoup4 dateparser python-dotenv pdfplumber pydantic fastapi httpx asyncpg PyJWT bcrypt email-validator
 
       - name: Run tests
         run: python -m pytest tests/ -v
