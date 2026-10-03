@@ -18,3 +18,6 @@ frontend/tsconfig.tsbuildinfo
 /recall.html
 /foscos.html
 /main.js
+
+# portal data generated in CI by scripts/export_portal.py (never committed)
+site/data/live/

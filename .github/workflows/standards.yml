@@ -100,6 +100,13 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.run_and_log country_indicators
 
+      - name: Packaged foods sold in India (Open Food Facts bulk export, ~1.3 GB streamed)
+        id: off_india
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log off_india
+
       - name: Recompute India vs EU / Codex / US comparison
         id: standards_compare
         env:

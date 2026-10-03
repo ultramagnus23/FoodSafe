@@ -50,6 +50,8 @@ FRIENDLY = {
     "rasff_global": "EU RASFF notifications (all origins)",
     "health_profile": "Health-outcome profiles of recorded contamination",
     "country_indicators": "WHO / World Bank country indicators",
+    "off_india": "Open Food Facts packaged foods (India)",
+    "export_portal": "Public portal data export",
     "fssai_annual_report": "FSSAI Annual Report metrics",
     "local_news": "Local news (5 metros)",
     "research_evidence": "OpenAlex evidence",

@@ -3,310 +3,646 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FoodSafe India — Pipeline Execution Record</title>
-<meta name="description" content="A real, committed snapshot of the FoodSafe India ingestion pipeline's output — not a mockup.">
+<title>FoodSafe India — open food-safety evidence</title>
+<meta name="description" content="India's food-safety rules compared with the EU, Codex and the US; what contamination found in Indian food means for health; country, state and nutrition data. Every number linked to its source.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232d5f63'/%3E%3Cpath d='M9 17l5 5 9-12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
+:root {
+  --porcelain: oklch(97% 0.005 210);
+  --slab: oklch(99.5% 0.003 210);
+  --ink: oklch(32% 0.06 195);
+  --text: oklch(25% 0.02 220);
+  --provenance: oklch(45% 0.02 210);
+  --provenance-pale: oklch(93% 0.008 210);
+  --line: oklch(88% 0.008 210);
+  --line-strong: oklch(78% 0.01 210);
+  --clear: oklch(48% 0.11 155);
+  --clear-pale: oklch(94% 0.035 155);
+  --caution: oklch(48% 0.13 70);
+  --caution-pale: oklch(94% 0.045 70);
+  --risk: oklch(50% 0.19 30);
+  --risk-pale: oklch(94% 0.04 30);
+  --bar: oklch(55% 0.07 195);
+  --focus: oklch(55% 0.15 250);
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-data: ui-monospace, "SF Mono", Consolas, monospace;
+  --shadow: 0 1px 2px oklch(30% 0.02 220 / 0.06), 0 6px 18px oklch(30% 0.02 220 / 0.06);
+}
+@media (prefers-color-scheme: dark) {
   :root {
-    --porcelain: oklch(97% 0.005 210);
-    --slab: oklch(99% 0.003 210);
-    --ink: oklch(32% 0.06 195);
-    --provenance: oklch(45% 0.02 210);
-    --provenance-pale: oklch(93% 0.008 210);
-    --line: oklch(88% 0.008 210);
-    --line-strong: oklch(78% 0.01 210);
-    --clear: oklch(50% 0.11 155);
-    --clear-pale: oklch(94% 0.035 155);
-    --caution: oklch(50% 0.14 70);
-    --caution-pale: oklch(94% 0.045 70);
-    --risk: oklch(50% 0.19 30);
-    --risk-pale: oklch(94% 0.04 30);
-    --font-display: Georgia, "Times New Roman", serif;
-    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    --font-register: ui-monospace, "SF Mono", Consolas, monospace;
+    --porcelain: oklch(17% 0.015 220);
+    --slab: oklch(21% 0.017 220);
+    --ink: oklch(82% 0.08 195);
+    --text: oklch(90% 0.01 210);
+    --provenance: oklch(70% 0.02 210);
+    --provenance-pale: oklch(26% 0.015 210);
+    --line: oklch(31% 0.02 220);
+    --line-strong: oklch(42% 0.02 220);
+    --clear: oklch(74% 0.13 155);
+    --clear-pale: oklch(25% 0.05 155);
+    --caution: oklch(78% 0.13 75);
+    --caution-pale: oklch(26% 0.06 70);
+    --risk: oklch(72% 0.16 30);
+    --risk-pale: oklch(26% 0.06 30);
+    --bar: oklch(70% 0.08 195);
+    --shadow: 0 1px 2px oklch(0% 0 0 / 0.3), 0 8px 24px oklch(0% 0 0 / 0.25);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --porcelain: oklch(17% 0.015 220);
-      --slab: oklch(22% 0.017 220);
-      --ink: oklch(80% 0.08 195);
-      --provenance: oklch(65% 0.02 210);
-      --provenance-pale: oklch(27% 0.015 210);
-      --line: oklch(32% 0.02 220);
-      --line-strong: oklch(40% 0.02 220);
-      --clear-pale: oklch(24% 0.05 155);
-      --caution-pale: oklch(24% 0.06 70);
-      --risk-pale: oklch(24% 0.05 30);
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--porcelain);
-    color: var(--ink);
-    font-family: var(--font-body);
-    line-height: 1.5;
-  }
-  main {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 3rem 1.5rem 6rem;
-  }
-  header {
-    border-bottom: 1px solid var(--line-strong);
-    padding-bottom: 1.5rem;
-    margin-bottom: 2rem;
-  }
-  .kicker {
-    font-family: var(--font-register);
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--provenance);
-    margin-bottom: 0.5rem;
-  }
-  h1 {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 2rem;
-    margin: 0 0 0.75rem;
-    line-height: 1.2;
-  }
-  .lede {
-    color: var(--provenance);
-    max-width: 62ch;
-  }
-  .notice {
-    background: var(--caution-pale);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 1rem 1.25rem;
-    margin: 1.5rem 0 2.5rem;
-    font-size: 0.9rem;
-  }
-  .notice strong { display: block; margin-bottom: 0.35rem; }
-  section { margin-bottom: 3rem; }
-  h2 {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 1.3rem;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.25rem;
-  }
-  .section-note {
-    font-size: 0.85rem;
-    color: var(--provenance);
-    margin: 0 0 1rem;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-  }
-  th, td {
-    text-align: left;
-    padding: 0.55rem 0.6rem;
-    border-bottom: 1px solid var(--line);
-    vertical-align: top;
-  }
-  th {
-    font-family: var(--font-register);
-    font-size: 0.68rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--provenance);
-    font-weight: 500;
-  }
-  tr:last-child td { border-bottom: none; }
-  a { color: var(--ink); }
-  .pill {
-    display: inline-block;
-    font-family: var(--font-register);
-    font-size: 0.7rem;
-    padding: 0.1rem 0.5rem;
-    border-radius: 3px;
-  }
-  .pill.pass { background: var(--clear-pale); }
-  .pill.fail { background: var(--risk-pale); }
-  .pill.status-success { background: var(--clear-pale); }
-  .pill.status-expected_failure { background: var(--caution-pale); }
-  .mono { font-family: var(--font-register); font-size: 0.8rem; color: var(--provenance); }
-  .loading, .empty { color: var(--provenance); font-size: 0.85rem; font-style: italic; }
-  footer {
-    border-top: 1px solid var(--line-strong);
-    margin-top: 3rem;
-    padding-top: 1.5rem;
-    font-size: 0.8rem;
-    color: var(--provenance);
-  }
-  footer a { color: inherit; }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 4.5rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+body { margin: 0; background: var(--porcelain); color: var(--text); font: 16px/1.55 var(--font-body); }
+a { color: var(--ink); text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.num, td.n, .data { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; color: var(--ink); text-wrap: balance; }
+h1 { font-size: 2.6rem; line-height: 1.12; margin: 0 0 1rem; letter-spacing: -0.01em; max-width: 22ch; }
+h2 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 0.5rem; }
+h3 { font-size: 1.15rem; margin: 1.75rem 0 0.5rem; }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.12rem; color: var(--provenance); max-width: 62ch; }
+.note { font-size: 0.86rem; color: var(--provenance); max-width: 75ch; }
+
+/* top bar */
+.bar { position: sticky; top: 0; z-index: 10; background: color-mix(in oklch, var(--porcelain) 92%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); }
+.bar-in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 1.25rem; padding: 0 1.25rem; height: 3.5rem; }
+.brand { font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); text-decoration: none; white-space: nowrap; }
+.brand b { font-weight: 400; color: var(--provenance); }
+nav.sections { display: flex; gap: 0.15rem; overflow-x: auto; scrollbar-width: none; flex: 1; }
+nav.sections::-webkit-scrollbar { display: none; }
+nav.sections a { font-size: 0.86rem; color: var(--provenance); text-decoration: none; padding: 0.4rem 0.6rem; border-radius: 6px; white-space: nowrap; }
+nav.sections a:hover { color: var(--ink); background: var(--provenance-pale); }
+nav.sections a[aria-current="true"] { color: var(--ink); background: var(--provenance-pale); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 0 1.25rem 6rem; }
+section { padding: 4.5rem 0 1rem; border-bottom: 1px solid var(--line); }
+section:last-of-type { border-bottom: 0; }
+.intro { padding: 4rem 0 2.5rem; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 3rem; align-items: end; }
+.intro aside { font-size: 0.9rem; color: var(--provenance); border-top: 2px solid var(--ink); padding-top: 0.9rem; }
+.intro aside p { margin-bottom: 0.6rem; }
+
+/* findings register */
+.findings { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line-strong); }
+.findings li { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto; gap: 1.25rem; align-items: baseline;
+  padding: 1.05rem 0; border-bottom: 1px solid var(--line); }
+.findings .fig { font-family: var(--font-data); font-size: 1.45rem; color: var(--ink); line-height: 1.1; }
+.findings .say { max-width: 70ch; }
+.findings .say small { display: block; color: var(--provenance); font-size: 0.82rem; margin-top: 0.2rem; }
+.findings a.go { font-size: 0.82rem; white-space: nowrap; }
+.skeleton { color: transparent; background: linear-gradient(90deg, var(--provenance-pale), var(--line), var(--provenance-pale));
+  background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; border-radius: 4px; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: end; margin: 1.25rem 0 1rem; }
+label.f { display: grid; gap: 0.25rem; font-size: 0.78rem; color: var(--provenance); }
+select, input[type="search"], input[type="number"], textarea {
+  font: inherit; font-size: 0.92rem; color: var(--text); background: var(--slab); border: 1px solid var(--line-strong);
+  border-radius: 7px; padding: 0.5rem 0.65rem; min-width: 12rem; }
+textarea { width: 100%; min-height: 5.5rem; resize: vertical; }
+select:hover, input:hover, textarea:hover { border-color: var(--provenance); }
+.toggle { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.88rem; color: var(--text); padding: 0.45rem 0; cursor: pointer; }
+.toggle input { width: 1rem; height: 1rem; accent-color: var(--ink); }
+button { font: inherit; font-size: 0.9rem; border-radius: 7px; padding: 0.5rem 0.95rem; cursor: pointer;
+  border: 1px solid var(--ink); background: var(--ink); color: var(--porcelain); transition: filter 0.15s ease-out; }
+button:hover { filter: brightness(1.12); }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chips button { background: var(--slab); color: var(--text); border-color: var(--line); padding: 0.3rem 0.7rem; font-size: 0.84rem; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--porcelain); border-color: var(--ink); }
+
+/* tables */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--slab); box-shadow: var(--shadow); }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.tw table.wide { min-width: 760px; }
+th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.74rem; font-weight: 600; color: var(--provenance); background: var(--porcelain); position: sticky; top: 0;
+  letter-spacing: 0.01em; white-space: nowrap; }
+th button { all: unset; cursor: pointer; }
+th button:focus-visible { outline: 2px solid var(--focus); }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: color-mix(in oklch, var(--provenance-pale) 55%, transparent); }
+td.n, td.nw { white-space: nowrap; }
+td.n { text-align: right; }
+th.n { text-align: right; }
+.basis { display: block; font-family: var(--font-body); font-size: 0.72rem; color: var(--provenance); }
+.muted { color: var(--provenance); }
+.badge { display: inline-block; font-family: var(--font-data); font-size: 0.74rem; padding: 0.1rem 0.4rem; border-radius: 5px; white-space: nowrap; }
+.badge.more { background: var(--risk-pale); color: var(--risk); }
+.badge.less { background: var(--clear-pale); color: var(--clear); }
+.badge.same { background: var(--provenance-pale); color: var(--provenance); }
+.tag { display: inline-block; font-size: 0.72rem; padding: 0.08rem 0.4rem; border-radius: 4px; background: var(--provenance-pale);
+  color: var(--provenance); margin: 0.1rem 0.2rem 0.1rem 0; }
+.tag.risk { background: var(--risk-pale); color: var(--risk); }
+.tag.caution { background: var(--caution-pale); color: var(--caution); }
+.tag.clear { background: var(--clear-pale); color: var(--clear); }
+.count { font-size: 0.82rem; color: var(--provenance); margin: 0.5rem 0 0; }
+.empty { padding: 1.5rem; text-align: center; color: var(--provenance); font-size: 0.9rem; }
+.err { padding: 1rem 1.25rem; background: var(--caution-pale); color: var(--text); border-radius: 8px; font-size: 0.9rem; }
+
+/* bars */
+.bars { display: grid; gap: 0.55rem; margin: 1rem 0; }
+.brow { display: grid; grid-template-columns: minmax(10rem, 22rem) minmax(0, 1fr) 4.5rem; gap: 0.75rem; align-items: center; font-size: 0.88rem; }
+.brow .lab small { display: block; color: var(--provenance); font-size: 0.76rem; }
+.track { height: 0.8rem; background: var(--provenance-pale); border-radius: 4px; overflow: hidden; }
+.fill { height: 100%; background: var(--bar); border-radius: 4px; transform-origin: left; transition: transform 0.6s cubic-bezier(.16,1,.3,1); }
+.brow .v { text-align: right; font-family: var(--font-data); font-size: 0.82rem; }
+
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.5rem; }
+details.kb { border-bottom: 1px solid var(--line); padding: 0.75rem 0; }
+details.kb summary { cursor: pointer; display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; list-style: none; }
+details.kb summary::-webkit-details-marker { display: none; }
+details.kb summary::before { content: ""; width: 0.5rem; height: 0.5rem; border-right: 2px solid var(--provenance);
+  border-bottom: 2px solid var(--provenance); transform: rotate(-45deg); transition: transform 0.2s ease-out; flex: none; margin-right: 0.15rem; }
+details.kb[open] summary::before { transform: rotate(45deg); }
+details.kb .hz { font-family: var(--font-display); font-size: 1.05rem; color: var(--ink); }
+details.kb ul { margin: 0.6rem 0 0.25rem 1.2rem; padding: 0; font-size: 0.9rem; }
+details.kb li { margin-bottom: 0.45rem; }
+
+.result { margin-top: 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--slab); padding: 1.1rem 1.25rem; box-shadow: var(--shadow); }
+.result h3 { margin-top: 0; }
+.prob { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 3.5rem; gap: 0.6rem; align-items: center; font-size: 0.85rem; margin: 0.25rem 0; }
+.why { font-family: var(--font-data); font-size: 0.8rem; color: var(--provenance); }
+
+footer { max-width: 1180px; margin: 0 auto; padding: 2rem 1.25rem 4rem; font-size: 0.82rem; color: var(--provenance); border-top: 1px solid var(--line); }
+
+@media (max-width: 860px) {
+  h1 { font-size: 2rem; }
+  .intro { grid-template-columns: 1fr; gap: 1.5rem; padding-top: 2.5rem; }
+  .findings li { grid-template-columns: 1fr; gap: 0.25rem; }
+  .cols { grid-template-columns: 1fr; }
+  .brow { grid-template-columns: minmax(0, 1fr) 3.5rem; }
+  .brow .track { grid-column: 1 / -1; grid-row: 2; }
+  .prob { grid-template-columns: minmax(0, 1fr) 3rem; }
+  .prob .track { grid-column: 1 / -1; }
+  section { padding-top: 3rem; }
+  .brand b { display: none; }
+}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div class="kicker">FoodSafe India — Execution Record</div>
-    <h1>What the pipeline actually produced</h1>
-    <p class="lede">
-      FoodSafe India ingests food-safety enforcement records from public sources
-      and computes district- and brand-level risk scores from them. Everything
-      below is the real, unedited output of running that pipeline once — not a
-      mockup or a design placeholder.
-    </p>
-  </header>
+<div class="bar"><div class="bar-in">
+  <a class="brand" href="#top">FoodSafe <b>India</b></a>
+  <nav class="sections" aria-label="Sections">
+    <a href="#standards">Standards</a><a href="#health">Health</a><a href="#intake">Safe intake</a>
+    <a href="#classify">Classify text</a><a href="#hazards">Hazards</a><a href="#countries">Countries</a>
+    <a href="#burden">Global burden</a><a href="#states">Indian states</a><a href="#nutrition">Nutrition</a>
+    <a href="#sources">Sources</a>
+  </nav>
+</div></div>
 
-  <div class="notice">
-    <strong>Why this is a local snapshot, not a live dashboard</strong>
-    This page reads a JSON snapshot committed to the repository, generated by
-    running the pipeline against a local database — the project's cloud
-    database is currently unreachable (every scheduled ingestion run since
-    2026-07-04 has failed on the database connection step; see
-    <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/data/README.md">data/README.md</a>
-    for the full detail and exact error). This page has no backend and makes
-    no live requests — everything you see was fetched once and is baked into
-    this deploy.
+<main id="top">
+  <div class="intro">
+    <div>
+      <h1>What can actually be known about the safety of India's food</h1>
+      <p class="lede">India's legal limits for pesticides, metals and toxins set beside the EU, Codex and the US; what the contamination found in Indian food means for health; and how places compare. Built only from public records, with every number traceable to its source.</p>
+    </div>
+    <aside>
+      <p>India publishes no programmatic dataset of food test results. What exists is pieced together here from the regulator's rule-book, disclosures to Parliament, EU border checks, WHO and World Bank data, and open product labels.</p>
+      <p id="stamp" class="data">Loading snapshot…</p>
+    </aside>
   </div>
 
-  <section id="openfda">
-    <h2>Real US FDA recalls ingested</h2>
-    <p class="section-note">
-      Fetched live from accessdata.fda.gov (no API key) by
-      <code class="mono">pipeline/sources/openfda.py</code> and written to the
-      database by the same code path production ingestion uses. Every source
-      link below is real and dereferenceable.
-    </p>
-    <div id="openfda-table" class="loading">Loading…</div>
+  <ol class="findings" id="findings" aria-live="polite">
+    <li><span class="fig skeleton">000</span><span class="say skeleton">Loading findings from the latest snapshot</span><span></span></li>
+    <li><span class="fig skeleton">000</span><span class="say skeleton">Loading findings from the latest snapshot</span><span></span></li>
+    <li><span class="fig skeleton">000</span><span class="say skeleton">Loading findings from the latest snapshot</span><span></span></li>
+  </ol>
+
+  <section id="standards" aria-labelledby="h-standards">
+    <h2 id="h-standards">India's legal limits beside the EU, Codex and the US</h2>
+    <p class="note">Maximum residue limits for pesticides and maximum levels for contaminants, read from each rule-book as printed: the FSSAI compendium, the EU Pesticides Database and Regulation 2023/915, Codex, and 40 CFR 180. A legal limit is a regulatory line, not a safety verdict. "×" is India's limit divided by the other's: above 1 means India permits more.</p>
+    <div class="controls">
+      <label class="f">Food<select id="std-food"></select></label>
+      <label class="f">Hazard<input type="search" id="std-q" placeholder="e.g. chlorpyrifos, lead"></label>
+      <label class="f">Type<select id="std-type"><option value="">All</option><option value="pesticide_mrl">Pesticide residues</option><option value="contaminant_ml">Contaminants</option></select></label>
+      <label class="toggle"><input type="checkbox" id="std-more"> Only where India allows more than the EU</label>
+    </div>
+    <div class="tw"><table class="wide">
+      <thead><tr><th>Hazard</th><th>Food</th><th class="n">India</th><th class="n">EU</th><th class="n">Codex</th><th class="n">US</th><th>Note</th></tr></thead>
+      <tbody id="std-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table></div>
+    <p class="count"><span id="std-count"></span> <button type="button" class="ghost" id="std-more-rows" hidden>Show more</button></p>
+    <p class="note">Values in mg/kg. Basis under each value: <em>group</em> = a food group covering it; <em>catch-all</em> = India's "foods not specified"; <em>EU default</em> = no EU residue definition, so the general 0.01 mg/kg applies; <em>none</em> = no Codex standard, or in the US no tolerance (no residue is legal). Method: <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/docs/STANDARDS.md">docs/STANDARDS.md</a>.</p>
   </section>
 
-  <section id="districts">
-    <h2>Real Indian districts added</h2>
-    <p class="section-note">
-      Fetched live from data.gov.in's AGMARKNET commodity-price API by
-      <code class="mono">pipeline/sources/agmarknet.py</code>. Geographic
-      reference data, not enforcement records — AGMARKNET carries commodity
-      prices, not safety violations.
-    </p>
-    <div id="districts-table" class="loading">Loading…</div>
+  <section id="health" aria-labelledby="h-health">
+    <h2 id="h-health">What the contamination found in food points to, health-wise</h2>
+    <p class="note">Every EU border or market finding on a food is classified by its hazard, and each hazard linked to the outcomes it is known to cause, with the source for each link. Counts are findings, not illnesses: these are risk-targeted checks of exported food.</p>
+    <div class="controls">
+      <label class="f">Food from<select id="h-origin"></select></label>
+      <label class="f">Exposure<select id="h-exp"><option value="">Acute and chronic</option><option value="acute">Acute (hours–days)</option><option value="chronic">Chronic (years)</option></select></label>
+    </div>
+    <div id="h-bars" class="bars"></div>
+    <h3>Side by side</h3>
+    <p class="note">Share of each origin's classified findings whose hazard can cause the outcome.</p>
+    <div class="controls"><div class="chips" id="h-compare" role="group" aria-label="Origins to compare"></div></div>
+    <div class="tw"><table class="wide"><thead id="hc-head"></thead><tbody id="hc-body"></tbody></table></div>
   </section>
 
-  <section id="risk">
-    <h2>Computed district risk scores</h2>
-    <p class="section-note">
-      Output of <code class="mono">models.aggregate</code> run over the
-      database above — real statistical computation (fail rate, Wilson
-      confidence interval), not hand-entered numbers. Some rows reflect a
-      handful of old placeholder records already present in the local
-      database before this run, not exclusively the openFDA data above; see
-      <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/data/README.md">data/README.md</a>.
-    </p>
-    <div id="risk-table" class="loading">Loading…</div>
+  <section id="intake" aria-labelledby="h-intake">
+    <h2 id="h-intake">How much of that food reaches a safe-intake limit?</h2>
+    <p class="note">For each recent finding on Indian food with a measured concentration: the grams a 60 kg adult could eat every day for life within the acceptable daily intake (chronic), or in one day within the acute reference dose. Guidance values from EFSA, JMPR and JECFA. Where no safe level exists (genotoxic carcinogens, or where the safe intake was withdrawn) no number is given. One sample's value; an illustration, not anyone's diet.</p>
+    <div class="tw"><table class="wide">
+      <thead><tr><th>Date</th><th>Hazard</th><th>Food</th><th class="n">Measured mg/kg</th><th class="n">Daily, for life</th><th class="n">In one day</th><th>Basis</th></tr></thead>
+      <tbody id="in-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table></div>
   </section>
 
-  <section id="runs">
-    <h2>Pipeline run log</h2>
-    <p class="section-note">
-      Actual rows from the <code class="mono">pipeline_runs</code> table,
-      written by <code class="mono">pipeline/run_and_log.py</code> — the same
-      logging path the (currently broken) cloud ingestion uses.
-    </p>
-    <div id="runs-table" class="loading">Loading…</div>
+  <section id="classify" aria-labelledby="h-classify">
+    <h2 id="h-classify">Classify a food-safety report</h2>
+    <p class="note">Paste a headline or complaint. Rules from the hazard knowledge base run first; a model trained on 15,210 EU notifications and tested on 6,934 later ones (91.8% accuracy) runs alongside and is used only when it is at least 60% sure. It reads what the text says; it cannot test any food. Runs in your browser.</p>
+    <label class="f" for="cl-text">Text</label>
+    <textarea id="cl-text" maxlength="500" placeholder="e.g. Aflatoxin found in red chilli powder sold in Mumbai market"></textarea>
+    <div class="controls"><button id="cl-go" type="button">Classify</button>
+      <div class="chips" aria-label="Examples">
+        <button type="button" data-ex="Salmonella detected in chicken samples from a city market">Salmonella in chicken</button>
+        <button type="button" data-ex="Ethylene oxide above limit in sesame seeds">Ethylene oxide in sesame</button>
+        <button type="button" data-ex="Turmeric powder adulterated with lead chromate">Lead chromate in turmeric</button>
+        <button type="button" data-ex="Undeclared peanut in biscuits">Undeclared peanut</button>
+      </div></div>
+    <div id="cl-out" aria-live="polite"></div>
   </section>
 
-  <footer>
-    Source: <a href="https://github.com/ultramagnus23/FoodSafe">github.com/ultramagnus23/FoodSafe</a>
-    &middot; See the repository <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/README.md">README</a>
-    for what is built vs. planned.
-  </footer>
+  <section id="hazards" aria-labelledby="h-hazards">
+    <h2 id="h-hazards">Hazards and what they do to people</h2>
+    <p class="note">The knowledge base behind the classification: each hazard's known health outcomes, who is most at risk, the IARC cancer classification where one exists, and the source of each statement (WHO, IARC, EFSA, US EPA, CDC, FAO). It says what can happen, not how likely it is.</p>
+    <div class="controls"><label class="f">Search<input type="search" id="kb-q" placeholder="e.g. liver, children, salmonella"></label>
+      <label class="f">Class<select id="kb-class"><option value="">All classes</option></select></label></div>
+    <div id="kb-list"></div>
+  </section>
+
+  <section id="countries" aria-labelledby="h-countries">
+    <h2 id="h-countries">Countries compared</h2>
+    <p class="note">Food-safety capacity is each country's own IHR self-assessment to WHO. Nutrition indicators from the World Bank. EU findings count checks on that country's exports, which track trade volume and targeting: they do not rank whose food is safer.</p>
+    <div class="controls"><label class="f">Search<input type="search" id="co-q" placeholder="country or region"></label></div>
+    <div class="tw"><table class="wide">
+      <thead><tr id="co-head"></tr></thead>
+      <tbody id="co-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table></div>
+    <p class="count"><button type="button" class="ghost" id="co-more" hidden>Show all countries</button></p>
+  </section>
+
+  <section id="burden" aria-labelledby="h-burden">
+    <h2 id="h-burden">Which foodborne hazards harm the most people worldwide</h2>
+    <p class="note">WHO's estimates of the global burden of foodborne disease (FERG), by hazard. WHO publishes these at global level only; there is no country breakdown to show.</p>
+    <div class="controls"><div class="chips" id="bu-measure" role="group" aria-label="Measure">
+      <button type="button" data-m="deaths" aria-pressed="true">Deaths</button><button type="button" data-m="illnesses">Illnesses</button><button type="button" data-m="DALYs">DALYs</button></div>
+      <div class="chips" id="bu-age" role="group" aria-label="Age group">
+      <button type="button" data-a="all ages" aria-pressed="true">All ages</button><button type="button" data-a="under 5">Under 5</button></div></div>
+    <div id="bu-bars" class="bars"></div>
+  </section>
+
+  <section id="states" aria-labelledby="h-states">
+    <h2 id="h-states">Indian states: samples found non-conforming</h2>
+    <p class="note">Samples analysed and found non-conforming each year, as the Health Ministry disclosed to Parliament. Inspectors choose what to sample, so a high rate can mean sharper targeting as much as worse food; "non-conforming" also covers labelling and quality failures.</p>
+    <div class="tw"><table class="wide">
+      <thead><tr><th>State / UT</th><th>Latest year</th><th class="n">Analysed</th><th class="n">Non-conforming</th><th class="n">Rate</th><th>Range across years</th></tr></thead>
+      <tbody id="st-body"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section id="nutrition" aria-labelledby="h-nutrition">
+    <h2 id="h-nutrition">Packaged food sold in India</h2>
+    <p class="note">Products listed in Open Food Facts as sold in India: crowd-sourced label transcriptions, not lab analyses, and not a sample of what India eats. Nutri-Score and NOVA as Open Food Facts computes them; "high in" uses the UK front-of-pack thresholds per 100 g (India has no final scheme).</p>
+    <div id="nu-body"></div>
+  </section>
+
+  <section id="sources" aria-labelledby="h-sources">
+    <h2 id="h-sources">Sources and how far to trust them</h2>
+    <p class="note">Confidence describes whether a record states what its publisher disclosed: high for official machine-readable data, medium for validated document extraction or cited curation, low for unvalidated extraction or media. It says nothing about representativeness; each source's limits are listed with it.</p>
+    <div class="tw"><table class="wide">
+      <thead><tr><th>Source</th><th>Publisher</th><th>Confidence</th><th class="n">Rows</th><th>What it cannot tell you</th></tr></thead>
+      <tbody id="so-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    </table></div>
+  </section>
 </main>
 
+<footer>
+  <p>FoodSafe India is open source: <a href="https://github.com/ultramagnus23/FoodSafe">github.com/ultramagnus23/FoodSafe</a>. Data from FSSAI, the European Commission (RASFF, EU Pesticides Database, EUR-Lex), FAO/WHO Codex, US eCFR, WHO, IARC, the World Bank, the Lok Sabha, and Open Food Facts (Open Database License). Nothing here is medical advice or a finding about any brand or producer.</p>
+  <p><a href="record.html">Earlier pipeline execution record (July 2026)</a></p>
+</footer>
+
 <script>
-async function loadJSON(path) {
+"use strict";
+const D = "data/live/";
+const cache = {};
+const get = (n) => cache[n] || (cache[n] = fetch(D + n + ".json").then(r => { if (!r.ok) throw new Error(n + ": HTTP " + r.status); return r.json(); }));
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n, d = 0) => n == null ? "—" : Number(n).toLocaleString("en-IN", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+const mg = (v) => v == null ? "—" : (v >= 1 ? fmt(v, 2) : Number(v).toPrecision(2).replace(/\.?0+e/, "e"));
+const fail = (el, e) => { el.innerHTML = `<div class="err">This section's data could not be loaded (${esc(e.message)}). The rest of the page still works.</div>`; };
+const FOODS = {rice:"Rice",wheat:"Wheat",maize:"Maize",sorghum:"Sorghum (jowar)",millet:"Millets",chickpea:"Chickpea",lentil:"Lentil",pigeon_pea:"Pigeon pea (tur)",black_gram:"Black gram (urad)",green_gram:"Green gram (mung)",dry_beans:"Dry beans",dry_peas:"Dry peas",soybean:"Soybean",groundnut:"Groundnut",mustard_seed:"Mustard seed",sesame:"Sesame",cottonseed:"Cottonseed",sunflower_seed:"Sunflower seed",tea:"Tea",coffee:"Coffee",chilli_dried:"Dried chilli",black_pepper:"Black pepper",cardamom:"Cardamom",cumin:"Cumin",coriander_seed:"Coriander seed",turmeric:"Turmeric",ginger:"Ginger",mango:"Mango",banana:"Banana",grapes:"Grapes",pomegranate:"Pomegranate",apple:"Apple",orange:"Orange",lemon_lime:"Lemon / lime",papaya:"Papaya",guava:"Guava",pineapple:"Pineapple",tomato:"Tomato",potato:"Potato",onion:"Onion",brinjal:"Brinjal",okra:"Okra",cabbage:"Cabbage",cauliflower:"Cauliflower",chilli_fresh:"Green chilli / peppers",cucumber:"Cucumber",spinach:"Spinach",sugarcane:"Sugarcane",milk:"Milk",eggs:"Eggs",poultry_meat:"Poultry meat",bovine_meat:"Bovine meat",honey:"Honey",fish:"Fish",coconut:"Coconut"};
+let COUNTRY = {};
+
+/* ---------- findings + stamp ---------- */
+async function findings() {
+  const el = $("#findings");
   try {
-    const res = await fetch(path);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (e) {
-    return null;
+    const [meta, std, india, co, burden, nut, profiles] = await Promise.all(
+      ["meta", "standards_summary", "rasff_india", "rasff_countries", "burden", "nutrition", "health_profiles"].map(n => get(n).catch(() => null)));
+    if (meta) $("#stamp").textContent = "Snapshot " + meta.generated_at.replace("T", " ").replace("+00:00", " UTC");
+    const f = (std && std.flags) || {};
+    const items = [];
+    if (f.comparisons) items.push([fmt(f.india_higher_than_eu), `pesticide and contaminant limits where India permits more than the EU, of ${fmt(f.comparisons)} food–hazard pairs India regulates.`,
+      `The largest gap is ${fmt(f.max_ratio_eu)} times. ${fmt(f.eu_default)} of the EU values are its general 0.01 mg/kg default for pesticides it never assessed.`, "#standards"]);
+    if (f.not_approved_in_eu) items.push([fmt(f.not_approved_in_eu), `of the ${fmt(f.india_pesticides)} pesticides India sets food limits for are not approved for use in the EU.`, "Approval status from the EU Pesticides Database; the substance, not its residue family, decides.", "#standards"]);
+    const IN = (co || []).find(c => c.origin === "IN"), rank = (co || []).findIndex(c => c.origin === "IN") + 1;
+    if (IN) items.push([fmt(IN.notifications), `EU border and market notifications on food from India since 2020${rank ? `, the ${ordinal(rank)} most of any origin` : ""}.`, `${fmt(IN.serious)} were classed serious. These are risk-targeted checks of exports, not a sample of food eaten in India.`, "#health"]);
+    const inProf = (profiles || []).filter(p => p.origin === "IN");
+    const cancer = inProf.find(p => p.outcome_key === "cancer");
+    if (cancer) items.push([fmt(cancer.notifications), "of those findings involved a hazard classified as a carcinogen, most often ethylene oxide in sesame and spices.", "Classified through the cited hazard knowledge base; each link carries its WHO, IARC or EFSA source.", "#health"]);
+    const deaths = (burden || []).find(b => b.measure === "deaths" && b.age_group === "all ages" && b.hazard === "All hazards");
+    if (deaths) items.push([fmt(deaths.value / 1e6, 2) + " M", "deaths a year worldwide from foodborne disease, per WHO's 2021 estimates; inorganic arsenic and lead account for the largest share.", "Global estimates only: WHO publishes no country breakdown.", "#burden"]);
+    if (nut && nut.products) { const g = Object.fromEntries((nut.nutriscore || []).map(x => [x.g, x.n])); const graded = Object.values(g).reduce((a, b) => a + b, 0);
+      if (graded) items.push([Math.round(100 * ((g.d || 0) + (g.e || 0)) / graded) + "%", `of ${fmt(graded)} graded packaged foods sold in India score D or E on Nutri-Score.`, "Open Food Facts label data; not a sample of the Indian diet.", "#nutrition"]); }
+    el.innerHTML = items.map(([fig, say, small, href]) =>
+      `<li><span class="fig">${esc(fig)}</span><span class="say">${esc(say)}<small>${esc(small)}</small></span><a class="go" href="${href}">See the evidence</a></li>`).join("")
+      || `<li><span class="say muted">No findings in this snapshot yet.</span></li>`;
+  } catch (e) { fail(el, e); }
+}
+const ordinal = (n) => n + (["th","st","nd","rd"][(n % 100 - 20) % 10] || ["th","st","nd","rd"][n % 100] || "th");
+
+/* ---------- standards ---------- */
+let STD = [], STD_N = 50, CO_N = 40;
+function basisLabel(b) { return ({ specific: "", group: "group", residual: "catch-all", eu_default: "EU default", none: "none", not_loaded: "not compared", not_numeric: "printed as text" })[b] ?? b ?? ""; }
+const NONE = { EU: ["no limit", "EU sets none"], CODEX: ["—", "no Codex standard"], US: ["not permitted", "no tolerance"], IN: ["—", ""] };
+function cell(v, b, j) {
+  if (v == null) {
+    const [main, sub] = b === "none" ? NONE[j] : ["—", basisLabel(b)];
+    return `<td class="n"><span class="muted">${esc(main)}</span><span class="basis">${esc(sub)}</span></td>`;
   }
+  return `<td class="n">${mg(v)}<span class="basis">${esc(basisLabel(b))}</span></td>`;
+}
+const shortName = (n) => { n = String(n || ""); return n.length > 42 && n.indexOf(" (") > 2 ? n.slice(0, n.indexOf(" (")) : n; };
+const clean = (h) => String(h || "").replace(/\s+-\s+.*$/, "").replace(/\s+/g, " ").trim();
+function ratio(r) {
+  if (r == null) return "";
+  const cls = r > 1.0001 ? "more" : r < 0.9999 ? "less" : "same";
+  const txt = r > 1.0001 ? `India ${fmt(r, r < 10 ? 1 : 0)}× EU` : r < 0.9999 ? `India ${fmt(r, 2)}× EU` : "same as EU";
+  return `<span class="badge ${cls}">${txt}</span>`;
+}
+function renderStd() {
+  const food = $("#std-food").value, q = $("#std-q").value.trim().toLowerCase(), t = $("#std-type").value, more = $("#std-more").checked;
+  let rows = STD.filter(r => (!food || r.f === food) && (!t || r.t === t) && (!more || (r.flags || []).includes("india_higher_than_eu"))
+    && (!q || (r.hn || "").toLowerCase().includes(q) || r.h.includes(q)));
+  rows.sort((a, b) => (b.re ?? -1) - (a.re ?? -1));
+  const shown = rows.slice(0, STD_N);
+  $("#std-body").innerHTML = shown.length ? shown.map(r => `<tr>
+      <td title="${esc(r.hn)}">${esc(shortName(r.hn))}${r.st === "Not approved" ? ' <span class="tag caution">not approved in EU</span>' : ""}${r.ig ? ` <span class="tag ${r.ig === "1" ? "risk" : ""}">IARC ${esc(r.ig)}</span>` : ""}${(r.flags||[]).includes("basis_mismatch") ? ' <span class="tag">residue defined differently</span>' : ""}</td>
+      <td>${esc(FOODS[r.f] || r.f)}</td>${cell(r.i, r.ib, "IN")}${cell(r.e, r.eb, "EU")}${cell(r.c, r.cb, "CODEX")}${cell(r.u, r.ub, "US")}
+      <td>${ratio(r.re)}${(r.flags||[]).includes("no_us_tolerance") ? ' <span class="tag">no US tolerance</span>' : ""}${(r.flags||[]).includes("india_internal_conflict") ? ' <span class="tag caution">India prints two limits</span>' : ""}</td></tr>`).join("")
+    : `<tr><td colspan="7" class="empty">No pair matches. Clear the hazard search or choose another food.</td></tr>`;
+  $("#std-count").textContent = `${fmt(rows.length)} pairs, sorted by India ÷ EU${rows.length > shown.length ? `; first ${shown.length} shown` : ""}.`;
+  $("#std-more-rows").hidden = rows.length <= shown.length;
+}
+async function standards() {
+  try {
+    STD = await get("standards_compare");
+    const foods = [...new Set(STD.map(r => r.f))].sort((a, b) => (FOODS[a] || a).localeCompare(FOODS[b] || b));
+    $("#std-food").innerHTML = `<option value="">All foods</option>` + foods.map(f => `<option value="${esc(f)}"${f === "rice" ? " selected" : ""}>${esc(FOODS[f] || f)}</option>`).join("");
+    ["#std-food", "#std-type", "#std-more"].forEach(s => $(s).addEventListener("change", () => { STD_N = 50; renderStd(); }));
+    $("#std-q").addEventListener("input", () => { STD_N = 50; renderStd(); });
+    $("#std-more-rows").addEventListener("click", () => { STD_N += 200; renderStd(); });
+    renderStd();
+  } catch (e) { fail($("#std-body").closest(".tw"), e); }
 }
 
-function empty(el, msg) {
-  el.innerHTML = `<p class="empty">${msg}</p>`;
+/* ---------- health ---------- */
+let PROF = [];
+function bars(el, rows, max, label, value, fmtv) {
+  el.innerHTML = rows.length ? rows.map(r => `<div class="brow"><div class="lab">${label(r)}</div><div class="track" aria-hidden="true"><div class="fill" style="transform:scaleX(${Math.max(0.004, value(r) / max)})"></div></div><div class="v">${fmtv(r)}</div></div>`).join("")
+    : `<div class="empty">Nothing recorded for this selection.</div>`;
+}
+function renderHealth() {
+  const o = $("#h-origin").value, exp = $("#h-exp").value;
+  const rows = PROF.filter(p => p.origin === o && (!exp || p.exposure === exp || p.exposure === "both")).slice(0, 14);
+  const max = Math.max(1, ...rows.map(r => r.notifications));
+  bars($("#h-bars"), rows, max,
+    r => `${esc(r.outcome)}<small>${esc(r.organ_system)} · ${esc(r.exposure)} · ${esc([...new Set((r.top_hazards || []).map(h => clean(h[0])))].slice(0, 2).join(", "))} · <a href="${esc(((r.sources || [])[0] || {}).url || "#")}">source</a></small>`,
+    r => r.notifications, r => fmt(r.notifications));
+}
+const PICK = new Set(["IN", "CN", "TR", "TH", "VN", "US"]);
+function renderCompare() {
+  const origins = [...PICK].filter(o => PROF.some(p => p.origin === o));
+  const keys = [...new Set(PROF.filter(p => origins.includes(p.origin)).map(p => p.outcome_key))];
+  const by = {}; PROF.forEach(p => { (by[p.outcome_key] ||= { outcome: p.outcome })[p.origin] = p; });
+  keys.sort((a, b) => Math.max(...origins.map(o => by[b][o]?.notifications || 0)) - Math.max(...origins.map(o => by[a][o]?.notifications || 0)));
+  $("#hc-head").innerHTML = `<tr><th>Outcome</th>${origins.map(o => `<th class="n">${esc(COUNTRY[o] || o)}</th>`).join("")}</tr>`;
+  $("#hc-body").innerHTML = keys.slice(0, 16).map(k => `<tr><td>${esc(by[k].outcome)}</td>${origins.map(o => { const p = by[k][o];
+    return `<td class="n">${p && p.share_of_classified != null ? Math.round(100 * p.share_of_classified) + "%" : '<span class="muted">—</span>'}</td>`; }).join("")}</tr>`).join("");
+}
+async function health() {
+  try {
+    const [prof, co] = await Promise.all([get("health_profiles"), get("rasff_countries")]);
+    PROF = prof;
+    const origins = co.filter(c => c.notifications >= 100 && PROF.some(p => p.origin === c.origin)).map(c => c.origin);
+    $("#h-origin").innerHTML = ["IN", ...origins.filter(o => o !== "IN")].map(o => `<option value="${o}">${esc(COUNTRY[o] || o)}</option>`).join("") + `<option value="ALL">All origins</option>`;
+    $("#h-origin").addEventListener("change", renderHealth); $("#h-exp").addEventListener("change", renderHealth);
+    $("#h-compare").innerHTML = origins.slice(0, 18).map(o => `<button type="button" data-o="${o}" aria-pressed="${PICK.has(o)}">${esc(COUNTRY[o] || o)}</button>`).join("");
+    $("#h-compare").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const o = b.dataset.o;
+      if (PICK.has(o)) { if (PICK.size > 1) PICK.delete(o); } else if (PICK.size < 8) PICK.add(o);
+      b.setAttribute("aria-pressed", PICK.has(o)); renderCompare(); });
+    renderHealth(); renderCompare();
+  } catch (e) { fail($("#h-bars"), e); }
 }
 
-function esc(s) {
-  if (s === null || s === undefined) return "";
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+/* ---------- safe intake ---------- */
+const grams = (g) => g == null ? null : g >= 10000 ? "over 10 kg" : g >= 1000 ? fmt(g / 1000, 1) + " kg" : fmt(g) + " g";
+async function intake() {
+  try {
+    const rows = (await get("rasff_india_measured")).slice(0, 40);
+    $("#in-body").innerHTML = rows.map(r => {
+      const c = grams(r.chronic_g), a = grams(r.acute_g);
+      const short = (g, n) => g == null ? '<span class="muted">—</span>' : (n < 300 ? `<span class="badge more">${g}</span>` : g);
+      return `<tr><td class="data nw">${esc(r.date)}</td><td>${esc(clean(r.hazard))}</td><td>${esc(r.product || "")}</td><td class="n">${mg(r.mg_kg)}</td>
+        <td class="n">${r.reason ? "" : short(c, r.chronic_g)}</td><td class="n">${r.reason ? "" : short(a, r.acute_g)}</td>
+        <td>${r.reason ? `<span class="tag risk" title="${esc(r.reason)}">no safe amount</span> <span class="muted">${esc(r.reason.split(/[:(;]/)[0])}</span>` : `<span class="muted">${esc(r.guidance || "")}</span>`} <a href="${esc(r.url)}">notice</a></td></tr>`; }).join("")
+      || `<tr><td colspan="7" class="empty">No measured findings in this snapshot.</td></tr>`;
+  } catch (e) { fail($("#in-body").closest(".tw"), e); }
 }
 
-async function renderOpenFDA() {
-  const el = document.getElementById("openfda-table");
-  const rows = await loadJSON("data/sample_ingest_openfda.json");
-  if (!rows || !rows.length) return empty(el, "No data in this snapshot.");
-  el.innerHTML = `<table>
-    <thead><tr><th>Test date</th><th>Commodity</th><th>Contaminant</th><th>Result</th><th>Source</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td class="mono">${esc(r.test_date)}</td>
-      <td>${esc(r.commodity)}</td>
-      <td>${esc(r.contaminant)}</td>
-      <td><span class="pill ${r.pass_fail ? 'pass' : 'fail'}">${r.pass_fail ? 'PASS' : 'FAIL'}</span></td>
-      <td><a href="${esc(r.source_url)}" target="_blank" rel="noopener">FDA record ↗</a></td>
-    </tr>`).join("")}</tbody>
-  </table>`;
+/* ---------- classifier ---------- */
+const STOP = new Set(["in","of","the","and","from","for","with","on","a","an","to","by","at","or","as","is"]);
+function toks(text) {
+  let t = text.toLowerCase(); if (t.includes("///")) t = t.split("///").pop();
+  t = t.replace(/\bfrom\s+[^,;()]+$/, " ").replace(/\s+/g, " ").trim();
+  const w = (t.match(/[a-z][a-z0-9\-]+|\d+/g) || []).filter(x => !STOP.has(x));
+  return w.concat(w.slice(1).map((x, i) => w[i] + "_" + x));
+}
+function score(M, text) {
+  const tf = {}; toks(text).forEach(t => { if (t in M.idf) tf[t] = (tf[t] || 0) + 1; });
+  const v = {}; let norm = 0;
+  for (const t in tf) { v[t] = (1 + Math.log(tf[t])) * M.idf[t]; norm += v[t] * v[t]; }
+  norm = Math.sqrt(norm) || 1;
+  const s = M.intercept.slice(); const contrib = [];
+  for (const t in v) { const x = v[t] / norm; for (const [ci, w] of (M.weights[t] || [])) { s[ci] += w * x; contrib.push([t, ci, w * x]); } }
+  const m = Math.max(...s), ex = s.map(z => Math.exp(z - m)), z = ex.reduce((a, b) => a + b, 0);
+  const probs = M.classes.map((c, i) => [c, ex[i] / z, i]).sort((a, b) => b[1] - a[1]);
+  const why = contrib.filter(c => c[1] === probs[0][2] && c[2] > 0).sort((a, b) => b[2] - a[2]).slice(0, 5).map(c => c[0].replace("_", " "));
+  return { probs, why };
+}
+let RULES = null;
+async function classify() {
+  const out = $("#cl-out"), text = $("#cl-text").value.trim();
+  if (text.length < 3) { out.innerHTML = `<div class="err">Type at least a few words describing the problem.</div>`; return; }
+  $("#cl-go").disabled = true; out.innerHTML = `<div class="result"><p class="muted">Loading the model (1.4 MB, once)…</p></div>`;
+  try {
+    const [M, rules, hz] = await Promise.all([get("hazard_model"), get("hazard_rules"), get("hazards")]);
+    RULES ||= rules.filter(r => r.key !== "undeclared_allergen").map(r => ({ ...r, rx: new RegExp(r.pattern) }));
+    const low = text.toLowerCase().replace(/\s+/g, " ");
+    const hit = RULES.find(r => r.rx.test(low));
+    const { probs, why } = score(M, text);
+    const top = probs[0];
+    const kb = hit && hz.find(h => h.hazard_key === hit.key);
+    const decided = hit ? "the knowledge base matched a named hazard" : top[1] >= 0.6 ? "the model is confident enough" : "neither layer is confident: category unknown";
+    const effects = kb ? kb.effects : [];
+    out.innerHTML = `<div class="result">
+      <h3>${hit ? esc(hit.name) : top[1] >= 0.6 ? esc(cap(top[0])) : "Unknown"}</h3>
+      <p class="note">Decided because ${esc(decided)}.${hit ? ` Hazard class: ${esc(hit.class.replace(/_/g, " "))}.` : ""}</p>
+      ${effects.length ? `<h3>What this hazard can cause</h3><ul>${effects.map(e => `<li>${esc(e.outcome)} <span class="muted">(${esc(e.exposure)}${e.onset ? ", " + esc(e.onset) : ""})</span> — <a href="${esc(e.url)}">${esc(e.source)}</a></li>`).join("")}</ul>` : hit ? `<p class="note">No single health outcome is asserted for this hazard.</p>` : ""}
+      <h3>Model</h3>
+      ${probs.slice(0, 3).map(p => `<div class="prob"><span>${esc(cap(p[0]))}</span><div class="track" aria-hidden="true"><div class="fill" style="transform:scaleX(${p[1]})"></div></div><span class="data">${Math.round(100 * p[1])}%</span></div>`).join("")}
+      ${why.length ? `<p class="why">Driven by: ${esc(why.join(", "))}</p>` : ""}
+      <p class="note">Classifies what the text says, not whether any food is contaminated.</p></div>`;
+  } catch (e) { fail(out, e); }
+  $("#cl-go").disabled = false;
+}
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/* ---------- hazards KB ---------- */
+let HZ = [];
+function renderKB() {
+  const q = $("#kb-q").value.trim().toLowerCase(), c = $("#kb-class").value;
+  const rows = HZ.filter(h => (!c || h.hazard_class === c) && (!q || JSON.stringify(h).toLowerCase().includes(q)));
+  $("#kb-list").innerHTML = rows.map(h => `<details class="kb"><summary><span class="hz">${esc(h.name)}</span>
+      <span class="tag">${esc(h.hazard_class.replace(/_/g, " "))}</span>${h.iarc_group ? `<span class="tag ${h.iarc_group === "1" ? "risk" : h.iarc_group === "2A" ? "caution" : ""}">IARC ${esc(h.iarc_group)}</span>` : ""}
+      <span class="muted">${esc(h.effects.map(e => e.outcome).slice(0, 2).join("; "))}</span></summary>
+      <p class="note" style="margin-top:.6rem">${esc(h.summary || "")}</p>
+      ${h.effects.length ? `<ul>${h.effects.map(e => `<li><strong>${esc(e.outcome)}</strong> — ${esc(e.organ)}, ${esc(e.exposure)}${e.onset ? `, onset ${esc(e.onset)}` : ""}${(e.vulnerable || []).length ? `. Most at risk: ${esc(e.vulnerable.join(", "))}` : ""}. <span class="muted">${esc(e.evidence)}.</span> <a href="${esc(e.url)}">${esc(e.source)}</a></li>`).join("")}</ul>` : `<p class="note">No health outcome asserted (depends on substance and dose).</p>`}
+    </details>`).join("") || `<div class="empty">No hazard matches. Try a broader word.</div>`;
+}
+async function hazards() {
+  try {
+    HZ = await get("hazards");
+    [...new Set(HZ.map(h => h.hazard_class))].sort().forEach(c => $("#kb-class").insertAdjacentHTML("beforeend", `<option value="${esc(c)}">${esc(c.replace(/_/g, " "))}</option>`));
+    $("#kb-q").addEventListener("input", renderKB); $("#kb-class").addEventListener("change", renderKB); renderKB();
+  } catch (e) { fail($("#kb-list"), e); }
 }
 
-async function renderDistricts() {
-  const el = document.getElementById("districts-table");
-  const rows = await loadJSON("data/sample_ingest_agmarknet_districts.json");
-  if (!rows || !rows.length) return empty(el, "No data in this snapshot.");
-  el.innerHTML = `<table>
-    <thead><tr><th>District</th><th>State</th><th>Census 2021 code</th><th>Lat / Long</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td>${esc(r.name_canonical)}</td>
-      <td>${esc(r.state)}</td>
-      <td class="mono">${esc(r.census_2021_code)}</td>
-      <td class="mono">${r.latitude ?? "—"}, ${r.longitude ?? "—"}</td>
-    </tr>`).join("")}</tbody>
-  </table>`;
+/* ---------- countries ---------- */
+let CO = [], coSort = ["eu", -1];
+const COLS = [["name", "Country", false], ["IHRSPAR2_C13", "Food-safety capacity", true], ["SH.STA.STNT.ME.ZS", "Child stunting", true],
+  ["SH.ANM.ALLW.ZS", "Anaemia, women", true], ["SN.ITK.DEFC.ZS", "Undernourishment", true], ["eu", "EU findings on its food", true]];
+function coVal(c, k) { return k === "name" ? c.name : k === "eu" ? c.eu : (c.ind && c.ind[k] ? c.ind[k][0] : null); }
+function renderCo() {
+  const q = $("#co-q").value.trim().toLowerCase(); const [k, dir] = coSort;
+  const rows = CO.filter(c => !q || c.name.toLowerCase().includes(q) || (c.region || "").toLowerCase().includes(q))
+    .sort((a, b) => { const x = coVal(a, k), y = coVal(b, k); if (x == null) return 1; if (y == null) return -1; return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+  $("#co-head").innerHTML = COLS.map(([key, lab, n]) => `<th class="${n ? "n" : ""}" aria-sort="${k === key ? (dir > 0 ? "ascending" : "descending") : "none"}"><button type="button" data-k="${key}">${lab}${k === key ? (dir > 0 ? " ↑" : " ↓") : ""}</button></th>`).join("");
+  const total = rows.length; rows.splice(q ? 400 : CO_N);
+  $("#co-more").hidden = q || total <= CO_N;
+  $("#co-body").innerHTML = rows.map(c => `<tr${c.iso2 === "IN" ? ' style="font-weight:600"' : ""}><td>${esc(c.name)}<span class="basis">${esc(c.region || "")}</span></td>${
+    COLS.slice(1).map(([key]) => { const v = coVal(c, key), y = key === "eu" ? null : c.ind && c.ind[key] ? c.ind[key][1] : null;
+      return `<td class="n">${v == null ? '<span class="muted">—</span>' : key === "eu" ? fmt(v) : fmt(v, 1) + "%"}${y ? `<span class="basis">${y}</span>` : ""}</td>`; }).join("")}</tr>`).join("")
+    || `<tr><td colspan="6" class="empty">No country matches.</td></tr>`;
+}
+async function countries() {
+  try {
+    const [co, eu] = await Promise.all([get("countries"), get("rasff_countries")]);
+    const euBy = Object.fromEntries(eu.map(e => [e.origin, e.notifications]));
+    CO = co.map(c => ({ ...c, eu: euBy[c.iso2] || 0 }));
+    $("#co-q").addEventListener("input", renderCo);
+    $("#co-more").addEventListener("click", () => { CO_N = 1000; renderCo(); });
+    $("#co-head").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const k = b.dataset.k;
+      coSort = [k, coSort[0] === k ? -coSort[1] : (k === "name" ? 1 : -1)]; renderCo(); });
+    renderCo();
+  } catch (e) { fail($("#co-body").closest(".tw"), e); }
 }
 
-async function renderRisk() {
-  const el = document.getElementById("risk-table");
-  const rows = await loadJSON("data/sample_aggregation_district_risk.json");
-  if (!rows || !rows.length) return empty(el, "No data in this snapshot.");
-  el.innerHTML = `<table>
-    <thead><tr><th>District</th><th>Commodity</th><th>Quarter</th><th>N tests</th><th>Fail rate</th><th>Risk score</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td>${esc(r.district)}, ${esc(r.state)}</td>
-      <td>${esc(r.commodity)}</td>
-      <td class="mono">${esc(r.quarter)}</td>
-      <td class="mono">${esc(r.n_tests)}</td>
-      <td class="mono">${r.fail_rate != null ? (r.fail_rate * 100).toFixed(1) + '%' : '—'}</td>
-      <td class="mono">${r.risk_score ?? "—"}</td>
-    </tr>`).join("")}</tbody>
-  </table>`;
+/* ---------- burden ---------- */
+let BU = [], buM = "deaths", buA = "all ages";
+function renderBurden() {
+  const rows = BU.filter(b => b.measure === buM && b.age_group === buA && !/^All /.test(b.hazard) && b.hazard !== b.hazard_group)
+    .sort((a, b) => b.value - a.value).slice(0, 15);
+  const max = Math.max(1, ...rows.map(r => r.value));
+  bars($("#bu-bars"), rows, max, r => `${esc(r.hazard)}<small>${esc(r.hazard_group)}</small>`, r => r.value, r => fmt(r.value >= 1e6 ? r.value / 1e6 : r.value / 1e3, 1) + (r.value >= 1e6 ? " M" : " k"));
+}
+async function burden() {
+  try {
+    BU = await get("burden");
+    $("#bu-measure").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; buM = b.dataset.m;
+      [...$("#bu-measure").children].forEach(x => x.setAttribute("aria-pressed", x === b)); renderBurden(); });
+    $("#bu-age").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; buA = b.dataset.a;
+      [...$("#bu-age").children].forEach(x => x.setAttribute("aria-pressed", x === b)); renderBurden(); });
+    renderBurden();
+  } catch (e) { fail($("#bu-bars"), e); }
 }
 
-async function renderRuns() {
-  const el = document.getElementById("runs-table");
-  const rows = await loadJSON("data/sample_pipeline_runs_log.json");
-  if (!rows || !rows.length) return empty(el, "No data in this snapshot.");
-  el.innerHTML = `<table>
-    <thead><tr><th>Source</th><th>Status</th><th>Rows ingested</th><th>Started</th><th>Finished</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td class="mono">${esc(r.source)}</td>
-      <td><span class="pill status-${esc(r.status)}">${esc(r.status)}</span></td>
-      <td class="mono">${r.rows_ingested ?? 0}</td>
-      <td class="mono">${esc((r.started_at || "").replace("T", " ").slice(0, 19))}</td>
-      <td class="mono">${esc((r.finished_at || "").replace("T", " ").slice(0, 19))}</td>
-    </tr>`).join("")}</tbody>
-  </table>`;
+/* ---------- states ---------- */
+async function states() {
+  try {
+    const st = await get("states");
+    const rows = st.map(s => { const ser = s.series.filter(x => x[1] > 0); const last = ser[ser.length - 1];
+      const rates = ser.map(x => 100 * x[2] / x[1]); return { s, last, rates }; }).filter(r => r.last)
+      .sort((a, b) => (100 * b.last[2] / b.last[1]) - (100 * a.last[2] / a.last[1]));
+    $("#st-body").innerHTML = rows.map(({ s, last, rates }) => `<tr><td>${esc(s.state)}</td><td class="data">${esc(last[0])}</td>
+      <td class="n">${fmt(last[1])}</td><td class="n">${fmt(last[2])}</td><td class="n">${fmt(100 * last[2] / last[1], 1)}%</td>
+      <td class="data">${rates.length > 1 ? `${fmt(Math.min(...rates), 1)}–${fmt(Math.max(...rates), 1)}% over ${rates.length} years` : '<span class="muted">one year</span>'}</td></tr>`).join("")
+      || `<tr><td colspan="6" class="empty">No state data in this snapshot.</td></tr>`;
+  } catch (e) { fail($("#st-body").closest(".tw"), e); }
 }
 
-renderOpenFDA();
-renderDistricts();
-renderRisk();
-renderRuns();
+/* ---------- nutrition ---------- */
+async function nutrition() {
+  const el = $("#nu-body");
+  try {
+    const n = await get("nutrition");
+    if (!n.products) { el.innerHTML = `<div class="empty">Packaged-food data has not been loaded into this snapshot yet.</div>`; return; }
+    const graded = (n.nutriscore || []).reduce((a, b) => a + b.n, 0), nova = (n.nova || []).reduce((a, b) => a + b.n, 0);
+    el.innerHTML = `<div class="cols"><div><h3>Nutri-Score of ${fmt(graded)} graded products</h3><div class="bars" id="nu-ns"></div></div>
+      <div><h3>Processing (NOVA) of ${fmt(nova)} products</h3><div class="bars" id="nu-nova"></div></div></div>
+      <h3>High in, of ${fmt(n.complete)} products with a complete nutrition table</h3><div class="bars" id="nu-high"></div>
+      <h3>By category</h3><div class="tw"><table><thead><tr><th>Category</th><th class="n">Products</th><th class="n">Nutri-Score D or E</th><th class="n">Ultra-processed (NOVA 4)</th></tr></thead><tbody>${
+        n.categories.map(c => `<tr><td>${esc(c.category.replace(/^en:/, "").replace(/-/g, " "))}</td><td class="n">${fmt(c.products)}</td><td class="n">${c.graded ? Math.round(100 * c.de / c.graded) + "%" : "—"}</td><td class="n">${Math.round(100 * c.nova4 / c.products)}%</td></tr>`).join("")}</tbody></table></div>`;
+    const NS = { a: "A", b: "B", c: "C", d: "D", e: "E" }, NOVA = { 1: "1 · unprocessed", 2: "2 · culinary ingredients", 3: "3 · processed", 4: "4 · ultra-processed" };
+    bars($("#nu-ns"), n.nutriscore, Math.max(...n.nutriscore.map(x => x.n)), r => "Grade " + NS[r.g], r => r.n, r => Math.round(100 * r.n / graded) + "%");
+    bars($("#nu-nova"), n.nova, Math.max(...n.nova.map(x => x.n)), r => NOVA[r.g] || r.g, r => r.n, r => Math.round(100 * r.n / nova) + "%");
+    bars($("#nu-high"), n.high_in, n.complete, r => cap(r.k), r => r.n, r => Math.round(100 * r.n / n.complete) + "%");
+  } catch (e) { fail(el, e); }
+}
+
+/* ---------- sources ---------- */
+async function sources() {
+  try {
+    const so = await get("sources");
+    $("#so-body").innerHTML = so.map(s => `<tr><td>${esc(s.name)}</td><td class="muted">${esc(s.publisher)}</td>
+      <td><span class="tag ${s.base_confidence === "high" ? "clear" : s.base_confidence === "medium" ? "caution" : "risk"}">${esc(s.base_confidence)}</span></td>
+      <td class="n">${s.rows == null ? "—" : fmt(s.rows)}</td><td class="muted">${esc((s.scope || [])[0] || "")}</td></tr>`).join("");
+  } catch (e) { fail($("#so-body").closest(".tw"), e); }
+}
+
+/* ---------- boot ---------- */
+async function boot() {
+  try { (await get("countries")).forEach(c => { if (c.iso2) COUNTRY[c.iso2] = c.name; }); } catch (e) { /* names fall back to codes */ }
+  COUNTRY.ALL = "All origins";
+  // Every section's data is small (the 1.4 MB model loads only on first use), so all
+  // sections render up front: the layout is final before anyone follows an anchor.
+  await Promise.all([findings(), standards(), health(), intake(), hazards(), countries(), burden(), states(), nutrition(), sources()]);
+  if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView({ behavior: "instant" }); }
+  const links = [...document.querySelectorAll("nav.sections a")];
+  const spy = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) links.forEach(a => a.setAttribute("aria-current", a.getAttribute("href") === "#" + e.target.id)); }), { rootMargin: "-45% 0px -50% 0px" });
+  document.querySelectorAll("main section").forEach(s => spy.observe(s));
+  $("#cl-go").addEventListener("click", classify);
+  $("#cl-text").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) classify(); });
+  document.querySelectorAll("[data-ex]").forEach(b => b.addEventListener("click", () => { $("#cl-text").value = b.dataset.ex; classify(); }));
+}
+boot();
 </script>
 </body>
 </html>

@@ -1,14 +1,22 @@
-name: Deploy static execution-record page
+name: Publish public portal (GitHub Pages)
 
-# Publishes site/ (a single static page, no backend, reading the committed
-# JSON snapshot in data/) to GitHub Pages. This is the Task 2 deploy target
-# from the pipeline-validation pass — see README.md and site/index.html.
+# Builds the static public portal (site/index.html) from production data and
+# publishes it to GitHub Pages: https://ultramagnus23.github.io/FoodSafe/
+#
+# scripts/export_portal.py reads the production database (read-only queries)
+# and writes site/data/live/*.json; the page renders those files in the browser.
+# No backend, no API key, no rate limit — and the data is never committed to git.
+# Runs after the daily ingest (06:00 UTC, ~1 h), on demand, and when the site
+# itself changes. site/record.html keeps the earlier July 2026 execution record.
 
 on:
+  schedule:
+    - cron: "30 8 * * *"     # daily, after ingest.yml
   push:
     branches: ["main"]
     paths:
       - "site/**"
+      - "scripts/export_portal.py"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -16,6 +24,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: "pages"
@@ -29,9 +38,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary pydantic
+
+      - name: Export portal data from production
+        id: export_portal
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.export_portal --out site/data/live
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: "site"
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Alert on failed steps
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py
