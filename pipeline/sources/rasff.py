@@ -427,8 +427,15 @@ def run(limit: int = DEFAULT_DETAIL_LIMIT, scope: str = "india") -> dict:
     conn = pg_connect()
     try:
         known = known_state(conn)
+        # The all-origins list (~33,000) normally stops after pages it has fully
+        # seen, newest first. But details are planned only from what is listed, so
+        # while stored notifications still await their first detail attempt (a
+        # backfill cut off by its cap), the whole list must be read or the older
+        # backlog is never planned — as happened after the first 12,000-detail run.
+        pending = any(not attempted for _, attempted in known.values())
         listed = (fetch_all_listed() if require_india
-                  else fetch_all_listed(origin=None, known_ids={k for k, (d, a) in known.items() if a}))
+                  else fetch_all_listed(origin=None, known_ids=None if pending else
+                                        {k for k, (d, a) in known.items() if a}))
         summary["listed"] = len(listed)
         # Rows inserted below at list level are 'detail never attempted', so the
         # plan (made after) picks them up newest-first, a capped batch per run.

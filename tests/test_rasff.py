@@ -330,3 +330,20 @@ def test_a_run_with_nothing_new_says_so(monkeypatch):
     known = [(873205, True, True)]
     summary, _ = _run(monkeypatch, [LISTED], lambda nid: None, known=known)
     assert summary["inserted"] == 0 and "nothing new" in summary["note"]
+
+
+def test_global_run_reads_the_whole_list_while_stored_notifications_await_detail(monkeypatch):
+    """After a capped backfill, older notifications are stored but never attempted; the
+    early-stopping list would never reach them again, so the run must list everything."""
+    seen = []
+
+    def listed(origin=None, known_ids=None):
+        seen.append(known_ids)
+        return []
+    monkeypatch.setattr(R, "fetch_all_listed", listed)
+    monkeypatch.setattr(R, "pg_connect", lambda: _Conn(known=[(1, True, True), (2, False, False)]))
+    R.run_global(10)
+    assert seen == [None]                                    # backlog in the database: full list
+    monkeypatch.setattr(R, "pg_connect", lambda: _Conn(known=[(1, True, True), (2, False, True)]))
+    R.run_global(10)
+    assert seen[1] == {1, 2}                                 # nothing pending: stop at known pages
