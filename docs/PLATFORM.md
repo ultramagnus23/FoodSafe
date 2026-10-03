@@ -82,7 +82,10 @@ the portal and `GET /v1/standards/summary` always show current values):
 * Lead in dried spices: India 10 mg/kg vs EU 0.6–1.5 and Codex 0.6–2.0. Aflatoxin M1
   in milk: India 0.5 µg/kg vs EU 0.05. Total aflatoxins in spices: India 30 µg/kg vs
   EU 10, Codex 20 (chilli).
-* Food from India drew **2,118** EU notifications in 2020–2026 (second to Türkiye).
+* Food from India drew **2,118** EU notifications in 2020–2026 on the local run. In production on
+  2026-10-03 (all-origin backfill still running): **2,228**, third after Türkiye (3,183) and
+  Poland (2,318, almost all EU-market checks of its own products rather than border
+  rejections); the portal always shows the current rank.
   Linked through the knowledge base, the leading implied outcomes are cancer (662
   findings, mostly ethylene oxide), acute cholinergic poisoning from organophosphate
   pesticides (375), aflatoxin liver toxicity (164) and salmonellosis (145).
