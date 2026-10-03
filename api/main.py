@@ -28,6 +28,7 @@ from api.routes.research import research_router
 from api.routes.rasff import rasff_router
 from api.routes.standards import standards_router, hazards_router
 from api.routes.classify import classify_router
+from api.routes.health import health_router
 from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -177,6 +178,7 @@ app.include_router(rasff_router,     prefix="/v1/rasff",     tags=["rasff"])
 app.include_router(standards_router, prefix="/v1/standards", tags=["standards"])
 app.include_router(hazards_router,   prefix="/v1/hazards",   tags=["hazards"])
 app.include_router(classify_router,  prefix="/v1/classify",  tags=["classify"])
+app.include_router(health_router,    prefix="/v1/health",    tags=["health"])
 
 @app.get("/", include_in_schema=False)
 async def root():

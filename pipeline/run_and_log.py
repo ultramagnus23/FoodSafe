@@ -48,6 +48,7 @@ SOURCES = {
     "standards_codex_contaminants": ("pipeline.sources.standards_codex_contaminants", "run",  None,             True),
     "standards_us":         ("pipeline.sources.standards_us",         "run",                  None,             True),
     "hazard_kb":            ("pipeline.sources.hazard_kb",            "run",                  None,             True),
+    "country_indicators":   ("pipeline.sources.country_indicators",   "run",                  None,             True),
 }
 
 # Sources where zero rows ingested is a known, accepted outcome (documented

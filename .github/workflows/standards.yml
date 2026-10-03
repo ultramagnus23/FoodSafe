@@ -93,6 +93,13 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.run_and_log hazard_kb
 
+      - name: Country context — WHO GHO food-safety capacity + global foodborne burden, World Bank nutrition
+        id: country_indicators
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log country_indicators
+
       - name: Recompute India vs EU / Codex / US comparison
         id: standards_compare
         env:

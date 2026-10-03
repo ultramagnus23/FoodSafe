@@ -49,6 +49,7 @@ FRIENDLY = {
     "rasff": "EU RASFF notifications (India-origin food)",
     "rasff_global": "EU RASFF notifications (all origins)",
     "health_profile": "Health-outcome profiles of recorded contamination",
+    "country_indicators": "WHO / World Bank country indicators",
     "fssai_annual_report": "FSSAI Annual Report metrics",
     "local_news": "Local news (5 metros)",
     "research_evidence": "OpenAlex evidence",
