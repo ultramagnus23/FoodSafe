@@ -96,6 +96,50 @@ limits for the same pair, the pair is flagged `india_internal_conflict` and the
 **lower** (stricter) value is used, so an "India is more permissive" flag is never
 inflated by it.
 
+## Why limits differ, and the reason recorded for each gap
+
+* **Pesticide limits follow authorised use.** JMPR (and national regulators the same
+  way) estimate maximum residue levels from residue data on how a pesticide is used,
+  and set acceptable intakes from the toxicology
+  ([FAO/WHO JMPR](https://www.who.int/groups/joint-fao-who-meeting-on-pesticide-residues-(jmpr))).
+  A country that permits a use on a crop sets a limit that allows for it.
+* **Where the EU permits no use, its limit is the detection floor:** a limit at the
+  limit of quantification (LOQ) for substances not approved, or not approved on that
+  food, and 0.01 mg/kg wherever no specific limit exists
+  ([Reg. (EC) 396/2005](http://data.europa.eu/eli/reg/2005/396/oj), Art. 18(1)(b)).
+  Such a limit means "should not be found", not "safe up to here".
+* **US:** no tolerance means no legal residue; a tolerance must give "a reasonable
+  certainty of no harm", with an additional tenfold safety factor for children unless
+  data support another
+  ([FQPA summary, EPA](https://www.epa.gov/laws-regulations/summary-food-quality-protection-act)).
+* **Codex** is the international reference: WTO members base their measures on it and
+  may go further with scientific justification
+  ([SPS Agreement](https://www.wto.org/english/tratop_e/sps_e/spsagr_e.htm), Art. 3).
+* **Contaminants** are not used on purpose: levels "shall be as low as reasonably
+  achievable through best practices such as good agricultural practice (GAP) and good
+  manufacturing practice (GMP) following an appropriate risk assessment" (CXS 193), so
+  maximum levels also reflect what a food supply can meet.
+
+`models/standards_compare.eu_gap_reason` reads, for every pesticide pair where
+India's limit is above the EU's, why the EU's is lower — from the EU value itself
+(its basis and the printed `*` LOQ marker) and the substance's EU approval status:
+
+| flag | the EU value is… |
+|---|---|
+| `eu_gap_not_approved` | at the LOQ, and the substance is not approved in the EU |
+| `eu_gap_no_use_on_food` | at the LOQ for this food, though the substance is approved (no authorised EU use on it) |
+| `eu_gap_never_assessed` | the 0.01 mg/kg default: no EU residue definition |
+| `eu_gap_at_loq` | at the LOQ, approval status unknown or mixed |
+| `eu_gap_both_permit` | above the LOQ: both permit use on this food, India's limit is higher |
+
+On the first full run: of 759 pesticide pairs where India is higher, **683** are
+pesticides the EU does not permit on that food (497 not approved, 94 approved but
+not for that food, 92 never assessed; median India ÷ EU 10×, 40×, 20×). Only **76**
+involve a use both permit, where India's limit is a median **3×** the EU's. The other
+72 India-higher pairs are contaminants. `GET /v1/standards/summary` serves the
+current breakdown (`india_higher_than_eu_why`); `/v1/standards/compare?flag=…`
+filters by it.
+
 ## First full run (local verification, 2026-10-03)
 
 All six parsers run against the live documents; loaded into a scratch Postgres built

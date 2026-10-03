@@ -70,8 +70,12 @@ Measured on a database built from the live sources (production loads run in CI;
 the portal and `GET /v1/standards/summary` always show current values):
 
 * India permits more than the EU in **831 of 1,711** food–hazard pairs it regulates
-  (pesticides 759 of 1,297; contaminants 72 of 414). 183 of the EU values are its
-  0.01 mg/kg default for pesticides it never assessed.
+  (pesticides 759 of 1,297; contaminants 72 of 414). **Why:** in 683 of the 759
+  pesticide pairs the EU permits no use of that pesticide on that food (497 not
+  approved in the EU, 94 approved but not for that food, 92 never assessed), so its
+  limit is the detection floor — "should not be found", not a safe level. Only 76
+  involve a use both permit; there India's limit is a median 3× the EU's
+  (`docs/STANDARDS.md`, "Why limits differ").
 * **114** of the pesticides India sets food limits for are not approved in the EU
   (approval status of the specific substance, from the EU Pesticides Database).
 * Lead in dried spices: India 10 mg/kg vs EU 0.6–1.5 and Codex 0.6–2.0. Aflatoxin M1

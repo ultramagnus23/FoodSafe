@@ -340,6 +340,32 @@ def test_compare_tiers_defaults_and_flags():
     assert "india_internal_conflict" in cb["flags"] and cb["IN"]["value"] == Decimal("0.5")   # stricter reading
 
 
+def test_eu_gap_reason_is_read_from_the_eu_value():
+    def loq(r):
+        return {**r, "at_loq": True}
+    rows = [
+        _row("IN", "fenobucarb", ["rice"], 0.05),                                   # no EU residue definition
+        _row("IN", "monocrotophos", ["rice"], 0.05), loq(_row("EU", "monocrotophos", ["rice"], 0.01)),
+        _row("IN", "acetamiprid", ["rice"], 0.5), loq(_row("EU", "acetamiprid", ["rice"], 0.01)),
+        _row("IN", "tricyclazole", ["rice"], 3), _row("EU", "tricyclazole", ["rice"], 0.09),
+        _row("IN", "oldone", ["rice"], 0.5), loq(_row("EU", "oldone", ["rice"], 0.01)),
+        _row("IN", "lowone", ["rice"], 0.005), _row("EU", "lowone", ["rice"], 0.01),
+        _row("IN", "lead", ["rice"], 0.3, stype="contaminant_ml"), _row("EU", "lead", ["rice"], 0.2, stype="contaminant_ml"),
+    ]
+    subs = {"monocrotophos": ("Not approved", None), "acetamiprid": ("Approved", "3"), "tricyclazole": ("Not approved", None),
+            "oldone": (None, None)}
+    eu_hazards = {"monocrotophos", "acetamiprid", "tricyclazole", "oldone", "lowone"}
+    recs = {(r["hazard_key"]): r for r in SC.compare(rows, {"rice"}, eu_hazards, subs)}
+    reason = {k: [f for f in r["flags"] if f.startswith("eu_gap_")] for k, r in recs.items()}
+    assert reason["fenobucarb"] == ["eu_gap_never_assessed"]
+    assert reason["monocrotophos"] == ["eu_gap_not_approved"]
+    assert reason["acetamiprid"] == ["eu_gap_no_use_on_food"]                    # approved, but not on rice
+    assert reason["tricyclazole"] == ["eu_gap_both_permit"]                       # EU value above quantification
+    assert reason["oldone"] == ["eu_gap_at_loq"]                                  # status unknown
+    assert reason["lowone"] == [] and "india_higher_than_eu" not in recs["lowone"]["flags"]
+    assert reason["lead"] == []                                                   # contaminants: no reason flag
+
+
 def test_compare_residual_only_when_nothing_better():
     rows = [_row("IN", "lead", ["tomato"], 2.5, "residual", "contaminant_ml"),
             _row("IN", "lead", ["tomato"], 0.1, "group", "contaminant_ml"),

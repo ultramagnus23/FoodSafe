@@ -60,6 +60,8 @@ export interface StandardsSummary {
   no_codex_standard: number;
   eu_default_applies: number;
   india_internal_conflict: number;
+  /** Why India's limit is above the EU's: eu_gap_* reason -> pairs, plus "contaminant". */
+  india_higher_than_eu_why?: Record<string, number>;
   india_pesticides: number;
   india_pesticides_not_approved_in_eu: number;
   hazards_in_kb: number;

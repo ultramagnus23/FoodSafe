@@ -46,8 +46,18 @@ function Ratio({ r }: { r: number | null }) {
   return <span className={`font-mono ${cls}`}>{r >= 10 ? int.format(Math.round(r)) : num.format(r)}×</span>;
 }
 
+// Why India's limit is above the EU's (models/standards_compare.eu_gap_reason).
+const GAP_LABEL: Record<string, string> = {
+  eu_gap_not_approved: "EU: not approved, detection-level limit",
+  eu_gap_no_use_on_food: "EU: no approved use on this food",
+  eu_gap_never_assessed: "EU: never assessed (0.01 default)",
+  eu_gap_at_loq: "EU: detection-level limit",
+  eu_gap_both_permit: "both permit use",
+};
+
 function Row({ c }: { c: Comparison }) {
   const notApproved = c.eu_status === "Not approved";
+  const gap = c.flags.find((f) => f in GAP_LABEL);
   return (
     <tr className="border-t border-line align-top">
       <td className="px-3 py-2.5">
@@ -68,7 +78,10 @@ function Row({ c }: { c: Comparison }) {
       <td className="px-3 py-2.5 text-right"><Value cell={c.eu} /></td>
       <td className="px-3 py-2.5 text-right"><Value cell={c.codex} /></td>
       <td className="px-3 py-2.5 text-right"><Value cell={c.us} /></td>
-      <td className="px-3 py-2.5 text-right"><Ratio r={c.eu.ratio_india_over} /></td>
+      <td className="px-3 py-2.5 text-right">
+        <Ratio r={c.eu.ratio_india_over} />
+        {gap && <div className="mt-0.5 text-[11px] leading-tight text-provenance">{GAP_LABEL[gap]}</div>}
+      </td>
     </tr>
   );
 }
@@ -123,6 +136,22 @@ export default function StandardsPage() {
         <Stat value={s?.india_pesticides_not_approved_in_eu} label="India-regulated pesticides not approved in the EU" />
         <Stat value={s?.eu_default_applies} label="EU values that are its 0.01 mg/kg default" />
       </div>
+
+      {s?.india_higher_than_eu_why && (s.india_higher_than_eu_why.eu_gap_both_permit ?? 0) > 0 && (
+        <p className="mb-8 max-w-prose leading-relaxed text-provenance">
+          <strong className="text-ink">Why most of the gap exists.</strong> Of the pesticide limits where India allows
+          more than the EU,{" "}
+          {int.format(
+            (s.india_higher_than_eu_why.eu_gap_not_approved ?? 0) +
+              (s.india_higher_than_eu_why.eu_gap_no_use_on_food ?? 0) +
+              (s.india_higher_than_eu_why.eu_gap_never_assessed ?? 0) +
+              (s.india_higher_than_eu_why.eu_gap_at_loq ?? 0),
+          )}{" "}
+          are pesticides the EU does not permit on that food at all, so its limit is the level a laboratory can just
+          detect: a statement that the residue should not be there, not a judgement of a safe level. Only{" "}
+          {int.format(s.india_higher_than_eu_why.eu_gap_both_permit ?? 0)} involve a use both permit.
+        </p>
+      )}
 
       <div className="mb-4 flex flex-wrap items-end gap-4">
         <label className="text-xs text-provenance">

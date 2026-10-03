@@ -30,6 +30,21 @@ Comparability guards (no ratio is computed when they fail):
     `india_internal_conflict` and the LOWER value is used for ratios — the
     stricter reading, so a 'more permissive' flag is never inflated by it.
 
+Why India's pesticide limit is above the EU's — one reason flag per such pair
+(`eu_gap_reason`), read from the EU value itself, not inferred:
+  eu_gap_never_assessed   the EU has no residue definition: the 0.01 mg/kg default
+  eu_gap_not_approved     the EU limit is set at the limit of quantification and
+                          the substance is not approved in the EU (no legal use)
+  eu_gap_no_use_on_food   EU limit at the limit of quantification for this food,
+                          though the substance is approved: no authorised EU use on it
+  eu_gap_at_loq           EU limit at the limit of quantification, approval status
+                          unknown or mixed
+  eu_gap_both_permit      the EU limit is above quantification: both permit use on
+                          this food, and India's limit is higher
+A limit at quantification means "no residue should be found", not a level judged
+safe, so most of the India > EU gap is the EU not permitting a use rather than
+the two setting different levels for the same use.
+
 Run after the standards loaders:  python -m models.standards_compare
 """
 
@@ -68,6 +83,24 @@ def pick(rows: list[dict]) -> tuple[Optional[Decimal], str, list[dict], bool]:
     if rows:
         return None, "not_numeric", rows, False
     return None, "none", [], False
+
+
+def eu_gap_reason(rec: dict) -> Optional[str]:
+    """For a pesticide pair where India's limit is above the EU's: why (see the
+    module docstring). None for anything else."""
+    if rec["standard_type"] != "pesticide_mrl" or "india_higher_than_eu" not in rec["flags"]:
+        return None
+    eu = rec["EU"]
+    if eu["basis"] == "eu_default":
+        return "eu_gap_never_assessed"
+    if eu["rows"] and all(r.get("at_loq") for r in eu["rows"]):
+        status = (rec.get("eu_status") or "").strip().lower()
+        if status.startswith("not approved"):
+            return "eu_gap_not_approved"
+        if status.startswith("approved"):
+            return "eu_gap_no_use_on_food"
+        return "eu_gap_at_loq"
+    return "eu_gap_both_permit"
 
 
 def compare(rows: list[dict], eu_foods_loaded: set[str], eu_hazards_loaded: set[str],
@@ -118,6 +151,9 @@ def compare(rows: list[dict], eu_foods_loaded: set[str], eu_hazards_loaded: set[
                 rec["flags"].append("no_us_tolerance")
             if india is not None and rec[j]["basis"] == "none" and j == "CODEX":
                 rec["flags"].append("no_codex_standard")
+        reason = eu_gap_reason(rec)
+        if reason:
+            rec["flags"].append(reason)
         out.append(rec)
     return out
 

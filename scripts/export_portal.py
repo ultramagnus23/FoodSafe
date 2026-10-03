@@ -76,7 +76,16 @@ def export(conn, out: Path) -> dict:
                  MAX(ratio_in_eu) AS max_ratio_eu,
                  COUNT(DISTINCT in_substance_key) FILTER (WHERE standard_type = 'pesticide_mrl'
                                                             AND eu_status = 'Not approved') AS not_approved_in_eu,
-                 COUNT(DISTINCT in_substance_key) FILTER (WHERE standard_type = 'pesticide_mrl') AS india_pesticides
+                 COUNT(DISTINCT in_substance_key) FILTER (WHERE standard_type = 'pesticide_mrl') AS india_pesticides,
+                 COUNT(*) FILTER (WHERE 'india_higher_than_eu' = ANY(flags)
+                                    AND standard_type = 'pesticide_mrl') AS higher_eu_pesticides,
+                 COUNT(*) FILTER (WHERE 'eu_gap_not_approved' = ANY(flags)) AS gap_not_approved,
+                 COUNT(*) FILTER (WHERE 'eu_gap_no_use_on_food' = ANY(flags)) AS gap_no_use_on_food,
+                 COUNT(*) FILTER (WHERE 'eu_gap_never_assessed' = ANY(flags)) AS gap_never_assessed,
+                 COUNT(*) FILTER (WHERE 'eu_gap_at_loq' = ANY(flags)) AS gap_at_loq,
+                 COUNT(*) FILTER (WHERE 'eu_gap_both_permit' = ANY(flags)) AS gap_both_permit,
+                 percentile_cont(0.5) WITHIN GROUP (ORDER BY ratio_in_eu)
+                     FILTER (WHERE 'eu_gap_both_permit' = ANY(flags)) AS gap_both_permit_median_ratio
                  FROM standards_comparison"""),
     }, {})
     files["standards_compare"] = rollback_safe(lambda: q(conn, """

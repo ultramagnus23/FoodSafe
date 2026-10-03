@@ -76,6 +76,10 @@ class SummaryOut(BaseModel):
     no_codex_standard: int
     eu_default_applies: int
     india_internal_conflict: int
+    # Why India's limit is above the EU's, per pair (models/standards_compare.eu_gap_reason):
+    # eu_gap_not_approved / _no_use_on_food / _never_assessed / _at_loq / _both_permit,
+    # plus 'contaminant' for contaminant maximum levels.
+    india_higher_than_eu_why: dict[str, int] = {}
     india_pesticides: int
     india_pesticides_not_approved_in_eu: int
     hazards_in_kb: int
@@ -102,6 +106,11 @@ async def standards_summary():
                       COUNT(*) FILTER (WHERE eu_basis = 'eu_default') AS eu_def,
                       COUNT(*) FILTER (WHERE 'india_internal_conflict' = ANY(flags)) AS conflict
                FROM standards_comparison""")
+        why = await conn.fetch(
+            """SELECT CASE WHEN standard_type = 'contaminant_ml' THEN 'contaminant'
+                           ELSE (SELECT f FROM unnest(flags) f WHERE starts_with(f, 'eu_gap_') LIMIT 1) END AS reason,
+                      COUNT(*) AS n
+               FROM standards_comparison WHERE 'india_higher_than_eu' = ANY(flags) GROUP BY 1""")
         in_pest = await conn.fetchval(
             """SELECT COUNT(DISTINCT hazard_key) FROM food_standards
                WHERE jurisdiction='IN' AND standard_type='pesticide_mrl'""")
@@ -119,6 +128,7 @@ async def standards_summary():
         comparisons=c["n"] or 0, india_higher_than_eu=c["hi_eu"] or 0, india_higher_than_codex=c["hi_cx"] or 0,
         india_higher_than_us=c["hi_us"] or 0, no_us_tolerance=c["no_us"] or 0, no_codex_standard=c["no_cx"] or 0,
         eu_default_applies=c["eu_def"] or 0, india_internal_conflict=c["conflict"] or 0,
+        india_higher_than_eu_why={(r["reason"] or "unclassified"): r["n"] for r in why},
         india_pesticides=in_pest or 0, india_pesticides_not_approved_in_eu=not_eu or 0,
         hazards_in_kb=kb or 0, health_effect_rows=eff or 0, caveats=CAVEATS,
     )
