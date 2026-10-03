@@ -1,12 +1,28 @@
 # FoodSafe India
 
-A public register of what can actually be known about food safety enforcement
-in India — built on real data only, and honest about how little of it exists.
-FSSAI publishes no programmatically accessible enforcement dataset; this
-project ingests what *is* reachable, refuses to invent the rest, and treats the
-gap itself as a finding (see [`docs/PAPER_SCOPING.md`](docs/PAPER_SCOPING.md)).
+An open, evidence-first food-safety platform for India, built on public records
+only. It compares India's legal limits with the EU, Codex and the US; links the
+contamination found in food to the diseases its hazards cause (with sources);
+gives country, state and packaged-food nutrition context; and is honest about how
+little Indian testing data is public (see [`docs/PAPER_SCOPING.md`](docs/PAPER_SCOPING.md)).
 
-## Current state (checked 2026-09-19)
+**Public portal:** [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)
+(rebuilt daily from the production database). **Platform structure, models,
+findings and limits:** [`docs/PLATFORM.md`](docs/PLATFORM.md).
+
+## What was added on 2026-10-03
+
+| Area | What | Docs |
+|---|---|---|
+| Standards | ~56,000 legal limits from FSSAI (CTR compendium v IX), the EU (pesticide MRLs + Reg. 2023/915), Codex (CXLs + CXS 193) and the US (40 CFR 180); India-vs-world comparison of ~1,700 food–hazard pairs | [`docs/STANDARDS.md`](docs/STANDARDS.md) |
+| Hazard → health | IARC groups for 1,128 agents; 52 curated hazards with cited outcomes; ADI/ARfD/TDI values | [`docs/HAZARD_KB.md`](docs/HAZARD_KB.md) |
+| ML | hazard-category text classifier trained on 15,210 EU notifications, tested on 6,934 later ones: accuracy 0.918, macro-F1 0.777 | [`docs/MODEL_HAZARD_CLASSIFIER.md`](docs/MODEL_HAZARD_CLASSIFIER.md) |
+| Health | disease classification of every RASFF finding; health-outcome profiles per origin country; safe-intake calculator | `models/health_*.py`, `models/safe_intake.py` |
+| Places | RASFF for every origin country; WHO food-safety capacity + global foodborne burden; World Bank nutrition indicators; Indian state profiles | `country_indicators.py`, `api/routes/places.py` |
+| Nutrition | ~21,000 packaged foods sold in India (Open Food Facts) with UK front-of-pack traffic lights | `off_india.py`, `models/nutrition.py` |
+| API | `/v1/standards`, `/v1/hazards`, `/v1/classify`, `/v1/health`, `/v1/countries`, `/v1/global`, `/v1/nutrition`, `/v1/places`; `/v1/rasff` takes `origin` | `api/routes/` |
+
+## Current state (checked 2026-09-19; additions above dated 2026-10-03)
 
 Each line says how it was verified. Where something is only reported, it says so.
 
@@ -21,16 +37,17 @@ Each line says how it was verified. Where something is only reported, it says so
 - **Database:** Supabase, recreated 2026-09-11 and **real-only** — no synthetic
   rows (`seed_demo.sql` / `pipeline/seed_enforcement.py` are not loaded in
   production).
-- **Tests:** 329 passing (`pytest tests/`), CI green.
+- **Tests:** 510 passing on 2026-10-03 (`pytest tests/`), CI green.
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
   2026-09-16 (the actual service name may differ), and `food-safe.vercel.app`
   serves a different app.
-- **Static execution-record page** (GitHub Pages,
-  [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/),
-  HTTP 200 on 2026-09-19): a snapshot of one local validation run on 2026-07-27
-  read from `data/` — historical, not live data.
+- **Public portal** (GitHub Pages,
+  [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)):
+  since 2026-10-03 a live portal rebuilt daily from production by
+  `.github/workflows/deploy-pages.yml`; the July 2026 execution record moved to
+  [`record.html`](https://ultramagnus23.github.io/FoodSafe/record.html).
 
 ### What real data is in the database
 

@@ -29,6 +29,9 @@ from api.routes.rasff import rasff_router
 from api.routes.standards import standards_router, hazards_router
 from api.routes.classify import classify_router
 from api.routes.health import health_router
+from api.routes.countries import countries_router, global_router
+from api.routes.nutrition import nutrition_router
+from api.routes.places import places_router
 from api.other_routes import search_router, fmcg_router, insurance_router, meta_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -179,6 +182,10 @@ app.include_router(standards_router, prefix="/v1/standards", tags=["standards"])
 app.include_router(hazards_router,   prefix="/v1/hazards",   tags=["hazards"])
 app.include_router(classify_router,  prefix="/v1/classify",  tags=["classify"])
 app.include_router(health_router,    prefix="/v1/health",    tags=["health"])
+app.include_router(countries_router, prefix="/v1/countries", tags=["countries"])
+app.include_router(global_router,    prefix="/v1/global",    tags=["global"])
+app.include_router(nutrition_router, prefix="/v1/nutrition", tags=["nutrition"])
+app.include_router(places_router,    prefix="/v1/places",    tags=["places"])
 
 @app.get("/", include_in_schema=False)
 async def root():

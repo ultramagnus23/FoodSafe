@@ -156,8 +156,9 @@ jobs:
 
   knowledge:
     needs: [schema, eu_pesticides, rulebooks]
-    # Run even if a loader job failed or timed out; never if the schema is missing.
-    if: ${{ always() && needs.schema.result == 'success' }}
+    # Run even if a loader job failed or timed out; not if the run was cancelled or
+    # the schema is missing (always() would also fire on cancellation).
+    if: ${{ !cancelled() && needs.schema.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
