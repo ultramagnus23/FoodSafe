@@ -83,9 +83,9 @@ def export(conn, out: Path) -> dict:
                  COUNT(*) FILTER (WHERE 'eu_gap_no_use_on_food' = ANY(flags)) AS gap_no_use_on_food,
                  COUNT(*) FILTER (WHERE 'eu_gap_never_assessed' = ANY(flags)) AS gap_never_assessed,
                  COUNT(*) FILTER (WHERE 'eu_gap_at_loq' = ANY(flags)) AS gap_at_loq,
-                 COUNT(*) FILTER (WHERE 'eu_gap_both_permit' = ANY(flags)) AS gap_both_permit,
+                 COUNT(*) FILTER (WHERE 'eu_gap_above_loq' = ANY(flags)) AS gap_above_loq,
                  percentile_cont(0.5) WITHIN GROUP (ORDER BY ratio_in_eu)
-                     FILTER (WHERE 'eu_gap_both_permit' = ANY(flags)) AS gap_both_permit_median_ratio
+                     FILTER (WHERE 'eu_gap_above_loq' = ANY(flags)) AS gap_above_loq_median_ratio
                  FROM standards_comparison"""),
     }, {})
     files["standards_compare"] = rollback_safe(lambda: q(conn, """

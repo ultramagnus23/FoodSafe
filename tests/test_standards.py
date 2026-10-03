@@ -360,7 +360,7 @@ def test_eu_gap_reason_is_read_from_the_eu_value():
     assert reason["fenobucarb"] == ["eu_gap_never_assessed"]
     assert reason["monocrotophos"] == ["eu_gap_not_approved"]
     assert reason["acetamiprid"] == ["eu_gap_no_use_on_food"]                    # approved, but not on rice
-    assert reason["tricyclazole"] == ["eu_gap_both_permit"]                       # EU value above quantification
+    assert reason["tricyclazole"] == ["eu_gap_above_loq"]                         # EU value above quantification
     assert reason["oldone"] == ["eu_gap_at_loq"]                                  # status unknown
     assert reason["lowone"] == [] and "india_higher_than_eu" not in recs["lowone"]["flags"]
     assert reason["lead"] == []                                                   # contaminants: no reason flag

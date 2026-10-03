@@ -52,7 +52,7 @@ const GAP_LABEL: Record<string, string> = {
   eu_gap_no_use_on_food: "EU: no approved use on this food",
   eu_gap_never_assessed: "EU: never assessed (0.01 default)",
   eu_gap_at_loq: "EU: detection-level limit",
-  eu_gap_both_permit: "both permit use",
+  eu_gap_above_loq: "EU sets a residue level",
 };
 
 function Row({ c }: { c: Comparison }) {
@@ -137,7 +137,7 @@ export default function StandardsPage() {
         <Stat value={s?.eu_default_applies} label="EU values that are its 0.01 mg/kg default" />
       </div>
 
-      {s?.india_higher_than_eu_why && (s.india_higher_than_eu_why.eu_gap_both_permit ?? 0) > 0 && (
+      {s?.india_higher_than_eu_why && (s.india_higher_than_eu_why.eu_gap_above_loq ?? 0) > 0 && (
         <p className="mb-8 max-w-prose leading-relaxed text-provenance">
           <strong className="text-ink">Why most of the gap exists.</strong> Of the pesticide limits where India allows
           more than the EU,{" "}
@@ -148,8 +148,9 @@ export default function StandardsPage() {
               (s.india_higher_than_eu_why.eu_gap_at_loq ?? 0),
           )}{" "}
           are pesticides the EU does not permit on that food at all, so its limit is the level a laboratory can just
-          detect: a statement that the residue should not be there, not a judgement of a safe level. Only{" "}
-          {int.format(s.india_higher_than_eu_why.eu_gap_both_permit ?? 0)} involve a use both permit.
+          detect: a statement that the residue should not be there, not a judgement of a safe level. In only{" "}
+          {int.format(s.india_higher_than_eu_why.eu_gap_above_loq ?? 0)} does the EU set a residue level above detection
+          (for an EU use, an import tolerance or a temporary limit).
         </p>
       )}
 

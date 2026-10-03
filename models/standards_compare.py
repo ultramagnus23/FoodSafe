@@ -39,11 +39,13 @@ Why India's pesticide limit is above the EU's — one reason flag per such pair
                           though the substance is approved: no authorised EU use on it
   eu_gap_at_loq           EU limit at the limit of quantification, approval status
                           unknown or mixed
-  eu_gap_both_permit      the EU limit is above quantification: both permit use on
-                          this food, and India's limit is higher
+  eu_gap_above_loq        the EU sets a residue level above quantification (an
+                          authorised EU use, an import tolerance or a temporary
+                          limit; for a substance not approved in the EU it is one
+                          of the latter two), and India's limit is higher still
 A limit at quantification means "no residue should be found", not a level judged
 safe, so most of the India > EU gap is the EU not permitting a use rather than
-the two setting different levels for the same use.
+the EU tolerating a smaller residue.
 
 Run after the standards loaders:  python -m models.standards_compare
 """
@@ -100,7 +102,7 @@ def eu_gap_reason(rec: dict) -> Optional[str]:
         if status.startswith("approved"):
             return "eu_gap_no_use_on_food"
         return "eu_gap_at_loq"
-    return "eu_gap_both_permit"
+    return "eu_gap_above_loq"
 
 
 def compare(rows: list[dict], eu_foods_loaded: set[str], eu_hazards_loaded: set[str],

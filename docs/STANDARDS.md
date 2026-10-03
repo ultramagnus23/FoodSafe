@@ -130,12 +130,13 @@ India's limit is above the EU's, why the EU's is lower — from the EU value its
 | `eu_gap_no_use_on_food` | at the LOQ for this food, though the substance is approved (no authorised EU use on it) |
 | `eu_gap_never_assessed` | the 0.01 mg/kg default: no EU residue definition |
 | `eu_gap_at_loq` | at the LOQ, approval status unknown or mixed |
-| `eu_gap_both_permit` | above the LOQ: both permit use on this food, India's limit is higher |
+| `eu_gap_above_loq` | above the LOQ: the EU sets a residue level (an authorised EU use, an import tolerance or a temporary limit — the latter two for the 29 of 76 not approved in the EU), and India's is higher |
 
 On the first full run: of 759 pesticide pairs where India is higher, **683** are
 pesticides the EU does not permit on that food (497 not approved, 94 approved but
-not for that food, 92 never assessed; median India ÷ EU 10×, 40×, 20×). Only **76**
-involve a use both permit, where India's limit is a median **3×** the EU's. The other
+not for that food, 92 never assessed; median India ÷ EU 10×, 40×, 20×). In only
+**76** does the EU set a residue level above detection; there India's limit is a
+median **3×** the EU's. The other
 72 India-higher pairs are contaminants. `GET /v1/standards/summary` serves the
 current breakdown (`india_higher_than_eu_why`); `/v1/standards/compare?flag=…`
 filters by it.

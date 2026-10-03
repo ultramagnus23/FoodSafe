@@ -77,7 +77,7 @@ class SummaryOut(BaseModel):
     eu_default_applies: int
     india_internal_conflict: int
     # Why India's limit is above the EU's, per pair (models/standards_compare.eu_gap_reason):
-    # eu_gap_not_approved / _no_use_on_food / _never_assessed / _at_loq / _both_permit,
+    # eu_gap_not_approved / _no_use_on_food / _never_assessed / _at_loq / _above_loq,
     # plus 'contaminant' for contaminant maximum levels.
     india_higher_than_eu_why: dict[str, int] = {}
     india_pesticides: int

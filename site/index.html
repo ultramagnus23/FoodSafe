@@ -237,7 +237,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 2rem 1.25rem 4rem; font-siz
       <p><strong>The US permits no residue without a tolerance</strong>, and a tolerance must give "a reasonable certainty of no harm", with an extra tenfold safety factor for children unless data support another (<a href="https://www.epa.gov/laws-regulations/summary-food-quality-protection-act">Food Quality Protection Act</a>).</p>
       <p><strong>Codex limits are the international reference.</strong> Under the WTO's SPS Agreement, countries base their measures on them, and may be stricter where there is scientific justification (<a href="https://www.wto.org/english/tratop_e/sps_e/spsagr_e.htm">SPS Agreement, Art. 3</a>).</p>
       <p><strong>Contaminants are not used on purpose</strong> (metals, mycotoxins), so their limits are set as low as reasonably achievable with good agricultural and manufacturing practice, after a risk assessment (<a href="https://openknowledge.fao.org/server/api/core/bitstreams/4d0e7245-8166-49ca-b822-ca80a1ff5cfe/content">Codex CXS 193</a>). They reflect what a food supply can meet as well as toxicity.</p>
-      <p class="note">Each pair in the table above carries its reason: whether the EU's value is a detection-level limit for a pesticide it does not permit on that food, its 0.01 default, or a limit for a use both permit.</p>
+      <p class="note">Each pair in the table above carries its reason: whether the EU's value is a detection-level limit for a pesticide it does not permit on that food, its 0.01 default, or a residue level the EU does set (for an EU use, an import tolerance or a temporary limit).</p>
     </div>
   </section>
 
@@ -364,7 +364,7 @@ async function findings() {
       `The largest gap is ${fmt(f.max_ratio_eu)} times. ${fmt(f.eu_default)} of the EU values are its general 0.01 mg/kg default for pesticides it never assessed.`, "#standards"]);
     const floor = (f.gap_not_approved || 0) + (f.gap_no_use_on_food || 0) + (f.gap_never_assessed || 0) + (f.gap_at_loq || 0);
     if (f.higher_eu_pesticides && floor) items.push([fmt(floor), `of the ${fmt(f.higher_eu_pesticides)} pesticide limits where India permits more than the EU are cases where the EU permits no use of that pesticide on that food, so its limit sits at the level a laboratory can just detect.`,
-      `${fmt(f.gap_not_approved)} not approved in the EU, ${fmt(f.gap_no_use_on_food)} approved but not for that food, ${fmt(f.gap_never_assessed)} never assessed. Only ${fmt(f.gap_both_permit)} involve a use both permit; there India's limit is a median ${fmt(f.gap_both_permit_median_ratio, 1)} times the EU's.`, "#why-limits"]);
+      `${fmt(f.gap_not_approved)} not approved in the EU, ${fmt(f.gap_no_use_on_food)} approved but not for that food, ${fmt(f.gap_never_assessed)} never assessed. In only ${fmt(f.gap_above_loq)} does the EU set a residue level above detection; there India's limit is a median ${fmt(f.gap_above_loq_median_ratio, 1)} times the EU's.`, "#why-limits"]);
     if (f.not_approved_in_eu) items.push([fmt(f.not_approved_in_eu), `of the ${fmt(f.india_pesticides)} pesticides India sets food limits for are not approved for use in the EU.`, "Approval status from the EU Pesticides Database; the substance, not its residue family, decides.", "#standards"]);
     const IN = (co || []).find(c => c.origin === "IN"), rank = (co || []).findIndex(c => c.origin === "IN") + 1;
     if (IN) items.push([fmt(IN.notifications), `EU border and market notifications on food from India since 2020${rank ? `, the ${ordinal(rank)} most of any origin` : ""}.`, `${fmt(IN.serious)} were classed serious. These are risk-targeted checks of exports, not a sample of food eaten in India.`, "#health"]);
@@ -402,8 +402,8 @@ function ratio(r) {
   return `<span class="badge ${cls}">${txt}</span>`;
 }
 const GAP = { eu_gap_not_approved: "EU: not approved, detection-level limit", eu_gap_no_use_on_food: "EU: no approved use on this food",
-  eu_gap_never_assessed: "EU: never assessed (0.01 default)", eu_gap_at_loq: "EU: detection-level limit", eu_gap_both_permit: "both permit use" };
-const gapTag = (flags) => { const g = (flags || []).find(x => GAP[x]); return g ? ` <span class="tag${g === "eu_gap_both_permit" ? " caution" : ""}">${esc(GAP[g])}</span>` : ""; };
+  eu_gap_never_assessed: "EU: never assessed (0.01 default)", eu_gap_at_loq: "EU: detection-level limit", eu_gap_above_loq: "EU sets a residue level" };
+const gapTag = (flags) => { const g = (flags || []).find(x => GAP[x]); return g ? ` <span class="tag${g === "eu_gap_above_loq" ? " caution" : ""}">${esc(GAP[g])}</span>` : ""; };
 function renderStd() {
   const food = $("#std-food").value, q = $("#std-q").value.trim().toLowerCase(), t = $("#std-type").value, more = $("#std-more").checked;
   let rows = STD.filter(r => (!food || r.f === food) && (!t || r.t === t) && (!more || (r.flags || []).includes("india_higher_than_eu"))
