@@ -1,0 +1,51 @@
+name: RASFF backfill (all origins, on demand)
+
+# One-off catch-up for the all-origins RASFF feed: the daily ingest fetches
+# 1,500 notification details per run; this lets a maintainer work off the
+# initial ~32,800-notification backlog in a few runs. Same code path as the
+# daily step (pipeline.sources.rasff.run_global). Idempotent.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "max notification details to fetch this run"
+        default: "12000"
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary
+      - name: Sync database schema (idempotent)
+        id: bootstrap_db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.bootstrap_db
+      - name: Backfill EU RASFF notifications (every origin)
+        id: rasff_global
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log rasff_global --limit "${{ github.event.inputs.limit || '12000' }}"
+      - name: Recompute health-outcome profiles
+        id: health_profile
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m models.health_profile
+      - name: Alert on failed steps
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py

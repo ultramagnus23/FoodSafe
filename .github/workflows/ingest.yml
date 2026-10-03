@@ -145,6 +145,27 @@ jobs:
         # endpoint can't be reached at all, rather than looking like "no news".
         run: python -m pipeline.run_and_log rasff --limit 400
 
+      - name: Refresh EU RASFF notifications (every origin country)
+        id: rasff_global
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # ~32,800 notifications; the backlog is worked off 1,500 details/run
+        # Same tables as the India step (schema_migration_023 dropped the
+        # India-only CHECK); every API route filters by origin, India by default.
+        # The list is read newest-first and stops after two fully known pages,
+        # so after the first run this reads a few pages, not 330. Larger one-off
+        # backfills: .github/workflows/rasff-backfill.yml.
+        run: python -m pipeline.run_and_log rasff_global --limit 1500
+
+      - name: Recompute health-outcome profiles of recorded contamination
+        id: health_profile
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true   # derived view; a failure must not block the remaining ingest steps
+        # models/health_profile.py: re-classifies every RASFF hazard with the
+        # current knowledge base and writes health_outcome_profile (migration 024).
+        run: python -m models.health_profile
+
       - name: Refresh FSSAI Annual Report national enforcement metrics
         id: fssai_annual_report
         env:
