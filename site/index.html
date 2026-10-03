@@ -500,12 +500,12 @@ async function classify() {
     const { probs, why } = score(M, text);
     const top = probs[0];
     const kb = hit && hz.find(h => h.hazard_key === hit.key);
-    const decided = hit ? "the knowledge base matched a named hazard" : top[1] >= 0.6 ? "the model is confident enough" : "neither layer is confident: category unknown";
-    const effects = kb ? kb.effects : [];
+    const decided = hit ? (hit.pclass ? `the knowledge base knows it as ${/^[aeiou]/.test(hit.pclass) ? "an" : "a"} ${hit.pclass.replace(/_/g, " ")} pesticide` : "the knowledge base matched a named hazard") : top[1] >= 0.6 ? "the model is confident enough" : "neither layer is confident: category unknown";
+    const effects = kb ? kb.effects : hit && hit.effects ? hit.effects : [];
     out.innerHTML = `<div class="result">
       <h3>${hit ? esc(hit.name) : top[1] >= 0.6 ? esc(cap(top[0])) : "Unknown"}</h3>
       <p class="note">Decided because ${esc(decided)}.${hit ? ` Hazard class: ${esc(hit.class.replace(/_/g, " "))}.` : ""}</p>
-      ${effects.length ? `<h3>What this hazard can cause</h3><ul>${effects.map(e => `<li>${esc(e.outcome)} <span class="muted">(${esc(e.exposure)}${e.onset ? ", " + esc(e.onset) : ""})</span> — <a href="${esc(e.url)}">${esc(e.source)}</a></li>`).join("")}</ul>` : hit ? `<p class="note">No single health outcome is asserted for this hazard.</p>` : ""}
+      ${effects.length ? `<h3>What this ${hit && hit.pclass ? "class of pesticide" : "hazard"} can cause</h3><ul>${effects.map(e => `<li>${esc(e.outcome)} <span class="muted">(${esc(e.exposure)}${e.onset ? ", " + esc(e.onset) : ""})</span> — <a href="${esc(e.url)}">${esc(e.source)}</a></li>`).join("")}</ul>` : hit ? `<p class="note">No single health outcome is asserted for this hazard.</p>` : ""}
       <h3>Model</h3>
       ${probs.slice(0, 3).map(p => `<div class="prob"><span>${esc(cap(p[0]))}</span><div class="track" aria-hidden="true"><div class="fill" style="transform:scaleX(${p[1]})"></div></div><span class="data">${Math.round(100 * p[1])}%</span></div>`).join("")}
       ${why.length ? `<p class="why">Driven by: ${esc(why.join(", "))}</p>` : ""}

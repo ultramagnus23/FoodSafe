@@ -37,7 +37,14 @@ Each line says how it was verified. Where something is only reported, it says so
 - **Database:** Supabase, recreated 2026-09-11 and **real-only** — no synthetic
   rows (`seed_demo.sql` / `pipeline/seed_enforcement.py` are not loaded in
   production).
-- **Tests:** 510 passing on 2026-10-03 (`pytest tests/`), CI green.
+- **Tests:** 536 passing on 2026-10-03 (`pytest tests/`).
+- **Standards, knowledge base, countries, packaged foods in production:** the
+  2026-10-03 run of `standards.yml` (run 37091692036, job logs) loaded 56,619
+  legal limits (FSSAI 1,573; EU 35,351 MRLs + 403 contaminant levels; Codex
+  6,490 + 134; US 12,668), 789 hazard→outcome links, 39,172 country indicator
+  values, 10,494 WHO burden rows and 21,188 packaged foods, and recomputed 1,711
+  India-vs-world comparisons (India above the EU in 831) — the same counts as the
+  local verification. Whole run: 9 minutes.
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
@@ -46,8 +53,10 @@ Each line says how it was verified. Where something is only reported, it says so
 - **Public portal** (GitHub Pages,
   [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)):
   since 2026-10-03 a live portal rebuilt daily from production by
-  `.github/workflows/deploy-pages.yml`; the July 2026 execution record moved to
-  [`record.html`](https://ultramagnus23.github.io/FoodSafe/record.html).
+  `.github/workflows/deploy-pages.yml`; checked in a browser on 2026-10-03 after
+  the production loads (standards, hazards, safe intake, countries, burden,
+  states, nutrition, sources render; no console errors). The July 2026 execution
+  record moved to [`record.html`](https://ultramagnus23.github.io/FoodSafe/record.html).
 
 ### What real data is in the database
 

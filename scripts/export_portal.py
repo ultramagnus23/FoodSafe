@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -150,8 +151,29 @@ def export(conn, out: Path) -> dict:
     from pipeline.sources import hazard_kb as KB
     rules = [{"pattern": rx.pattern, "key": k, "name": KB.HAZARDS[k]["name"], "class": KB.HAZARDS[k]["hazard_class"]}
              for rx, k in _ALIASES]
+    # Then pesticides by chemical class, after the named hazards — the same order as
+    # models.health_classifier.classify_hazard (kb name/alias, then pesticide class).
+    rules += _pesticide_class_rules(KB)
     (out / "hazard_rules.json").write_text(json.dumps(rules), encoding="utf-8")
     return meta
+
+
+def _pesticide_class_rules(KB) -> list[dict]:
+    """In-browser rules for pesticides the KB knows only by class (e.g. chlorpyrifos ->
+    organophosphate), carrying the class's cited effects. Member keys are normalised
+    ('chlorpyrifosmethyl'), so '-methyl' variants also match 'chlorpyrifos-methyl'."""
+    rules = []
+    for cls, d in KB.PESTICIDE_CLASSES.items():
+        effects = [{"outcome": e["outcome"], "organ": e["organ_system"], "exposure": e["exposure"], "onset": e["onset"],
+                    "vulnerable": e["vulnerable_groups"], "evidence": e["evidence"],
+                    "source": KB.SRC[e["source"]][0], "url": KB.SRC[e["source"]][1]} for e in d["effects"]]
+        for m in d["members"]:
+            if m == "aldrinanddieldrin":            # a combined residue definition; both parts are members
+                continue
+            rules.append({"pattern": r"\b" + re.sub(r"methyl$", r"[\\s-]?methyl", m) + r"\b", "key": m,
+                          "name": m.upper() if len(m) <= 3 else re.sub(r"methyl$", "-methyl", m).capitalize(),
+                          "class": "pesticide", "pclass": cls, "effects": effects})
+    return sorted(rules, key=lambda r: -len(r["key"]))     # 'chlorpyrifos-methyl' before 'chlorpyrifos'
 
 
 def _measured(conn) -> list[dict]:
