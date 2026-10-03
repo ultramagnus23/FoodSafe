@@ -31,7 +31,7 @@ daily from the production database) and the REST API (`/v1/...`, docs at `/docs`
 
 | Layer | What it holds | Where |
 |---|---|---|
-| **Contamination records** | EU RASFF notifications, every origin, 2020→ (~32,800; India ~2,200) with measured values vs legal limits; Lok Sabha state sampling outcomes (2013-14→2025-26) and pesticide-residue monitoring (2012-13→2018-19); FSSAI annual report; openFDA (comparison); local news | `rasff.py`, `loksabha_*.py`, `fssai_annual_report.py`, `openfda.py`, `local_news.py` |
+| **Contamination records** | EU RASFF notifications, every origin, 2018→ (32,786 with 35,208 classified hazards in production on 2026-10-03; India 2,228) with measured values vs legal limits; Lok Sabha state sampling outcomes (2013-14→2025-26) and pesticide-residue monitoring (2012-13→2018-19); FSSAI annual report; openFDA (comparison); local news | `rasff.py`, `loksabha_*.py`, `fssai_annual_report.py`, `openfda.py`, `local_news.py` |
 | **Standards** | ~56,000 legal limits from four rule-books, keyed for comparison; ~1,700 India-vs-world comparisons with the basis of every value | `standards_*.py`, `models/standards_compare.py`, `docs/STANDARDS.md` |
 | **Hazard → health knowledge** | IARC classification of 1,128 agents; 52 curated hazards and 5 pesticide classes with outcomes, organ systems, timing, vulnerable groups, each cited (WHO, IARC, EFSA, EPA, CDC, FAO); ADI/ARfD/TDI reference values (EFSA, JMPR, JECFA) | `hazard_kb.py`, `docs/HAZARD_KB.md` |
 | **Models** | (a) hazard-category text classifier (ML); (b) disease classification of findings (knowledge base); (c) health-outcome profiles per origin; (d) safe-intake calculator; (e) nutrition classification; (f) state sampling backtest | `models/hazard_text_classifier.py`, `health_classifier.py`, `health_profile.py`, `safe_intake.py`, `nutrition.py`, `backtest_sampling.py` |
@@ -82,13 +82,15 @@ the portal and `GET /v1/standards/summary` always show current values):
 * Lead in dried spices: India 10 mg/kg vs EU 0.6–1.5 and Codex 0.6–2.0. Aflatoxin M1
   in milk: India 0.5 µg/kg vs EU 0.05. Total aflatoxins in spices: India 30 µg/kg vs
   EU 10, Codex 20 (chilli).
-* Food from India drew **2,118** EU notifications in 2020–2026 on the local run. In production on
-  2026-10-03 (all-origin backfill still running): **2,228**, third after Türkiye (3,183) and
-  Poland (2,318, almost all EU-market checks of its own products rather than border
-  rejections); the portal always shows the current rank.
-  Linked through the knowledge base, the leading implied outcomes are cancer (662
-  findings, mostly ethylene oxide), acute cholinergic poisoning from organophosphate
-  pesticides (375), aflatoxin liver toxicity (164) and salmonellosis (145).
+* Food from India drew **2,228** EU notifications (production, 2026-10-03, every
+  origin loaded: 32,786 notifications from 164 origins): third after Türkiye (3,183)
+  and Poland (2,318, almost all EU-market checks of its own products rather than
+  border rejections); the portal always shows the current rank.
+  Linked through the knowledge base, the leading implied outcomes for India are
+  cancer (669 findings, 36% of those classified, mostly ethylene oxide), acute
+  cholinergic poisoning from organophosphate and carbamate pesticides (381), aflatoxin
+  liver damage (193) and gastroenteritis (170). Health-outcome profiles cover 97
+  origin countries.
 * WHO's 2021 global estimate of foodborne deaths, as loaded: **1.52 million**,
   matching WHO's published figure; inorganic arsenic (641,000) and lead (466,000) lead.
 * India: anaemia in 53.7% of women of reproductive age, stunting in 32.9% of children

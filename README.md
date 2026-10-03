@@ -45,6 +45,11 @@ Each line says how it was verified. Where something is only reported, it says so
   values, 10,494 WHO burden rows and 21,188 packaged foods, and recomputed 1,711
   India-vs-world comparisons (India above the EU in 831) — the same counts as the
   local verification. Whole run: 9 minutes.
+- **EU RASFF, every origin, in production:** backfilled 2026-10-03 (runs
+  37105982825 and 37109255918, job logs): 32,786 notifications from 164 origins,
+  35,208 classified hazards, health-outcome profiles for 97 origin countries;
+  India 2,228 notifications (third after Türkiye and Poland). 28 details failed
+  with transient HTTP 500s and are retried by the daily run.
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
