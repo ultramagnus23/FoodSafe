@@ -172,30 +172,29 @@ def fetch_all() -> dict:
 
 
 def load(conn, data: dict) -> dict:
+    from psycopg2.extras import execute_batch
     with conn.cursor() as cur:
-        for c in data["countries"]:
-            cur.execute(
-                """INSERT INTO countries (iso3, iso2, name, region, income_level, is_aggregate, updated_at)
-                   VALUES (%s,%s,%s,%s,%s,%s,NOW())
-                   ON CONFLICT (iso3) DO UPDATE SET iso2=EXCLUDED.iso2, name=EXCLUDED.name, region=EXCLUDED.region,
-                     income_level=EXCLUDED.income_level, is_aggregate=EXCLUDED.is_aggregate, updated_at=NOW()""",
-                (c["iso3"], c["iso2"], c["name"], c["region"], c["income_level"], c["is_aggregate"]))
-        for r in data["indicators"]:
-            cur.execute(
-                """INSERT INTO country_indicators (iso3, indicator_code, indicator_name, source, year, value, unit, source_url)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                   ON CONFLICT (iso3, indicator_code, year) DO UPDATE SET value=EXCLUDED.value,
-                     indicator_name=EXCLUDED.indicator_name, unit=EXCLUDED.unit, loaded_at=NOW()""",
-                (r["iso3"], r["indicator_code"], r["indicator_name"], r["source"], r["year"], r["value"], r["unit"],
-                 r["source_url"]))
-        for b in data["burden"]:
-            cur.execute(
-                """INSERT INTO foodborne_burden_global (indicator_code, measure, year, age_group, hazard_group, hazard,
-                     value, low, high, source_url) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                   ON CONFLICT (indicator_code, year, age_group, hazard_group, hazard) DO UPDATE SET
-                     value=EXCLUDED.value, low=EXCLUDED.low, high=EXCLUDED.high""",
-                (b["indicator_code"], b["measure"], b["year"], b["age_group"], b["hazard_group"], b["hazard"],
-                 b["value"], b["low"], b["high"], b["source_url"]))
+        execute_batch(cur,
+            """INSERT INTO countries (iso3, iso2, name, region, income_level, is_aggregate, updated_at)
+               VALUES (%s,%s,%s,%s,%s,%s,NOW())
+               ON CONFLICT (iso3) DO UPDATE SET iso2=EXCLUDED.iso2, name=EXCLUDED.name, region=EXCLUDED.region,
+                 income_level=EXCLUDED.income_level, is_aggregate=EXCLUDED.is_aggregate, updated_at=NOW()""",
+            [(c["iso3"], c["iso2"], c["name"], c["region"], c["income_level"], c["is_aggregate"])
+             for c in data["countries"]], page_size=500)
+        execute_batch(cur,
+            """INSERT INTO country_indicators (iso3, indicator_code, indicator_name, source, year, value, unit, source_url)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (iso3, indicator_code, year) DO UPDATE SET value=EXCLUDED.value,
+                 indicator_name=EXCLUDED.indicator_name, unit=EXCLUDED.unit, loaded_at=NOW()""",
+            [(r["iso3"], r["indicator_code"], r["indicator_name"], r["source"], r["year"], r["value"], r["unit"],
+              r["source_url"]) for r in data["indicators"]], page_size=500)
+        execute_batch(cur,
+            """INSERT INTO foodborne_burden_global (indicator_code, measure, year, age_group, hazard_group, hazard,
+                 value, low, high, source_url) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (indicator_code, year, age_group, hazard_group, hazard) DO UPDATE SET
+                 value=EXCLUDED.value, low=EXCLUDED.low, high=EXCLUDED.high""",
+            [(b["indicator_code"], b["measure"], b["year"], b["age_group"], b["hazard_group"], b["hazard"],
+              b["value"], b["low"], b["high"], b["source_url"]) for b in data["burden"]], page_size=500)
     conn.commit()
     return {"countries": len(data["countries"]), "indicator_values": len(data["indicators"]),
             "burden_rows": len(data["burden"])}

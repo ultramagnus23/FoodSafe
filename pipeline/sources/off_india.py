@@ -204,9 +204,9 @@ def fetch_bulk(country_tag: str = "en:india", dump: Optional[str] = None) -> lis
 
 
 def load(conn, products: list[dict]) -> int:
+    from psycopg2.extras import execute_batch
     with conn.cursor() as cur:
-        for p in products:
-            cur.execute(
+        execute_batch(cur,
                 """INSERT INTO packaged_foods (code, product_name, brands, categories, countries, nutriscore_grade,
                      nutriscore_score, nova_group, energy_kcal_100g, fat_100g, saturated_fat_100g, sugars_100g,
                      salt_100g, fiber_100g, proteins_100g, additives, allergens, ingredients_text, quantity,
@@ -222,10 +222,11 @@ def load(conn, products: list[dict]) -> int:
                      allergens=EXCLUDED.allergens, ingredients_text=EXCLUDED.ingredients_text,
                      quantity=EXCLUDED.quantity, last_modified=EXCLUDED.last_modified, nutrition=EXCLUDED.nutrition,
                      fetched_at=NOW()""",
-                (p["code"], p["product_name"], p["brands"], p["categories"], p["countries"], p["nutriscore_grade"],
-                 p["nutriscore_score"], p["nova_group"], p["energy_kcal_100g"], p["fat_100g"], p["saturated_fat_100g"],
-                 p["sugars_100g"], p["salt_100g"], p["fiber_100g"], p["proteins_100g"], p["additives"], p["allergens"],
-                 p["ingredients_text"], p["quantity"], p["last_modified"], json.dumps(p["nutrition"])))
+                [(p["code"], p["product_name"], p["brands"], p["categories"], p["countries"], p["nutriscore_grade"],
+                  p["nutriscore_score"], p["nova_group"], p["energy_kcal_100g"], p["fat_100g"], p["saturated_fat_100g"],
+                  p["sugars_100g"], p["salt_100g"], p["fiber_100g"], p["proteins_100g"], p["additives"], p["allergens"],
+                  p["ingredients_text"], p["quantity"], p["last_modified"], json.dumps(p["nutrition"]))
+                 for p in products], page_size=500)
     conn.commit()
     return len(products)
 

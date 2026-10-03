@@ -659,27 +659,27 @@ def run(dry_run: bool = False) -> dict:
             "pesticides_with_iarc_group": len(kb["iarc_pesticides"])}
     if dry_run:
         return {**info, "dry_run": True}
+    from psycopg2.extras import execute_batch
     try:
         with conn.cursor() as cur:
-            for h in kb["hazards"]:
-                cur.execute(
-                    """INSERT INTO hazards (hazard_key, name, hazard_class, aliases, iarc_group, iarc_agent, summary,
-                                            sources, updated_at)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-                       ON CONFLICT (hazard_key) DO UPDATE SET name=EXCLUDED.name, hazard_class=EXCLUDED.hazard_class,
-                         aliases=EXCLUDED.aliases, iarc_group=EXCLUDED.iarc_group, iarc_agent=EXCLUDED.iarc_agent,
-                         summary=EXCLUDED.summary, sources=EXCLUDED.sources, updated_at=NOW()""",
-                    (h["hazard_key"], h["name"], h["hazard_class"], h["aliases"], h["iarc_group"], h["iarc_agent"],
-                     h["summary"], json.dumps(h["sources"])))
-            for p in kb["iarc_pesticides"]:
-                cur.execute("UPDATE hazards SET iarc_group=%s, iarc_agent=%s, updated_at=NOW() WHERE hazard_key=%s",
-                            (p["iarc_group"], p["iarc_agent"], p["hazard_key"]))
+            execute_batch(cur,
+                """INSERT INTO hazards (hazard_key, name, hazard_class, aliases, iarc_group, iarc_agent, summary,
+                                        sources, updated_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                   ON CONFLICT (hazard_key) DO UPDATE SET name=EXCLUDED.name, hazard_class=EXCLUDED.hazard_class,
+                     aliases=EXCLUDED.aliases, iarc_group=EXCLUDED.iarc_group, iarc_agent=EXCLUDED.iarc_agent,
+                     summary=EXCLUDED.summary, sources=EXCLUDED.sources, updated_at=NOW()""",
+                [(h["hazard_key"], h["name"], h["hazard_class"], h["aliases"], h["iarc_group"], h["iarc_agent"],
+                  h["summary"], json.dumps(h["sources"])) for h in kb["hazards"]], page_size=500)
+            execute_batch(cur, "UPDATE hazards SET iarc_group=%s, iarc_agent=%s, updated_at=NOW() WHERE hazard_key=%s",
+                          [(p["iarc_group"], p["iarc_agent"], p["hazard_key"]) for p in kb["iarc_pesticides"]],
+                          page_size=500)
             cur.execute("DELETE FROM hazard_health_effects")
-            for e in kb["effects"]:
-                cur.execute(
-                    """INSERT INTO hazard_health_effects (hazard_key, outcome_key, outcome, icd10, organ_system, exposure,
-                         onset, vulnerable_groups, evidence, source_title, source_url)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (hazard_key, outcome_key) DO NOTHING""", e)
+            execute_batch(cur,
+                """INSERT INTO hazard_health_effects (hazard_key, outcome_key, outcome, icd10, organ_system, exposure,
+                     onset, vulnerable_groups, evidence, source_title, source_url)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (hazard_key, outcome_key) DO NOTHING""",
+                [tuple(e) for e in kb["effects"]], page_size=500)
         conn.commit()
     finally:
         conn.close()

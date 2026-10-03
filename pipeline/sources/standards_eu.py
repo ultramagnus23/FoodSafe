@@ -247,36 +247,31 @@ def merge_substances(subs: list[dict]) -> list[dict]:
 
 
 def load_substances(conn, subs: list[dict]) -> dict:
-    n_h = n_v = 0
-    subs = merge_substances(subs)
+    from psycopg2.extras import execute_batch
+    subs = [s for s in merge_substances(subs) if s and s["hazard_key"]]
+    src = json.dumps([{"title": "EU Pesticides Database (active substances)", "url": DB_URL}])
+    hazards = [(s["hazard_key"], s["name"], s["cas_number"], s["eu_status"], s["eu_category"], s["eu_clp"], src)
+               for s in subs]
+    values = [(s["hazard_key"], v["body"], v["value_type"], v["value"], v["unit"], v["raw_text"], v["year"],
+               v["source_ref"], DB_URL) for s in subs for v in s["tox"]]
     with conn.cursor() as cur:
-        for s in subs:
-            if not s or not s["hazard_key"]:
-                continue
-            cur.execute(
-                """INSERT INTO hazards (hazard_key, name, hazard_class, cas_number, eu_status, eu_category, eu_clp,
-                                        sources, updated_at)
-                   VALUES (%s,%s,'pesticide',%s,%s,%s,%s,%s,NOW())
-                   ON CONFLICT (hazard_key) DO UPDATE SET
-                     cas_number = COALESCE(hazards.cas_number, EXCLUDED.cas_number),
-                     eu_status = EXCLUDED.eu_status, eu_category = EXCLUDED.eu_category,
-                     eu_clp = EXCLUDED.eu_clp, updated_at = NOW()""",
-                (s["hazard_key"], s["name"], s["cas_number"], s["eu_status"], s["eu_category"], s["eu_clp"],
-                 json.dumps([{"title": "EU Pesticides Database (active substances)", "url": DB_URL}])))
-            n_h += 1
-            for v in s["tox"]:
-                cur.execute(
-                    """INSERT INTO hazard_reference_values (hazard_key, body, value_type, value, unit, raw_text, year,
-                                                            source_ref, source_url)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                       ON CONFLICT (hazard_key, body, value_type) DO UPDATE SET value=EXCLUDED.value,
-                         unit=EXCLUDED.unit, raw_text=EXCLUDED.raw_text, source_ref=EXCLUDED.source_ref,
-                         loaded_at=NOW()""",
-                    (s["hazard_key"], v["body"], v["value_type"], v["value"], v["unit"], v["raw_text"], v["year"],
-                     v["source_ref"], DB_URL))
-                n_v += 1
+        execute_batch(cur,
+            """INSERT INTO hazards (hazard_key, name, hazard_class, cas_number, eu_status, eu_category, eu_clp,
+                                    sources, updated_at)
+               VALUES (%s,%s,'pesticide',%s,%s,%s,%s,%s,NOW())
+               ON CONFLICT (hazard_key) DO UPDATE SET
+                 cas_number = COALESCE(hazards.cas_number, EXCLUDED.cas_number),
+                 eu_status = EXCLUDED.eu_status, eu_category = EXCLUDED.eu_category,
+                 eu_clp = EXCLUDED.eu_clp, updated_at = NOW()""", hazards, page_size=500)
+        execute_batch(cur,
+            """INSERT INTO hazard_reference_values (hazard_key, body, value_type, value, unit, raw_text, year,
+                                                    source_ref, source_url)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (hazard_key, body, value_type) DO UPDATE SET value=EXCLUDED.value,
+                 unit=EXCLUDED.unit, raw_text=EXCLUDED.raw_text, source_ref=EXCLUDED.source_ref,
+                 loaded_at=NOW()""", values, page_size=500)
     conn.commit()
-    return {"substances": n_h, "reference_values": n_v}
+    return {"substances": len(hazards), "reference_values": len(values)}
 
 
 def fetch_all(product_codes: list[str]) -> tuple[list[StandardRow], list[dict], dict]:

@@ -405,12 +405,14 @@ def replace_snapshot(conn, jurisdiction: str, standard_types: set[str], rows: li
         snap = cur.fetchone()[0]
         cur.execute("DELETE FROM food_standards WHERE jurisdiction=%s AND standard_type = ANY(%s)",
                     (jurisdiction, types))
-        for r in rows:
-            cur.execute(_INSERT, (
-                r.jurisdiction, r.standard_type, r.hazard_raw, r.hazard_key, r.hazard_class, r.food_raw,
-                r.food_code, list(r.food_keys), r.food_match, r.limit_raw, r.limit_value, r.limit_unit, r.limit_mg_per_kg, r.at_loq,
-                r.limit_basis, r.parse_status, r.note, r.applicability, r.legal_reference, r.source_url,
-                r.source_page, snap, json.dumps(r.extra, default=str) if r.extra else None))
+        # Batched: one round trip per page, not per row. Row by row, the EU's ~35,000
+        # MRLs took over half an hour from a CI runner to the hosted database.
+        from psycopg2.extras import execute_batch
+        execute_batch(cur, _INSERT, [(
+            r.jurisdiction, r.standard_type, r.hazard_raw, r.hazard_key, r.hazard_class, r.food_raw,
+            r.food_code, list(r.food_keys), r.food_match, r.limit_raw, r.limit_value, r.limit_unit, r.limit_mg_per_kg, r.at_loq,
+            r.limit_basis, r.parse_status, r.note, r.applicability, r.legal_reference, r.source_url,
+            r.source_page, snap, json.dumps(r.extra, default=str) if r.extra else None) for r in rows], page_size=500)
     conn.commit()
     return {"snapshot_id": snap, "rows_before": before, "inserted": len(rows)}
 

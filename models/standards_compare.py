@@ -140,8 +140,9 @@ def rekey(conn) -> int:
             fk, fm = match(j, food, code)
             if hk != old_hk or list(fk) != list(old_fk or []) or fm != old_fm:
                 updates.append((hk, fk, fm, rid))
-        for u in updates:
-            cur.execute("UPDATE food_standards SET hazard_key=%s, food_keys=%s, food_match=%s WHERE id=%s", u)
+        from psycopg2.extras import execute_batch
+        execute_batch(cur, "UPDATE food_standards SET hazard_key=%s, food_keys=%s, food_match=%s WHERE id=%s",
+                      updates, page_size=500)
         changed = len(updates)
     conn.commit()
     return changed
@@ -175,22 +176,23 @@ def _num(v):
 
 
 def store(conn, recs: list[dict]) -> int:
+    from psycopg2.extras import execute_batch
     with conn.cursor() as cur:
         cur.execute("DELETE FROM standards_comparison")
-        for r in recs:
-            cur.execute(
-                """INSERT INTO standards_comparison
-                     (standard_type, hazard_key, food_key, hazard_name,
-                      in_value, eu_value, eu_basis, codex_value, codex_basis, us_value, us_basis,
-                      ratio_in_eu, ratio_in_codex, ratio_in_us, flags, in_substance_key, eu_status, iarc_group,
-                      detail)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (r["standard_type"], r["hazard_key"], r["food_key"], r["hazard_name"],
-                 _num(r["IN"]["value"]), _num(r["EU"]["value"]), r["EU"]["basis"],
-                 _num(r["CODEX"]["value"]), r["CODEX"]["basis"], _num(r["US"]["value"]), r["US"]["basis"],
-                 r["EU"]["ratio_india_over"], r["CODEX"]["ratio_india_over"], r["US"]["ratio_india_over"],
-                 sorted(set(r["flags"])), r.get("in_substance_key"), r.get("eu_status"), r.get("iarc_group"),
-                 json.dumps({j: {"basis": r[j]["basis"], "rows": r[j]["rows"]} for j in JURIS}, default=str)))
+        execute_batch(cur,
+            """INSERT INTO standards_comparison
+                 (standard_type, hazard_key, food_key, hazard_name,
+                  in_value, eu_value, eu_basis, codex_value, codex_basis, us_value, us_basis,
+                  ratio_in_eu, ratio_in_codex, ratio_in_us, flags, in_substance_key, eu_status, iarc_group,
+                  detail)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [(r["standard_type"], r["hazard_key"], r["food_key"], r["hazard_name"],
+              _num(r["IN"]["value"]), _num(r["EU"]["value"]), r["EU"]["basis"],
+              _num(r["CODEX"]["value"]), r["CODEX"]["basis"], _num(r["US"]["value"]), r["US"]["basis"],
+              r["EU"]["ratio_india_over"], r["CODEX"]["ratio_india_over"], r["US"]["ratio_india_over"],
+              sorted(set(r["flags"])), r.get("in_substance_key"), r.get("eu_status"), r.get("iarc_group"),
+              json.dumps({j: {"basis": r[j]["basis"], "rows": r[j]["rows"]} for j in JURIS}, default=str))
+             for r in recs], page_size=500)
     conn.commit()
     return len(recs)
 

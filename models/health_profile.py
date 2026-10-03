@@ -121,20 +121,23 @@ def run(min_notifications: int = 20) -> dict:
                            FROM rasff_notifications n JOIN rasff_hazards h USING (notif_id)""")
             rows = cur.fetchall()
         profile, updates = build(rows, min_notifications)
+        # Batched: the first run reclassifies every hazard row of every origin (tens
+        # of thousands), one round trip each from CI to the hosted database otherwise.
+        from psycopg2.extras import execute_batch
         with conn.cursor() as cur:
-            for u in updates:
-                cur.execute("UPDATE rasff_hazards SET hazard_key=%s, hazard_class=%s, classified_by=%s WHERE id=%s", u)
+            execute_batch(cur, "UPDATE rasff_hazards SET hazard_key=%s, hazard_class=%s, classified_by=%s WHERE id=%s",
+                          updates, page_size=1000)
             cur.execute("DELETE FROM health_outcome_profile WHERE scope_type = 'rasff_origin'")
-            for p in profile:
-                cur.execute(
-                    """INSERT INTO health_outcome_profile (scope_type, scope_key, outcome_key, outcome, organ_system,
-                         exposure, notifications, share_of_classified, serious_notifications, level_counts,
-                         top_hazards, top_products, by_year, sources, vulnerable_groups)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (p["scope_type"], p["scope_key"], p["outcome_key"], p["outcome"], p["organ_system"],
-                     p["exposure"], p["notifications"], p["share_of_classified"], p["serious_notifications"],
-                     json.dumps(p["level_counts"]), json.dumps(p["top_hazards"]), json.dumps(p["top_products"]),
-                     json.dumps(p["by_year"]), json.dumps(p["sources"]), p["vulnerable_groups"]))
+            execute_batch(cur,
+                """INSERT INTO health_outcome_profile (scope_type, scope_key, outcome_key, outcome, organ_system,
+                     exposure, notifications, share_of_classified, serious_notifications, level_counts,
+                     top_hazards, top_products, by_year, sources, vulnerable_groups)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                [(p["scope_type"], p["scope_key"], p["outcome_key"], p["outcome"], p["organ_system"],
+                  p["exposure"], p["notifications"], p["share_of_classified"], p["serious_notifications"],
+                  json.dumps(p["level_counts"]), json.dumps(p["top_hazards"]), json.dumps(p["top_products"]),
+                  json.dumps(p["by_year"]), json.dumps(p["sources"]), p["vulnerable_groups"]) for p in profile],
+                page_size=500)
         conn.commit()
     finally:
         conn.close()
