@@ -1,42 +1,96 @@
 name: Refresh food standards and hazard knowledge base
 
 # Weekly: re-reads the four rule-books FoodSafe compares (India FSSAI, EU, Codex,
-# US), refreshes the hazard -> health knowledge base, and recomputes the India vs
-# EU/Codex/US comparison. Rule-books change a few times a year, so weekly is
-# plenty; each load records the exact document version it parsed
-# (standards_snapshots). See docs/STANDARDS.md and docs/HAZARD_KB.md.
+# US), refreshes the hazard -> health knowledge base, country context and the
+# packaged-food table, and recomputes the India vs EU/Codex/US comparison. Rule-
+# books change a few times a year, so weekly is plenty; each load records the
+# exact document version it parsed (standards_snapshots). See docs/STANDARDS.md
+# and docs/HAZARD_KB.md.
 #
 # Separate from ingest.yml on purpose: these are slow-changing reference
-# documents (the EU step alone reads ~50 x 2,400 API records), and a failure here
-# must not delay the daily contamination ingest.
+# documents, and a failure here must not delay the daily contamination ingest.
+#
+# Jobs: schema -> (eu_pesticides || rulebooks) -> knowledge. The EU Pesticides
+# Database read (~1,400 API pages) is by far the slowest source, so it runs in its
+# own job and can no longer starve the others of the time budget. The knowledge
+# job runs whatever happened upstream (each loader keeps its last good slice on
+# failure), because the comparison must be recomputed from what is loaded.
 
 on:
   schedule:
     - cron: "0 3 * * 1"   # Mondays 03:00 UTC
   workflow_dispatch:
 
+# Two runs replacing the same slices at once could interleave; queue instead.
+concurrency:
+  group: standards
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
 jobs:
-  standards:
+  schema:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      issues: write
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Install dependencies
-        run: pip install --quiet psycopg2-binary pdfplumber numpy scipy networkx
-
+        run: pip install --quiet psycopg2-binary
       - name: Sync database schema (idempotent)
         id: bootstrap_db
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m scripts.bootstrap_db
+      - name: Alert on failed steps
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py
+
+  eu_pesticides:
+    needs: schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary
+      - name: EU — Pesticides Database (MRLs, approval status, ADI/ARfD)
+        id: standards_eu
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_eu
+      - name: Alert on failed steps
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py
+
+  rulebooks:
+    needs: schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary pdfplumber
 
       # Each loader replaces only its own (jurisdiction, type) slice inside one
       # transaction and refuses to replace a populated slice with an empty parse,
@@ -48,15 +102,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.run_and_log standards_fssai
-
-      # Substances first: the KB joins IARC groups to pesticides by the CAS
-      # numbers this step stores.
-      - name: EU — Pesticides Database (MRLs, approval status, ADI/ARfD)
-        id: standards_eu
-        continue-on-error: true
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m pipeline.run_and_log standards_eu
 
       - name: EU — Regulation 2023/915 contaminant maximum levels (EUR-Lex)
         id: standards_eu_contaminants
@@ -86,13 +131,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.run_and_log standards_us
 
-      - name: Hazard -> health knowledge base (IARC + curated sources)
-        id: hazard_kb
-        continue-on-error: true
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m pipeline.run_and_log hazard_kb
-
       - name: Country context — WHO GHO food-safety capacity + global foodborne burden, World Bank nutrition
         id: country_indicators
         continue-on-error: true
@@ -106,6 +144,38 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.run_and_log off_india
+
+      - name: Alert on failed steps
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py
+
+  knowledge:
+    needs: [schema, eu_pesticides, rulebooks]
+    # Run even if a loader job failed or timed out; never if the schema is missing.
+    if: ${{ always() && needs.schema.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary
+
+      # After the EU job: the KB joins IARC groups to pesticides by the CAS
+      # numbers the EU substances load stores.
+      - name: Hazard -> health knowledge base (IARC + curated sources)
+        id: hazard_kb
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log hazard_kb
 
       - name: Recompute India vs EU / Codex / US comparison
         id: standards_compare

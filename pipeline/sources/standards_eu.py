@@ -39,6 +39,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from typing import Iterable, Optional
 
@@ -51,6 +52,7 @@ API_VERSION = "v3.0"
 DB_URL = "https://food.ec.europa.eu/plants/pesticides/eu-pesticides-database_en"
 USER_AGENT = "FoodSafe-India/1.0 (public-interest research; +https://github.com/ultramagnus23/FoodSafe)"
 PARSER_VERSION = "eu-pesticides-1"
+FETCH_WORKERS = 4
 
 # EU Annex I product codes chosen for India relevance (diet staples + main exports).
 EU_PRODUCT_CODES = [
@@ -283,19 +285,22 @@ def fetch_all(product_codes: list[str]) -> tuple[list[StandardRow], list[dict], 
     by_id = {int(p["product_id"]): p for p in plist}
     if not products:
         raise EuApiUnavailable("product list came back empty")
-    names = residue_names(_pages("/pesticide-residues"))
+    missing = [c for c in product_codes if c not in products]
+    wanted = [products[c] for c in product_codes if c in products]
+    # Each product's MRL history is ~24 pages (~25 s here, several times that from a
+    # US CI runner), so 53 products read one by one took most of the job's time
+    # budget. A few concurrent readers keep the run short without hammering the API;
+    # pages are parsed afterwards, in the requested order.
+    with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
+        names_job = pool.submit(lambda: residue_names(_pages("/pesticide-residues")))
+        raw = list(pool.map(lambda p: list(_pages(f"/pesticide-residues-mrls?product_id={p['product_id']}")), wanted))
+        names = names_job.result()
     if len(names) < 100:
         raise EuApiUnavailable(f"only {len(names)} English residue names — the residue list looks truncated")
     rows: list[StandardRow] = []
-    missing = []
-    for code in product_codes:
-        p = products.get(code)
-        if not p:
-            missing.append(code)
-            continue
-        got = mrl_rows(_pages(f"/pesticide-residues-mrls?product_id={p['product_id']}"), names, p,
-                       product_label(p, by_id))
-        logger.info("EU %s %s: %d applicable MRLs", code, p["product_name"], len(got))
+    for p, mrls in zip(wanted, raw):
+        got = mrl_rows(mrls, names, p, product_label(p, by_id))
+        logger.info("EU %s %s: %d applicable MRLs", p["product_code"], p["product_name"], len(got))
         rows += got
     subs = [s for s in (substance_record(x) for x in _pages("/active-substances")) if s]
     info = {"products_requested": len(product_codes), "products_missing": missing,
