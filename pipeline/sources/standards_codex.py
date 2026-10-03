@@ -32,6 +32,7 @@ import json
 import logging
 import re
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal, InvalidOperation
@@ -74,7 +75,19 @@ def loads_lenient(text: str) -> dict:
     return json.loads("\n".join(fixed), strict=False)
 
 
-def _get(url: str, attempts: int = 4) -> dict:
+REQUEST_PAUSE_S = 0.4     # between detail requests, per worker: FAO rate-limits bursts (HTTP 429)
+
+
+def _retry_after(e: urllib.error.HTTPError, attempt: int) -> float:
+    """Seconds to wait after a 429: the server's Retry-After when it gives one
+    (capped), else 15, 30, 60, 120 s."""
+    try:
+        return min(float(e.headers.get("Retry-After", "")), 180.0)
+    except (TypeError, ValueError):
+        return 15.0 * 2 ** attempt
+
+
+def _get(url: str, attempts: int = 5) -> dict:
     last: Optional[Exception] = None
     for i in range(attempts):
         try:
@@ -84,6 +97,9 @@ def _get(url: str, attempts: int = 4) -> dict:
             if body.lstrip().startswith("<"):
                 raise ValueError("HTML error page instead of JSON")
             return loads_lenient(body)
+        except urllib.error.HTTPError as e:
+            last = e
+            time.sleep(_retry_after(e, i) if e.code == 429 else 2 * (i + 1))
         except Exception as e:  # noqa: BLE001
             last = e
             time.sleep(2 * (i + 1))
@@ -148,14 +164,16 @@ def detail_rows(pid: str, d: dict) -> tuple[list[StandardRow], Optional[dict]]:
     return rows, adi
 
 
-def fetch_all(workers: int = 4) -> tuple[list[StandardRow], list[dict], dict]:
+def fetch_all(workers: int = 2) -> tuple[list[StandardRow], list[dict], dict]:
     ids = index_ids(_get(INDEX_URL))
     if len(ids) < 50:
         raise CodexUnavailable(f"index lists only {len(ids)} pesticides")
 
     def one(pid_name):
         pid, _ = pid_name
-        return pid, _get(DETAIL_URL.format(id=pid))
+        d = _get(DETAIL_URL.format(id=pid))
+        time.sleep(REQUEST_PAUSE_S)
+        return pid, d
 
     rows: list[StandardRow] = []
     adis: list[dict] = []
@@ -169,15 +187,16 @@ def fetch_all(workers: int = 4) -> tuple[list[StandardRow], list[dict], dict]:
 
 
 def load_adis(conn, adis: list[dict]) -> int:
+    from psycopg2.extras import execute_batch
     with conn.cursor() as cur:
-        for a in adis:
-            cur.execute(
-                """INSERT INTO hazard_reference_values (hazard_key, body, value_type, value, unit, raw_text, year,
-                                                        source_ref, source_url)
-                   VALUES (%s,'JMPR','ADI',%s,%s,%s,%s,'Codex online pesticide database (JMPR evaluation)',%s)
-                   ON CONFLICT (hazard_key, body, value_type) DO UPDATE SET value=EXCLUDED.value, unit=EXCLUDED.unit,
-                     raw_text=EXCLUDED.raw_text, year=EXCLUDED.year, source_url=EXCLUDED.source_url, loaded_at=NOW()""",
-                (a["hazard_key"], a["value"], a["unit"], a["raw_text"], a["year"], a["source_url"]))
+        execute_batch(cur,
+            """INSERT INTO hazard_reference_values (hazard_key, body, value_type, value, unit, raw_text, year,
+                                                    source_ref, source_url)
+               VALUES (%s,'JMPR','ADI',%s,%s,%s,%s,'Codex online pesticide database (JMPR evaluation)',%s)
+               ON CONFLICT (hazard_key, body, value_type) DO UPDATE SET value=EXCLUDED.value, unit=EXCLUDED.unit,
+                 raw_text=EXCLUDED.raw_text, year=EXCLUDED.year, source_url=EXCLUDED.source_url, loaded_at=NOW()""",
+            [(a["hazard_key"], a["value"], a["unit"], a["raw_text"], a["year"], a["source_url"]) for a in adis],
+            page_size=500)
     conn.commit()
     return len(adis)
 

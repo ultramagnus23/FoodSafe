@@ -382,3 +382,26 @@ def test_standard_row_rejects_unknown_values():
         StandardRow(jurisdiction="XX", standard_type="pesticide_mrl", hazard_raw="a", hazard_class="pesticide",
                     food_raw="b", limit_raw="1", limit_value=None, limit_unit=None, parse_status="exact",
                     legal_reference="r", source_url="u")
+
+
+def test_codex_get_waits_out_a_rate_limit(monkeypatch):
+    """FAO answered HTTP 429 mid-run on 2026-10-03; the loader must wait (Retry-After,
+    else a growing backoff) and carry on, not fail the whole load."""
+    import email.message
+    import io
+    import urllib.error
+    calls, slept = [], []
+
+    def fake_urlopen(req, timeout=None):
+        calls.append(req.full_url)
+        if len(calls) == 1:
+            h = email.message.Message()
+            h["Retry-After"] = "7"
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", h, None)
+        if len(calls) == 2:
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", email.message.Message(), None)
+        return io.BytesIO(b'{"ok": 1}')
+    monkeypatch.setattr(CX.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(CX.time, "sleep", slept.append)
+    assert CX._get("https://example.org/x") == {"ok": 1}
+    assert slept == [7.0, 30.0]          # the server's Retry-After, then 15 * 2**1
