@@ -74,6 +74,7 @@ INDIA_NETWORK_ID = 5118
 INDIA_ISO = "IN"
 PAGE_SIZE = 100
 DETAIL_WORKERS = 4
+DETAIL_CHUNK = 200     # details fetched, then stored and committed, per chunk
 DEFAULT_DETAIL_LIMIT = 400
 GLOBAL_DETAIL_LIMIT = 1500
 KNOWN_PAGES_TO_STOP = 2
@@ -317,54 +318,73 @@ def known_state(conn) -> dict[int, tuple[bool, bool]]:
         return {int(r[0]): (bool(r[1]), bool(r[2])) for r in cur.fetchall()}
 
 
-def mark_detail_unavailable(conn, nid: int) -> None:
+_UPSERT_NOTIFICATION = """INSERT INTO rasff_notifications
+     (notif_id, reference, validation_date, subject, notifying_country, origin_countries,
+      classification, risk_decision, product_category, product_type, basis, product_name,
+      actions_taken, distribution, has_detail, detail_checked_at, source_url, fetched_at)
+   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+           CASE WHEN %s THEN NOW() ELSE NULL END, %s, NOW())
+   ON CONFLICT (notif_id) DO UPDATE SET
+     reference=EXCLUDED.reference, validation_date=EXCLUDED.validation_date, subject=EXCLUDED.subject,
+     notifying_country=EXCLUDED.notifying_country, origin_countries=EXCLUDED.origin_countries,
+     classification=EXCLUDED.classification, risk_decision=EXCLUDED.risk_decision,
+     product_category=EXCLUDED.product_category, product_type=EXCLUDED.product_type,
+     basis=EXCLUDED.basis, product_name=EXCLUDED.product_name, actions_taken=EXCLUDED.actions_taken,
+     distribution=EXCLUDED.distribution, has_detail=EXCLUDED.has_detail,
+     detail_checked_at=COALESCE(EXCLUDED.detail_checked_at, rasff_notifications.detail_checked_at),
+     fetched_at=NOW()"""
+
+_INSERT_HAZARD = """INSERT INTO rasff_hazards
+     (notif_id, hazard, hazard_category, result_raw, result_value, result_qualifier, result_unit,
+      limit_value, limit_unit, exceedance_ratio, exceeds_limit, sampling_date,
+      hazard_key, hazard_class, classified_by)
+   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+
+
+def store(conn, rows: list[dict], unavailable: Optional[list[int]] = None) -> None:
+    """Upsert notifications (and, for those carrying their detail, replace their
+    hazards) and mark detail-less ones attempted, in one transaction.
+
+    Batched (psycopg2 execute_batch: one round trip per page of statements, the
+    statements themselves unchanged): one statement and one commit per row took
+    over an hour for the ~30,000-notification first all-origins pass from a CI
+    runner to the hosted database."""
+    from psycopg2.extras import execute_batch
+    from models.health_classifier import classify_hazard
+    unavailable = unavailable or []
     with conn.cursor() as cur:
-        cur.execute("UPDATE rasff_notifications SET detail_checked_at = NOW() WHERE notif_id = %s", (nid,))
+        execute_batch(cur, _UPSERT_NOTIFICATION, [
+            (row["notif_id"], row["reference"], row["validation_date"], row["subject"], row["notifying_country"],
+             row["origin_countries"], row["classification"], row["risk_decision"], row["product_category"],
+             row["product_type"], row["basis"], row["product_name"], row["actions_taken"], row["distribution"],
+             row["has_detail"], row["has_detail"],
+             f"https://webgate.ec.europa.eu/rasff-window/screen/notification/{row['notif_id']}") for row in rows],
+            page_size=200)
+        # Replace the hazards only when we hold the detail: a list-only refresh
+        # must not wipe hazards stored earlier.
+        detailed = [row for row in rows if row["has_detail"]]
+        if detailed:
+            cur.execute("DELETE FROM rasff_hazards WHERE notif_id = ANY(%s)", ([row["notif_id"] for row in detailed],))
+            hazards = []
+            for row in detailed:
+                for h in row["hazards"]:
+                    c = classify_hazard(h["hazard"], h["hazard_category"])
+                    hazards.append((row["notif_id"], h["hazard"], h["hazard_category"], h["result_raw"],
+                                    h["result_value"], h["result_qualifier"], h["result_unit"], h["limit_value"],
+                                    h["limit_unit"], h["exceedance_ratio"], h["exceeds_limit"], h["sampling_date"],
+                                    c.kb_key or c.hazard_key, c.hazard_class, c.classified_by))
+            execute_batch(cur, _INSERT_HAZARD, hazards, page_size=200)
+        execute_batch(cur, "UPDATE rasff_notifications SET detail_checked_at = NOW() WHERE notif_id = %s",
+                      [(nid,) for nid in unavailable], page_size=500)
     conn.commit()
 
 
 def upsert_notification(conn, row: dict) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO rasff_notifications
-                 (notif_id, reference, validation_date, subject, notifying_country, origin_countries,
-                  classification, risk_decision, product_category, product_type, basis, product_name,
-                  actions_taken, distribution, has_detail, detail_checked_at, source_url, fetched_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                       CASE WHEN %s THEN NOW() ELSE NULL END, %s, NOW())
-               ON CONFLICT (notif_id) DO UPDATE SET
-                 reference=EXCLUDED.reference, validation_date=EXCLUDED.validation_date, subject=EXCLUDED.subject,
-                 notifying_country=EXCLUDED.notifying_country, origin_countries=EXCLUDED.origin_countries,
-                 classification=EXCLUDED.classification, risk_decision=EXCLUDED.risk_decision,
-                 product_category=EXCLUDED.product_category, product_type=EXCLUDED.product_type,
-                 basis=EXCLUDED.basis, product_name=EXCLUDED.product_name, actions_taken=EXCLUDED.actions_taken,
-                 distribution=EXCLUDED.distribution, has_detail=EXCLUDED.has_detail,
-                 detail_checked_at=COALESCE(EXCLUDED.detail_checked_at, rasff_notifications.detail_checked_at),
-                 fetched_at=NOW()""",
-            (row["notif_id"], row["reference"], row["validation_date"], row["subject"], row["notifying_country"],
-             row["origin_countries"], row["classification"], row["risk_decision"], row["product_category"],
-             row["product_type"], row["basis"], row["product_name"], row["actions_taken"], row["distribution"],
-             row["has_detail"], row["has_detail"], f"https://webgate.ec.europa.eu/rasff-window/screen/notification/{row['notif_id']}"),
-        )
-        # Replace the hazards only when we hold the detail: a list-only refresh
-        # must not wipe hazards stored earlier.
-        if row["has_detail"]:
-            from models.health_classifier import classify_hazard
-            cur.execute("DELETE FROM rasff_hazards WHERE notif_id = %s", (row["notif_id"],))
-            for h in row["hazards"]:
-                c = classify_hazard(h["hazard"], h["hazard_category"])
-                cur.execute(
-                    """INSERT INTO rasff_hazards
-                         (notif_id, hazard, hazard_category, result_raw, result_value, result_qualifier, result_unit,
-                          limit_value, limit_unit, exceedance_ratio, exceeds_limit, sampling_date,
-                          hazard_key, hazard_class, classified_by)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (row["notif_id"], h["hazard"], h["hazard_category"], h["result_raw"], h["result_value"],
-                     h["result_qualifier"], h["result_unit"], h["limit_value"], h["limit_unit"],
-                     h["exceedance_ratio"], h["exceeds_limit"], h["sampling_date"],
-                     c.kb_key or c.hazard_key, c.hazard_class, c.classified_by),
-                )
-    conn.commit()
+    store(conn, [row])
+
+
+def mark_detail_unavailable(conn, nid: int) -> None:
+    store(conn, [], [nid])
 
 
 def plan_detail_fetches(listed: list[dict], known: dict[int, tuple[bool, bool]],
@@ -415,6 +435,7 @@ def run(limit: int = DEFAULT_DETAIL_LIMIT, scope: str = "india") -> dict:
             except (KeyError, TypeError, ValueError):
                 summary["not_india_or_malformed"] += 1
         # 1) list-level rows for notifications we have never seen (cheap, no detail needed)
+        fresh = []
         for nid, n in by_id.items():
             if nid in known:
                 continue
@@ -422,30 +443,36 @@ def run(limit: int = DEFAULT_DETAIL_LIMIT, scope: str = "india") -> dict:
             if row is None:
                 summary["not_india_or_malformed"] += 1
                 continue
-            upsert_notification(conn, row)
+            fresh.append(row)
             known[nid] = (False, False)
-            summary["new_notifications"] += 1
-            summary["inserted"] += 1
+        store(conn, fresh)
+        summary["new_notifications"] = summary["inserted"] = len(fresh)
         # 2) detail for the newest ones first, up to the per-run cap
         todo = plan_detail_fetches(listed, known)
         batch, summary["backlog_remaining"] = todo[:limit], max(0, len(todo) - limit)
+        # Stored chunk by chunk, so a run cut short (job timeout, API outage) keeps
+        # every detail it already fetched; the plan picks up the rest next time.
         with ThreadPoolExecutor(max_workers=DETAIL_WORKERS) as pool:
-            results = list(pool.map(_safe_detail, batch))
-        for nid, (status, detail) in zip(batch, results):
-            if status == "error":
-                summary["detail_errors"] += 1
-                continue
-            if status == "none":
-                mark_detail_unavailable(conn, nid)
-                summary["detail_unavailable"] += 1
-                continue
-            row = parse_notification(by_id[nid], detail, require_india)
-            if row is None:
-                summary["not_india_or_malformed"] += 1
-                continue
-            upsert_notification(conn, row)
-            summary["detail_fetched"] += 1
-            summary["hazards_stored"] += len(row["hazards"])
+            for start in range(0, len(batch), DETAIL_CHUNK):
+                chunk = batch[start:start + DETAIL_CHUNK]
+                rows, unavailable = [], []
+                for nid, (status, detail) in zip(chunk, pool.map(_safe_detail, chunk)):
+                    if status == "error":
+                        summary["detail_errors"] += 1
+                        continue
+                    if status == "none":
+                        unavailable.append(nid)
+                        continue
+                    row = parse_notification(by_id[nid], detail, require_india)
+                    if row is None:
+                        summary["not_india_or_malformed"] += 1
+                        continue
+                    rows.append(row)
+                store(conn, rows, unavailable)
+                summary["detail_fetched"] += len(rows)
+                summary["detail_unavailable"] += len(unavailable)
+                summary["hazards_stored"] += sum(len(r["hazards"]) for r in rows)
+                logger.info("RASFF details %d/%d stored", min(start + DETAIL_CHUNK, len(batch)), len(batch))
     finally:
         conn.close()
     if summary["inserted"] == 0 and summary["detail_fetched"] == 0 and summary["backlog_remaining"] == 0:

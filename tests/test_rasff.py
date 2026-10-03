@@ -181,7 +181,15 @@ class _Cur:
         return False
 
     def execute(self, sql, params=None):
+        if isinstance(sql, bytes):        # a page joined by psycopg2's execute_batch: logged via mogrify
+            return
         self.log.append((" ".join(sql.split())[:50], params))
+
+    def mogrify(self, sql, params=None):
+        # execute_batch renders each statement through mogrify, then sends the page
+        # in one execute; log here so a batched statement reads like a single one.
+        self.log.append((" ".join(sql.split())[:50], params))
+        return b""
 
     def fetchall(self):
         return list(self._fetch)
@@ -222,6 +230,31 @@ def test_first_run_stores_every_notification_and_fetches_details_up_to_the_cap(m
     assert summary["detail_fetched"] == 2 and summary["backlog_remaining"] == 3
     assert sorted(fetched) == [103, 104]                     # the newest two
     assert sum(1 for e in conn.log if e[0].startswith("INSERT INTO rasff_hazards")) == 2
+
+
+def test_details_are_committed_chunk_by_chunk(monkeypatch):
+    """A run cut short must keep what it already fetched: each chunk of details is
+    stored and committed before the next is fetched."""
+    monkeypatch.setattr(R, "DETAIL_CHUNK", 2)
+    listed = [dict(LISTED, notifId=100 + i, ecValidationDate=f"{10 + i:02d}-09-2026 10:00:00") for i in range(5)]
+    commits_when_fetched = []
+    conn_box = {}
+
+    def detail(nid):
+        commits_when_fetched.append(conn_box["conn"].commits)
+        return dict(DETAIL, id=nid)
+    conn = _Conn()
+    conn_box["conn"] = conn
+    monkeypatch.setattr(R, "pg_connect", lambda: conn)
+    monkeypatch.setattr(R, "fetch_all_listed", lambda: listed)
+    monkeypatch.setattr(R, "fetch_detail", detail)
+    monkeypatch.setattr(R.time, "sleep", lambda s: None)
+    summary = R.run(5)
+    assert summary["detail_fetched"] == 5
+    # 1 commit for the list-level rows, then one per chunk of 2: fetches of chunk k
+    # happen after k chunks were committed.
+    assert sorted(commits_when_fetched) == [1, 1, 2, 2, 3]
+    assert conn.commits == 4
 
 
 def test_a_notification_with_no_public_detail_is_marked_attempted_and_not_retried(monkeypatch):
