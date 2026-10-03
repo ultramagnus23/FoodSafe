@@ -54,6 +54,14 @@ FRIENDLY = {
     "aggregation": "Risk-score aggregation",
     "disease_burden": "Disease-burden estimates",
     "notifications": "Alert-subscription notifications",
+    "standards_fssai": "India FSSAI legal limits (CTR compendium)",
+    "standards_eu": "EU pesticide MRLs / approval status",
+    "standards_eu_contaminants": "EU contaminant maximum levels (Reg. 2023/915)",
+    "standards_codex": "Codex pesticide MRLs",
+    "standards_codex_contaminants": "Codex CXS 193 contaminant limits",
+    "standards_us": "US 40 CFR 180 tolerances",
+    "hazard_kb": "Hazard -> health knowledge base",
+    "standards_compare": "India vs EU/Codex/US comparison",
 }
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]

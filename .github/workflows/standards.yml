@@ -1,0 +1,109 @@
+name: Refresh food standards and hazard knowledge base
+
+# Weekly: re-reads the four rule-books FoodSafe compares (India FSSAI, EU, Codex,
+# US), refreshes the hazard -> health knowledge base, and recomputes the India vs
+# EU/Codex/US comparison. Rule-books change a few times a year, so weekly is
+# plenty; each load records the exact document version it parsed
+# (standards_snapshots). See docs/STANDARDS.md and docs/HAZARD_KB.md.
+#
+# Separate from ingest.yml on purpose: these are slow-changing reference
+# documents (the EU step alone reads ~50 x 2,400 API records), and a failure here
+# must not delay the daily contamination ingest.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"   # Mondays 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  standards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet psycopg2-binary pdfplumber numpy scipy networkx
+
+      - name: Sync database schema (idempotent)
+        id: bootstrap_db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.bootstrap_db
+
+      # Each loader replaces only its own (jurisdiction, type) slice inside one
+      # transaction and refuses to replace a populated slice with an empty parse,
+      # so one source failing leaves the others' last good load in place.
+
+      - name: India — FSSAI Contaminants, Toxins and Residues Regulations (PDF)
+        id: standards_fssai
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_fssai
+
+      # Substances first: the KB joins IARC groups to pesticides by the CAS
+      # numbers this step stores.
+      - name: EU — Pesticides Database (MRLs, approval status, ADI/ARfD)
+        id: standards_eu
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_eu
+
+      - name: EU — Regulation 2023/915 contaminant maximum levels (EUR-Lex)
+        id: standards_eu_contaminants
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_eu_contaminants
+
+      - name: Codex — pesticide MRLs and JMPR ADIs
+        id: standards_codex
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_codex
+
+      - name: Codex — CXS 193 contaminant maximum levels (PDF)
+        id: standards_codex_contaminants
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_codex_contaminants
+
+      - name: US — 40 CFR 180 pesticide tolerances (eCFR)
+        id: standards_us
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log standards_us
+
+      - name: Hazard -> health knowledge base (IARC + curated sources)
+        id: hazard_kb
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m pipeline.run_and_log hazard_kb
+
+      - name: Recompute India vs EU / Codex / US comparison
+        id: standards_compare
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m models.standards_compare
+
+      - name: Alert on failed steps
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/ingest_alert.py

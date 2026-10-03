@@ -39,6 +39,14 @@ SOURCES = {
     "fssai_annual_report":  ("pipeline.sources.fssai_annual_report",  "run",                  None,             True),
     "research_evidence":    ("pipeline.sources.research_evidence",    "run",                  "limit",          True),
     "europepmc_evidence":   ("pipeline.sources.europepmc_evidence",   "run",                  "limit",          True),
+    # food standards + hazard knowledge base (weekly, .github/workflows/standards.yml)
+    "standards_fssai":      ("pipeline.sources.standards_fssai",      "run",                  None,             True),
+    "standards_eu":         ("pipeline.sources.standards_eu",         "run",                  None,             True),
+    "standards_eu_contaminants": ("pipeline.sources.standards_eu_contaminants", "run",        None,             True),
+    "standards_codex":      ("pipeline.sources.standards_codex",      "run",                  None,             True),
+    "standards_codex_contaminants": ("pipeline.sources.standards_codex_contaminants", "run",  None,             True),
+    "standards_us":         ("pipeline.sources.standards_us",         "run",                  None,             True),
+    "hazard_kb":            ("pipeline.sources.hazard_kb",            "run",                  None,             True),
 }
 
 # Sources where zero rows ingested is a known, accepted outcome (documented
