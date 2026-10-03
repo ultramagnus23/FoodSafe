@@ -353,6 +353,10 @@ def store(conn, rows: list[dict], unavailable: Optional[list[int]] = None) -> No
     from models.health_classifier import classify_hazard
     unavailable = unavailable or []
     with conn.cursor() as cur:
+        # Two runs storing the same notification at once (daily ingest + a backfill)
+        # cannot duplicate its hazards: this upsert row-locks the notification until
+        # commit, so the second waits and its DELETE then sees the first's rows.
+        # (Checked against Postgres: 2 x 30 concurrent stores, no duplicates.)
         execute_batch(cur, _UPSERT_NOTIFICATION, [
             (row["notif_id"], row["reference"], row["validation_date"], row["subject"], row["notifying_country"],
              row["origin_countries"], row["classification"], row["risk_decision"], row["product_category"],

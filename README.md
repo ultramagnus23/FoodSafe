@@ -48,8 +48,10 @@ Each line says how it was verified. Where something is only reported, it says so
 - **API and Next.js frontend:** *reported* live by the maintainer (Render +
   Vercel). No public URL is recorded in this repo and it has **not been
   independently verified**: `foodsafe-api.onrender.com` did not respond on
-  2026-09-16 (the actual service name may differ), and `food-safe.vercel.app`
-  serves a different app.
+  2026-09-16, and on 2026-10-03 it answered with a *different* application
+  (OpenAPI title "FoodSafe API — AI-powered food adulteration detection backend",
+  `/api/scan/*` routes, none of this repo's `/v1/...`); `food-safe.vercel.app`
+  also serves a different app. The verified public face is the portal below.
 - **Public portal** (GitHub Pages,
   [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)):
   since 2026-10-03 a live portal rebuilt daily from production by
