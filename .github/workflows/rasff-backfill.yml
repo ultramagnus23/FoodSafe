@@ -4,6 +4,10 @@ name: RASFF backfill (all origins, on demand)
 # 1,500 notification details per run; this lets a maintainer work off the
 # initial ~32,800-notification backlog in a few runs. Same code path as the
 # daily step (pipeline.sources.rasff.run_global). Idempotent.
+#
+# Details are committed 200 at a time, so a run cut short keeps what it fetched.
+# The fetch step has its own time limit inside the job's, so the health-profile
+# recompute always gets to run (on 2026-10-03 a job-level timeout skipped it).
 
 on:
   workflow_dispatch:
@@ -11,6 +15,10 @@ on:
       limit:
         description: "max notification details to fetch this run"
         default: "12000"
+
+concurrency:
+  group: rasff-backfill
+  cancel-in-progress: false
 
 jobs:
   backfill:
@@ -33,6 +41,8 @@ jobs:
         run: python -m scripts.bootstrap_db
       - name: Backfill EU RASFF notifications (every origin)
         id: rasff_global
+        timeout-minutes: 240
+        continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m pipeline.run_and_log rasff_global --limit "${{ github.event.inputs.limit || '12000' }}"
