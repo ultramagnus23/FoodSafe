@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Briefing | FoodSafe India</title>
+<meta name="description" content="Where FoodSafe India stands, where it is stuck, and the questions I would like advice on."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:#F7F4EF; --bg-card:#FDFBF8; --forest:#1B4332; --forest-lt:#2D6A4F; --forest-pale:#E8F0EB;
+    --amber:#D97706; --amber-lt:#FEF3C7; --red:#DC2626; --red-lt:#FEE2E2; --sage:#4CAF7D; --sage-lt:#D1FAE5;
+    --ink:#1C1917; --muted:#78716C; --border:#E7E2DA;
+    --shadow:0 1px 3px rgba(28,25,23,.08),0 4px 16px rgba(28,25,23,.04);
+    --radius:10px;
+    --font-serif:'Cormorant Garamond',Georgia,serif; --font-sans:'DM Sans',system-ui,sans-serif; --font-mono:'DM Mono',monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--ink);font-size:15px;line-height:1.6;min-height:100vh}
+  a{color:inherit;text-decoration:none}
+  p a,li a{color:var(--forest);text-decoration:underline;text-underline-offset:3px}
+
+  /* nav: identical to the app */
+  .nav{position:sticky;top:0;z-index:100;background:rgba(247,244,239,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:60px;gap:12px}
+  .nav-logo{display:flex;align-items:center;gap:10px;font-family:var(--font-serif);font-size:22px;font-weight:600;color:var(--forest);letter-spacing:-.3px}
+  .nav-logo-dot{width:8px;height:8px;border-radius:50%;background:var(--sage);display:inline-block}
+  .nav-links{display:flex;gap:4px}
+  .nav-btn{padding:6px 14px;border-radius:6px;font-size:13.5px;font-weight:500;color:var(--muted);transition:all .15s}
+  .nav-btn:hover{background:var(--forest-pale);color:var(--forest)}
+  .nav-btn.active{color:var(--forest);background:var(--forest-pale)}
+
+  .page{max-width:880px;margin:0 auto;padding:72px 24px 96px}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:var(--forest-pale);color:var(--forest);font-size:12px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;margin-bottom:24px}
+  .badge i{width:6px;height:6px;border-radius:50%;background:var(--sage)}
+  h1{font-family:var(--font-serif);font-size:clamp(38px,6vw,62px);font-weight:300;line-height:1.1;letter-spacing:-.5px;max-width:15em;text-wrap:balance}
+  h1 em{font-style:italic;color:var(--forest)}
+  .lede{font-size:18px;color:var(--muted);max-width:34em;margin-top:22px;line-height:1.65}
+  .meta{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-top:22px;display:flex;flex-wrap:wrap;gap:6px 20px}
+
+  section{margin-top:64px}
+  h2{font-family:var(--font-serif);font-size:clamp(28px,4vw,38px);font-weight:400;line-height:1.15;letter-spacing:-.3px;margin-bottom:10px}
+  h2 em{font-style:italic;color:var(--forest)}
+  .sub{color:var(--muted);max-width:40em;margin-bottom:26px}
+  p{margin-bottom:1em;max-width:42em}
+
+  /* the chain */
+  .chain{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  .link{background:var(--bg-card);border:1px solid var(--border);border-top:4px solid var(--forest-lt);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);min-width:0}
+  .link h3{font-size:15px;font-weight:600;margin-bottom:4px}
+  .link .st{font-family:var(--font-mono);font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--forest-lt)}
+  .link p{font-size:13px;color:var(--muted);line-height:1.5;margin:8px 0 0}
+  .link.part{border-top-color:var(--amber)}.link.part .st{color:var(--amber)}
+  .link.miss{border-top-color:var(--red);background:var(--red-lt);border-style:dashed;border-top-style:solid}.link.miss .st{color:var(--red)}
+  .link.miss p{color:var(--ink)}
+  .note{font-size:14px;color:var(--muted);margin-top:16px;max-width:44em}
+
+  /* facts */
+  .facts{border-top:1px solid var(--border)}
+  .fact{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;padding:18px 0;border-bottom:1px solid var(--border)}
+  .fact b{font-family:var(--font-serif);font-size:22px;font-weight:600;color:var(--forest);line-height:1.2}
+  .fact p{margin:0;max-width:none}
+  .fact small{display:block;font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:4px}
+
+  .aside{background:var(--amber-lt);border-radius:var(--radius);padding:20px 24px;margin-top:26px}
+  .aside p:last-child{margin:0}
+
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+  .tw{overflow-x:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)}
+  th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-family:var(--font-mono);font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:500}
+  tr:last-child td{border-bottom:0}
+  td:first-child{font-weight:500;white-space:nowrap}
+
+  .q{display:grid;grid-template-columns:36px minmax(0,1fr);gap:8px;padding:16px 0;border-top:1px solid var(--border)}
+  .q:last-child{border-bottom:1px solid var(--border)}
+  .q b{font-family:var(--font-serif);font-size:24px;color:var(--forest);line-height:1.1}
+  .q p{margin:0;max-width:none}
+
+  .ask{background:var(--forest);color:#fff;border-radius:var(--radius);padding:30px 32px;margin-top:64px}
+  .ask h2{color:#fff;margin-bottom:8px}
+  .ask p{color:rgba(255,255,255,.85);margin:0 0 6px}
+
+  .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .links a{display:block;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;transition:border-color .15s;min-width:0}
+  .links a:hover{border-color:var(--forest)}
+  .links b{display:block;font-weight:600;color:var(--forest)}
+  .links span{display:block;font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+  .foot{margin-top:48px;font-size:12.5px;color:var(--muted);max-width:46em}
+  a:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+
+  @media(max-width:820px){
+    .chain{grid-template-columns:1fr}
+    .fact{grid-template-columns:1fr;gap:4px}
+    .nav{padding:0 16px}
+    .nav-btn.hide-sm{display:none}
+    .ask{padding:24px 20px}
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-logo" href="./"><span class="nav-logo-dot"></span>FoodSafe India</a>
+  <div class="nav-links">
+    <a class="nav-btn hide-sm" href="./">Home</a>
+    <a class="nav-btn active" href="brief.html">Briefing</a>
+    <a class="nav-btn" href="https://ultramagnus23.github.io/FoodSafe/">Data portal</a>
+  </div>
+</nav>
+
+<main class="page">
+  <span class="badge"><i></i>Briefing for Prof. Manu Prakash</span>
+  <h1>A disease predictor needs measurements <em>that do not exist yet</em></h1>
+  <p class="lede">FoodSafe links food contamination to disease, using public records only. It started in India and is meant to work worldwide, for the people most at risk. The part I cannot build alone is the measurement.</p>
+  <div class="meta"><span>Chaitanya Tripathi</span><span>October 2026</span><span>Figures as of 3 Oct 2026</span></div>
+
+  <section>
+    <h2>The chain, and <em>where it breaks</em></h2>
+    <p class="sub">A predictor needs every link. Two are missing and one is only partly there.</p>
+    <div class="chain">
+      <div class="link"><div class="st">Built</div><h3>Rules</h3><p>56,000 legal limits from FSSAI, the EU, Codex and the US, compared side by side.</p></div>
+      <div class="link part"><div class="st">Partial</div><h3>Exposure</h3><p>EU border checks for 164 countries. For India, only yearly state totals.</p></div>
+      <div class="link miss"><div class="st">Missing</div><h3>Measurement</h3><p>No district or market testing is public. The regulator's portal blocks anonymous access.</p></div>
+      <div class="link"><div class="st">Built</div><h3>Hazard to disease</h3><p>A cited lookup: 52 hazards, IARC classes for 1,128 agents.</p></div>
+      <div class="link miss"><div class="st">Missing</div><h3>Outcomes</h3><p>Nothing shows where contaminated food makes people ill.</p></div>
+    </div>
+    <p class="note">Without measured exposure and observed illness in the same place, a trained predictor would be learning from invented data. I chose not to ship one.</p>
+  </section>
+
+  <section>
+    <h2>What works <em>today</em></h2>
+    <p class="sub">Everything is public, every figure keeps its source, and nothing is synthetic.</p>
+    <div class="facts">
+      <div class="fact"><b>The rules, side by side</b><p>India's limits for pesticides, metals and toxins against the EU, Codex and the US, across 1,711 food-hazard pairs. India permits more than the EU in 831. Aflatoxin M1 in milk is 0.5 µg/kg in India and 0.05 in the EU.</p></div>
+      <div class="fact"><b>What gets found</b><p>32,786 EU border notifications from 164 countries. Indian food is third most flagged, with 2,228.</p></div>
+      <div class="fact"><b>The disease link</b><p>Each hazard is tied to the illnesses it causes, with a source for each.</p></div>
+      <div class="fact"><b>A text classifier</b><p>Sorts notifications by hazard type, 92% accurate on notifications that came after its training data. It reads text and cannot detect contamination.</p></div>
+      <div class="fact"><b>Places</b><p>Indian states and 217 countries: WHO food-safety capacity, World Bank nutrition, WHO global burden (1.52 million deaths in 2021), and about 21,000 packaged foods sold in India.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where I am <em>stuck</em></h2>
+    <p>India's food regulator blocks anonymous access to its recall and testing portal. The only real pass-or-fail data I found is state-level yearly totals. No public dataset links where food is contaminated to where people fall ill. A model trained to predict disease would learn from data I made up.</p>
+    <div class="aside">
+      <p><b>What the state data can predict.</b> Nothing beat "same as last year." That may reflect how inspectors work more than how risky the food is: Uttar Pradesh fails 42 to 61 percent of samples every year, Gujarat 6 to 11.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Taking it <em>worldwide</em></h2>
+    <p class="sub">The people most exposed are also the people tested least: young children, pregnant women, the malnourished, anyone without clean water. First hazard: aflatoxin in maize and groundnuts across sub-Saharan Africa and South Asia. Sources I plan to add (licences not yet checked):</p>
+    <div class="tw"><table>
+      <thead><tr><th>Need</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Child malnutrition and diarrhoea, by region</td><td>DHS and UNICEF MICS surveys</td></tr>
+        <tr><td>Burden by country, age and cause</td><td>IHME Global Burden of Disease, WHO FERG</td></tr>
+        <tr><td>Water and sanitation</td><td>WHO/UNICEF JMP</td></tr>
+        <tr><td>Contamination outside the EU</td><td>WHO GEMS/Food, EFSA occurrence data</td></tr>
+        <tr><td>What people eat</td><td>FAO/WHO GIFT, FAO food balance sheets</td></tr>
+        <tr><td>Where people live</td><td>WorldPop</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">The output would be a transparent susceptibility index, with every input cited. It would not be a disease predictor.</p>
+  </section>
+
+  <section>
+    <h2>Five <em>questions</em></h2>
+    <div style="margin-top:20px">
+      <div class="q"><b>1</b><p>With no paired exposure and outcome data, is a predictor the right target? Or should the first product be a measurement system that creates the data?</p></div>
+      <div class="q"><b>2</b><p>Could paper-based or smartphone assays reach the sensitivity needed to test against legal limits, for example aflatoxin M1 at 0.5 against 0.05 µg/kg? Who does this well?</p></div>
+      <div class="q"><b>3</b><p>For a first validation study, which hazard, food and place would you pick, and what result would convince you it is real?</p></div>
+      <div class="q"><b>4</b><p>Who holds foodborne-illness data and would work with a student project? Is there prior work I have missed?</p></div>
+      <div class="q"><b>5</b><p>Globally, should I start with one hazard in the most vulnerable regions, or a broad index?</p></div>
+    </div>
+  </section>
+
+  <div class="ask">
+    <h2>What would help most</h2>
+    <p>A 15-minute call, or the name of one person I should talk to.</p>
+    <p>Chaitanya Tripathi · suhsuhbros@gmail.com</p>
+  </div>
+
+  <section>
+    <h2>Sources and <em>code</em></h2>
+    <div class="links" style="margin-top:20px">
+      <a href="https://ultramagnus23.github.io/FoodSafe/"><b>Data portal</b><span>ultramagnus23.github.io/FoodSafe</span></a>
+      <a href="https://github.com/ultramagnus23/FoodSafe"><b>Source code</b><span>github.com/ultramagnus23/FoodSafe</span></a>
+      <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/docs/PLATFORM.md"><b>How it is built</b><span>docs/PLATFORM.md</span></a>
+      <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/docs/STANDARDS.md"><b>India vs EU limits</b><span>docs/STANDARDS.md</span></a>
+      <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/docs/BACKTEST_SAMPLING.md"><b>State backtest</b><span>docs/BACKTEST_SAMPLING.md</span></a>
+      <a href="https://github.com/ultramagnus23/FoodSafe/blob/main/docs/PAPER_SCOPING.md"><b>Data-access audit</b><span>docs/PAPER_SCOPING.md</span></a>
+    </div>
+    <p class="foot">Legal limits are regulatory lines, not safety verdicts. EU notifications and Indian state samples are risk-targeted, so nothing here is a prevalence estimate.</p>
+  </section>
+</main>
+</body>
+</html>

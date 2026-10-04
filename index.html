@@ -590,8 +590,9 @@ function Nav({ page, setPage }) {
           React.createElement('button', {
             key: p, className: `nav-btn ${page===p?'active':''}`,
             onClick: ()=>setPage(p)
-          }, p === 'home' ? 'Home' : p === 'risk' ? 'Risk Report' : p === 'alerts' ? 'Alerts' : p === 'brands' ? 'Brands' : p === 'fmcg' ? 'FMCG' : 'About')
-        )
+          }, p === 'home' ? 'Home' : p === 'risk' ? 'Risk Report' : p === 'alerts' ? 'Alerts' : p === 'brands' ? 'Brands' : p === 'fmcg' ? 'FMCG' : 'About'),
+        ),
+        React.createElement('a', { className: 'nav-btn', href: 'brief.html' }, 'Briefing')
       ),
       auth && auth.user
         ? React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12} },
