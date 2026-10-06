@@ -108,11 +108,7 @@ _UNLIMITED_PATHS = {"/", "/docs", "/openapi.json", "/redoc"}
 
 
 def _is_public_read(request: Request) -> bool:
-    path = request.url.path
-    if not path.startswith(PUBLIC_READ_PREFIXES):
-        return False
-    # POST /v1/classify computes and stores nothing; every other public route is GET-only.
-    return request.method == "GET" or path.startswith("/v1/classify")
+    return request.method == "GET" and request.url.path.startswith(PUBLIC_READ_PREFIXES)
 
 
 def _rate_limit_key_and_cap(request: Request) -> tuple[str, int]:

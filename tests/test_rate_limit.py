@@ -54,8 +54,8 @@ def test_anonymous_public_read_gets_the_browsing_cap():
         assert key == "ip-read:203.0.113.9" and cap == M.PUBLIC_READ_LIMIT_PER_DAY, path
 
 
-def test_classify_post_counts_as_a_public_read():
-    _, cap = M._rate_limit_key_and_cap(_req("/v1/classify", method="POST"))
+def test_classify_is_a_public_read():
+    _, cap = M._rate_limit_key_and_cap(_req("/v1/classify"))
     assert cap == M.PUBLIC_READ_LIMIT_PER_DAY
 
 
