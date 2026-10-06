@@ -95,7 +95,7 @@ function EvidencePanel({ districtId, commodityId }: { districtId: number; commod
         </div>
       )}
 
-      <Link href={`/district/${districtId}?commodity=${commodityId}`} className="mt-4 text-sm font-medium text-ink underline">
+      <Link href={`/district?id=${districtId}&commodity=${commodityId}`} className="mt-4 text-sm font-medium text-ink underline">
         Full district report →
       </Link>
     </div>

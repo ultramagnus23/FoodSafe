@@ -1,0 +1,61 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --prefix frontend",
+  "buildCommand": "npm run build --prefix frontend",
+  "outputDirectory": "frontend/out",
+  "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/district/:id",
+      "destination": "/district?id=:id",
+      "permanent": false
+    },
+    {
+      "source": "/embed/district/:id",
+      "destination": "/embed/district?id=:id",
+      "permanent": false
+    },
+    {
+      "source": "/methodology/standards",
+      "destination": "/standards",
+      "permanent": true
+    }
+  ],
+  "headers": [
+    {
+      "source": "/((?!embed).*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self'"
+        }
+      ]
+    },
+    {
+      "source": "/embed/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors *"
+        }
+      ]
+    }
+  ]
+}

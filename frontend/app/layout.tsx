@@ -17,9 +17,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FoodSafe India",
+  title: "FoodSafe India · food contamination to disease",
   description:
-    "The public record for food safety in India: district contamination risk and disease-burden estimates from public enforcement records.",
+    "An open, evidence-linked engine from food contamination to disease: India's legal limits beside the EU, Codex and the US, what is found in food, the illnesses each hazard causes, and how places compare. Public records only.",
 };
 
 // Runs before hydration so the theme is correct on first paint (no
@@ -53,13 +53,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             <ChromeGate>
               <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-line px-8 py-10 text-xs text-provenance">
-                <div>
+                <div className="max-w-md">
                   <strong className="font-display text-base text-ink">FoodSafe India</strong>
                   <br />
-                  <span className="register">Statistical estimates · Not a laboratory service</span>
+                  <span className="register">Public records only · not a laboratory service · not medical advice</span>
+                  <br />
+                  <span>
+                    Open source:{" "}
+                    <a className="underline" href="https://github.com/ultramagnus23/FoodSafe">
+                      github.com/ultramagnus23/FoodSafe
+                    </a>
+                  </span>
                 </div>
-                <div className="register max-w-[320px] text-right leading-relaxed">
-                  Data: FSSAI · USFDA · AGMARKNET · NSSO · Census 2021
+                <div className="register max-w-[420px] leading-relaxed sm:text-right">
+                  Data: FSSAI · Lok Sabha · European Commission (RASFF, EU Pesticides Database) · FAO/WHO Codex · US eCFR ·
+                  WHO · IARC · EFSA · World Bank · Open Food Facts · OpenAlex · Europe PMC
                 </div>
               </footer>
             </ChromeGate>

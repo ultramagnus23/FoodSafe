@@ -1,6 +1,7 @@
 "use client";
 
-import { useParams, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useWidgetData } from "@/lib/api/widget";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { fmt } from "@/lib/constants";
@@ -8,10 +9,19 @@ import { fmt } from "@/lib/constants";
 // Bare, read-only, iframe-embeddable district-risk card for journalists/
 // local news. No auth, no nav — see ChromeGate in the root layout, which
 // suppresses the main site's nav/footer for anything under /embed.
+// The district comes from ?id= (a static site has no per-district route); /embed/district/<id>
+// links still work through the redirect in vercel.json.
 export default function EmbedDistrictPage() {
-  const params = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-provenance">Loading…</div>}>
+      <EmbedDistrict />
+    </Suspense>
+  );
+}
+
+function EmbedDistrict() {
   const searchParams = useSearchParams();
-  const districtId = Number(params.id);
+  const districtId = Number(searchParams.get("id"));
   const commodityId = Number(searchParams.get("commodity") || 1);
 
   const widget = useWidgetData(districtId, commodityId);
@@ -50,7 +60,7 @@ export default function EmbedDistrictPage() {
       <p className="mb-3 text-[11px] leading-relaxed text-provenance">{d.disclaimer}</p>
 
       <a
-        href={`https://foodsafe.in/district/${d.district_id}?commodity=${d.commodity_id}`}
+        href={`/district?id=${d.district_id}&commodity=${d.commodity_id}`}
         target="_blank"
         rel="noreferrer"
         className="text-xs font-medium text-ink underline"

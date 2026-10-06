@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useDistrictRisk } from "@/lib/api/risk";
 import { useDistrictDisease } from "@/lib/api/disease";
@@ -19,9 +19,8 @@ import { SubscribeButton } from "@/components/SubscribeButton";
 type Tab = "tests" | "contaminants" | "disease";
 
 function DistrictInner() {
-  const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const districtId = Number(params.id);
+  const districtId = Number(searchParams.get("id"));
   const { token, openAuth } = useAuth();
   const loggedIn = !!token;
 

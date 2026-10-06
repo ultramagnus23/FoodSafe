@@ -84,7 +84,7 @@ function CompareInner() {
               </thead>
               <tbody>
                 {best.data.map((d, i) => (
-                  <tr key={d.district_id} className="cursor-pointer border-t border-line hover:bg-porcelain" onClick={() => router.push(`/district/${d.district_id}?commodity=${commodityId}`)}>
+                  <tr key={d.district_id} className="cursor-pointer border-t border-line hover:bg-porcelain" onClick={() => router.push(`/district?id=${d.district_id}&commodity=${commodityId}`)}>
                     <td className="px-4 py-3 text-provenance">{i + 1}</td>
                     <td className="px-4 py-3 font-medium">
                       {d.district_name}, {d.state}

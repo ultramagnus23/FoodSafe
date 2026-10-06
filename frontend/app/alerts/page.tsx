@@ -104,7 +104,7 @@ function AlertsInner() {
                 key={a.id}
                 type="button"
                 className="cursor-pointer rounded border border-line bg-slab p-5 text-left transition-colors hover:border-line-strong"
-                onClick={() => router.push(`/district/${a.district_id}`)}
+                onClick={() => router.push(`/district?id=${a.district_id}`)}
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div>

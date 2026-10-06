@@ -64,7 +64,7 @@ export default function MethodologyPage() {
       <div className="mb-8 rounded-lg border border-line bg-provenance-pale p-5">
         <p className="text-sm text-ink">
           See the full{" "}
-          <a href="/methodology/standards" className="underline">
+          <a href="/standards" className="underline">
             comparison of India&apos;s legal limits with the EU, Codex and the US
           </a>{" "}
           for every pesticide and contaminant FSSAI regulates.
