@@ -6,9 +6,25 @@ contamination found in food to the diseases its hazards cause (with sources);
 gives country, state and packaged-food nutrition context; and is honest about how
 little Indian testing data is public (see [`docs/PAPER_SCOPING.md`](docs/PAPER_SCOPING.md)).
 
-**Public portal:** [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)
-(rebuilt daily from the production database). **Platform structure, models,
-findings and limits:** [`docs/PLATFORM.md`](docs/PLATFORM.md).
+**Live platform:** [foodsafev2.vercel.app](https://foodsafev2.vercel.app) (Next.js app in
+`frontend/`, deployed from `main`; data refreshed daily). **API:**
+[foodsafe-fll9.onrender.com](https://foodsafe-fll9.onrender.com/docs) (`/v1/...`; free tier,
+so the first request after idle takes about a minute). **Data snapshot / static portal:**
+[ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/).
+
+**Research plan** (the paper: estimating the disease burden of food contamination in India
+from open data): [`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md), summarised for supervisors at
+[foodsafev2.vercel.app/brief](https://foodsafev2.vercel.app/brief). **Platform structure,
+models, findings and limits:** [`docs/PLATFORM.md`](docs/PLATFORM.md).
+
+## What was added on 2026-10-06
+
+| Area | What | Where |
+|---|---|---|
+| One platform | The Next.js app is now the single public site on Vercel, with every dataset: disease engine, standards, findings, hazards, places, nutrition, sources, research, directory, briefing. Builds as a static export from the repository root (the Vercel deploys had failed since 2026-09-11) | `vercel.json`, `frontend/`, `docs/DEPLOYMENT.md` §5 |
+| Disease engine | Burden step: expected cases from dietary exposure with JECFA cancer potency, Monte Carlo uncertainty, margin of exposure; reproduces Liu & Wu (2010) for India | `models/burden_engine.py`, `tests/test_burden_engine.py` |
+| API | Visitors are told apart behind Render's proxy (CF-Connecting-IP); anonymous reads of the open data routes allow 2,000 requests a day instead of 20 | `api/main.py`, `api/public_rate_limit.py` |
+| Paper | Scope, questions, data, methods, validation, timeline | `docs/RESEARCH_PLAN.md` |
 
 ## What was added on 2026-10-03
 
@@ -50,13 +66,11 @@ Each line says how it was verified. Where something is only reported, it says so
   35,208 classified hazards, health-outcome profiles for 97 origin countries;
   India 2,228 notifications (third after Türkiye and Poland). 28 details failed
   with transient HTTP 500s and are retried by the daily run.
-- **API and Next.js frontend:** *reported* live by the maintainer (Render +
-  Vercel). No public URL is recorded in this repo and it has **not been
-  independently verified**: `foodsafe-api.onrender.com` did not respond on
-  2026-09-16, and on 2026-10-03 it answered with a *different* application
-  (OpenAPI title "FoodSafe API — AI-powered food adulteration detection backend",
-  `/api/scan/*` routes, none of this repo's `/v1/...`); `food-safe.vercel.app`
-  also serves a different app. The verified public face is the portal below.
+- **API and Next.js frontend (checked 2026-10-06):** the API runs at
+  `foodsafe-fll9.onrender.com` (OpenAPI title "FoodSafe India API" v1.1.0, every `/v1/...`
+  route of this repo, deployed from `main`). The frontend is
+  [foodsafev2.vercel.app](https://foodsafev2.vercel.app). `foodsafe-api.onrender.com` and
+  `food-safe.vercel.app` are *different* applications, not this project.
 - **Public portal** (GitHub Pages,
   [ultramagnus23.github.io/FoodSafe](https://ultramagnus23.github.io/FoodSafe/)):
   since 2026-10-03 a live portal rebuilt daily from production by

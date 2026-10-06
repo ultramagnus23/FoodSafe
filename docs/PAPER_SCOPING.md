@@ -1,3 +1,8 @@
+> **2026-10-06: the paper's scope is now [`RESEARCH_PLAN.md`](RESEARCH_PLAN.md)** (estimating
+> the disease burden of food contamination in India from open data). The data-access audit
+> below is kept and becomes its RQ5 and the reason the estimate stops at state level; it can
+> also stand alone as a short companion paper.
+
 # Paper scoping doc (Phase 0)
 
 Locked scoping decisions for the paper. Supersedes two prior scopes, both

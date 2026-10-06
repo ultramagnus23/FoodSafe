@@ -15,8 +15,11 @@ the records run out:
 4. **How do places compare?** Indian states, countries (food-safety capacity,
    nutrition, EU findings), and the nutrition of packaged food sold in India.
 
-Public face: **https://ultramagnus23.github.io/FoodSafe/** (static portal rebuilt
-daily from the production database) and the REST API (`/v1/...`, docs at `/docs`).
+Public face: **https://foodsafev2.vercel.app** (the Next.js app, one page per question
+below plus the disease engine and a research briefing), the REST API at
+https://foodsafe-fll9.onrender.com (`/v1/...`, docs at `/docs`), and the static snapshot
+portal at https://ultramagnus23.github.io/FoodSafe/ that both the site and outside users can
+read. The paper built on this platform is scoped in `docs/RESEARCH_PLAN.md`.
 
 ## Layers
 
@@ -60,6 +63,13 @@ daily from the production database) and the REST API (`/v1/...`, docs at `/docs`
 * **Nutrition classification.** Published rules (UK DHSC front-of-pack thresholds);
   Nutri-Score and NOVA as Open Food Facts computes them. A model trained to reproduce
   a deterministic score would add nothing.
+* **Burden engine** (`models/burden_engine.py`). The risk-characterisation step: expected
+  cases a year from dietary exposure (concentration x intake / body weight) and a published
+  cancer potency by susceptibility group (aflatoxin: JECFA 2016, by hepatitis B status), with
+  Monte Carlo uncertainty and the margin of exposure. It reproduces Liu & Wu's (2010)
+  published incidences for India exactly. It has no Indian inputs yet: assembling them is the
+  paper's core work (`docs/RESEARCH_PLAN.md`). It replaces the July 2026 district engine
+  (`models/disease_burden.py`), whose seeded aflatoxin slope factors are unverified.
 * **State sampling backtest.** Last year's non-conforming rate predicts the next far
   better than the national rate, but no model beat persistence
   (`docs/BACKTEST_SAMPLING.md`).

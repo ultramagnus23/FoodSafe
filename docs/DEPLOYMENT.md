@@ -227,22 +227,36 @@ Note the service URL Render gives you, e.g. `https://foodsafe-api.onrender.com`.
 
 ## 5. Deploy the frontend to Vercel **[you]**
 
-**Set Root Directory to `frontend`.** This matters: the repo root also contains a
-legacy single-file SPA (`index.html`), and the old root `vercel.json` used to
-build *that* instead of the Next.js app. It has been renamed to
-`vercel.legacy-static.json` so it can no longer be picked up by accident.
-`frontend/vercel.json` now carries the correct Next.js config.
+**Live:** https://foodsafev2.vercel.app (Vercel project `food-safe`, connected to this repo's
+`main`; every push deploys). The API it calls is https://foodsafe-fll9.onrender.com.
 
-1. **New Project** → this repo → **Root Directory: `frontend`**.
-2. Environment variables:
+The root `vercel.json` builds the Next.js app in `frontend/` as a **static export**
+(`next.config.js` `output: "export"` writes `frontend/out/`), so the project works with
+its **Root Directory left at the repository root** and no framework preset: install
+`npm ci --prefix frontend`, build `npm run build --prefix frontend`, serve `frontend/out`.
+Every page renders in the browser. Public data pages read the daily snapshot that
+`deploy-pages.yml` publishes to GitHub Pages (`lib/snapshot.ts`); interactive features call
+the API.
+
+History, so it is not repeated: from 2026-09-11 every production deploy failed, because the
+root `vercel.json` (which built the old single-file `index.html`) had been renamed to
+`vercel.legacy-static.json` while the project still built from the repository root. The site
+kept serving the last good build from 2026-09-07 until 2026-10-06. Do not set Root Directory
+to `frontend` unless you also move the redirects and headers in the root `vercel.json` there.
+
+Environment variables (Vercel project settings):
 
 | Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | the Render URL from step 4 |
-| `NEXT_PUBLIC_SITE_URL` | your Vercel production URL |
+| `BACKEND_LINK` | the Render URL from step 4 (already set; `next.config.js` maps it to `NEXT_PUBLIC_API_URL`) |
+| `NEXT_PUBLIC_API_URL` | optional; overrides `BACKEND_LINK` |
+| `NEXT_PUBLIC_SNAPSHOT_URL` | optional; defaults to the GitHub Pages snapshot |
 
-`NEXT_PUBLIC_*` values are baked in **at build time** — changing them later
-requires a redeploy, not just a settings save.
+These values are baked in **at build time**: changing them requires a redeploy.
+
+Old links keep working through redirects in `vercel.json`: `/district/<id>` →
+`/district?id=<id>`, `/embed/district/<id>` → `/embed/district?id=<id>`,
+`/methodology/standards` → `/standards`.
 
 ---
 
