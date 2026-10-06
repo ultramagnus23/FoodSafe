@@ -31,6 +31,19 @@ DAILY_LIMITS = {
 }
 
 
+def client_ip(request: Request) -> str:
+    """The visitor's address. Render serves the API behind Cloudflare, so request.client is
+    the proxy (one address shared by every visitor). Cloudflare overwrites CF-Connecting-IP
+    with the address it saw; X-Forwarded-For's first hop is the fallback."""
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _hash_ip(ip: str) -> str:
     return hashlib.sha256(ip.encode()).hexdigest()
 
@@ -39,8 +52,7 @@ async def enforce_public_rate_limit(request: Request, endpoint: str) -> None:
     """Raise 429 if this client IP has exceeded the daily cap for `endpoint`.
     Call before writing the submission; on pass, also logs the attempt."""
     limit = DAILY_LIMITS.get(endpoint, 10)
-    client_ip = request.client.host if request.client else "unknown"
-    ip_hash = _hash_ip(client_ip)
+    ip_hash = _hash_ip(client_ip(request))
 
     pool = get_pool()
     async with pool.acquire() as conn:

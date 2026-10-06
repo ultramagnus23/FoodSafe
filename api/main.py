@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from api.db import init_pool, close_pool
 from api.auth_utils import SECRET_KEY, ALGORITHM, TIER_LIMITS
+from api.public_rate_limit import client_ip
 import jwt as _jwt
 from api.auth import auth_router
 from api.routes.risk import risk_router
@@ -92,10 +93,26 @@ app.add_middleware(
 # deferring Redis (Task 11a) for this pass.
 # ------------------------------------------------------------
 UNAUTH_LIMIT_PER_DAY = 20
+# The public website calls the open data routes from every visitor's browser, and one page
+# view makes several requests, so anonymous reads of those routes get a cap sized for
+# browsing. Everything else (writes, sign-in-only routes) keeps the tiers above.
+PUBLIC_READ_LIMIT_PER_DAY = 2000
+PUBLIC_READ_PREFIXES = (
+    "/v1/standards", "/v1/hazards", "/v1/classify", "/v1/rasff", "/v1/health", "/v1/countries",
+    "/v1/global", "/v1/nutrition", "/v1/places", "/v1/meta", "/v1/research", "/v1/widget",
+)
 _RATE_WINDOW_SECONDS = 24 * 3600
 _rate_limit_lock = threading.Lock()
 _rate_limit_state: dict[str, tuple[float, int]] = {}
 _UNLIMITED_PATHS = {"/", "/docs", "/openapi.json", "/redoc"}
+
+
+def _is_public_read(request: Request) -> bool:
+    path = request.url.path
+    if not path.startswith(PUBLIC_READ_PREFIXES):
+        return False
+    # POST /v1/classify computes and stores nothing; every other public route is GET-only.
+    return request.method == "GET" or path.startswith("/v1/classify")
 
 
 def _rate_limit_key_and_cap(request: Request) -> tuple[str, int]:
@@ -105,15 +122,19 @@ def _rate_limit_key_and_cap(request: Request) -> tuple[str, int]:
             payload = _jwt.decode(auth[7:], SECRET_KEY, algorithms=[ALGORITHM])
             if payload.get("type") == "access":
                 tier = payload.get("tier", "consumer_free")
-                return f"user:{payload.get('sub')}", TIER_LIMITS.get(tier, 100)
+                cap = TIER_LIMITS.get(tier, 100)
+                if _is_public_read(request):        # signing in never lowers the browsing cap
+                    cap = max(cap, PUBLIC_READ_LIMIT_PER_DAY)
+                return f"user:{payload.get('sub')}", cap
         except Exception:
             pass
     if request.headers.get("x-api-key"):
         # Enforced separately (persisted) in api/auth_utils.py — don't
         # double-count here.
         return "apikey:skip", 10**9
-    client_ip = request.client.host if request.client else "unknown"
-    return f"ip:{client_ip}", UNAUTH_LIMIT_PER_DAY
+    if _is_public_read(request):
+        return f"ip-read:{client_ip(request)}", PUBLIC_READ_LIMIT_PER_DAY
+    return f"ip:{client_ip(request)}", UNAUTH_LIMIT_PER_DAY
 
 
 @app.middleware("http")
