@@ -60,7 +60,8 @@ jobs:
         id: openfda
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m pipeline.run_and_log openfda --limit "${{ github.event.inputs.limit || '50' }}"
+          LIMIT: ${{ github.event.inputs.limit || '50' }}
+        run: python -m pipeline.run_and_log openfda --limit "$LIMIT"
 
       - name: Ingest AGMARKNET districts/commodities (data.gov.in)
         id: agmarknet
