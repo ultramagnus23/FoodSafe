@@ -45,7 +45,8 @@ jobs:
         continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m pipeline.run_and_log rasff_global --limit "${{ github.event.inputs.limit || '12000' }}"
+          LIMIT: ${{ github.event.inputs.limit || '12000' }}
+        run: python -m pipeline.run_and_log rasff_global --limit "$LIMIT"
       - name: Recompute health-outcome profiles
         id: health_profile
         env:
